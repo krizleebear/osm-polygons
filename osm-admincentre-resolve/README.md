@@ -46,7 +46,7 @@ Some of these could be goals for later approaches
 
 ### Solution concept
 
-<img src="https://raw.githubusercontent.com/krizleebear/osm-polygons/master/doc/AdminCentreResolve.svg">
+<img src="../doc/AdminCentreResolve.svg">
 
 1.  take PBF and extract admin relations and place nodes to separate
     files
