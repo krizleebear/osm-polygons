@@ -2,6 +2,7 @@ package de.krizleebear.osm.admincentres;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -180,8 +181,17 @@ public class AdminCentreResolve {
 		return new ResolvedAdminCentre(admin, Optional.empty(), ResolvedAdminCentre.ResolvedType.UNRESOLVED);
 	}
 
-	public static void main(String[] args)
-	{
-		
+	public static void main(String[] args) throws IOException {
+		if (args.length < 2) {
+			throw new IllegalArgumentException("Usage: resolve <places-pbf> <admin-pbf>");
+		}
+
+		Path placesPBF = Paths.get(args[0]);
+		Path adminPBF = Paths.get(args[1]);
+
+		Stream<ResolvedAdminCentre> results = AdminCentreResolve.resolveAdminCentres(placesPBF, adminPBF);
+
+		Path resolvedTSV = Paths.get("admins-resolved.tsv");
+		ResolvedAdminCentre.writeResolvedToTSV(results, resolvedTSV);
 	}
 }
