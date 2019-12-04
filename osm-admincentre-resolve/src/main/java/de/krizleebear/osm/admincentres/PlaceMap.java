@@ -131,6 +131,9 @@ public class PlaceMap {
 		for (String key : tags.keySet()) {
 			properties.put(key, tags.get(key));
 		}
+		
+		properties.put("@type", "node");
+		properties.put("@id", node.getId());
 
 		org.wololo.geojson.Geometry g = writer.write(point);
 		Feature feature = new Feature(g, properties);

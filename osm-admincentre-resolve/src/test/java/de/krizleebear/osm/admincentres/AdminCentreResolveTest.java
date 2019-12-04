@@ -1,44 +1,38 @@
 package de.krizleebear.osm.admincentres;
 
-import java.io.BufferedWriter;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
-import de.krizleebear.osm.admincentres.AdminCentreResolve.ResolvedType;
-
 public class AdminCentreResolveTest {
+
+	static final String srcPath = "src/test/resources";
 
 	@Test
 	void resolve() throws IOException {
-		Path placesPBF = Paths.get("places.pbf");
-		Path adminPBF = Paths.get("admins.osm.pbf");
+		Path placesPBF = Paths.get(srcPath, "palling.place.pbf");
+		Path adminPBF = Paths.get(srcPath, "palling.admin.pbf");
 
 		Stream<ResolvedAdminCentre> results = AdminCentreResolve.resolveAdminCentres(placesPBF, adminPBF);
 
 		Path resolvedTSV = Paths.get("admins-resolved.tsv");
-		try (BufferedWriter out = Files.newBufferedWriter(resolvedTSV)) {
+		ResolvedAdminCentre.writeResolvedToTSV(results, resolvedTSV);
+		
+		assertThat(resolvedTSV.toFile()).exists();
+		List<String> lines = Files.readAllLines(resolvedTSV);
+		assertThat(lines).hasSize(2);
 
-			ResolvedAdminCentre.writeTSVHeader(out);
-
-			results.forEach(result -> {
-				print(out, result);
-			});
-		}
+		String headerLine = lines.get(0);
+		assertThat(headerLine).contains("ID", "\t");
+		
+		String resultLine = lines.get(1);
+		assertThat(resultLine).contains("Palling", "941652", "240041384");
 	}
-
-	private void print(BufferedWriter out, ResolvedAdminCentre result) {
-		if (result.result == ResolvedType.RESOLVED) {
-			try {
-				result.writeToTSV(out);
-			} catch (IOException e) {
-				throw new RuntimeException(e);
-			}
-		}
-	}
-
 }

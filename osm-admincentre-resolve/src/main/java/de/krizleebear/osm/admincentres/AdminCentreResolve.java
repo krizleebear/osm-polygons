@@ -150,10 +150,6 @@ public class AdminCentreResolve {
 		return adminLevel;
 	}
 
-	public enum ResolvedType {
-		UNRESOLVED, WAS_ALREAY_DEFINED, RESOLVED
-	}
-
 	public static Stream<ResolvedAdminCentre> resolveAdminCentres(Path placesPBF, Path adminPBF) throws IOException {
 		PlaceMap places = new PlaceMap();
 		places.readPlaces(placesPBF);
@@ -170,18 +166,22 @@ public class AdminCentreResolve {
 		try {
 			Optional<OsmRelationMember> adminCentreMember = OsmUtil.getAdminCentreMember(admin);
 			if (adminCentreMember.isPresent()) {
-				return new ResolvedAdminCentre(admin, Optional.empty(), ResolvedType.WAS_ALREAY_DEFINED);
+				return new ResolvedAdminCentre(admin, Optional.empty(), ResolvedAdminCentre.ResolvedType.WAS_ALREAY_DEFINED);
 			}
 
 			Geometry polygon = polygons.relationToPolygon(admin);
 			Optional<OsmNode> place = resolvePlaceFor(admin, polygon);
 			if (place.isPresent()) {
-				return new ResolvedAdminCentre(admin, place, ResolvedType.RESOLVED);
+				return new ResolvedAdminCentre(admin, place, ResolvedAdminCentre.ResolvedType.SUCCESSFULLY_RESOLVED);
 			}
 		} catch (EntityNotFoundException e) {
 			e.printStackTrace();
 		}
-		return new ResolvedAdminCentre(admin, Optional.empty(), ResolvedType.UNRESOLVED);
+		return new ResolvedAdminCentre(admin, Optional.empty(), ResolvedAdminCentre.ResolvedType.UNRESOLVED);
 	}
 
+	public static void main(String[] args)
+	{
+		
+	}
 }
