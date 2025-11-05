@@ -16,7 +16,7 @@ jobs:
 
 - job: export
   container: 
-    image: krizleebear/docker-osmium-tool
+    image: krizleebear/docker-osmium-tool:v1.18.0
     endpoint: docker-krizleebear
 
   strategy:
@@ -509,7 +509,7 @@ jobs:
         POLYGON_JSON=$(OSM_REGION).admin-polygons.geojsonseq
 
         osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} boundary=administrative
-        osmium export ${ADMIN_PBF} --output=temp.geojsonseq --omit-rs --overwrite --config=osmium-export-config.json
+        osmium export ${ADMIN_PBF} --output=temp.geojsonseq --overwrite --config=osmium-export-config.json
 
         #omit polygons without name, admin_level and wikidata reference
         cat temp.geojsonseq | grep "admin_level" | grep "name" | grep "wikidata" > ${POLYGON_JSON}
