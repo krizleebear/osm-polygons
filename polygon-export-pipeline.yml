@@ -1,10 +1,12 @@
 # OSM polygon export pipeline
 # Exports polygons of localities to geoJSON streams.
-
 name: polygon-pipeline
 
-variables:
-  imageName: 'polygon-export-docker'
+resources:
+  containers:
+  - container: osmium-tool-container
+    image: krizleebear/docker-osmium-tool:v1.18.0
+    endpoint: docker-krizleebear
 
 trigger:
 - none
@@ -15,9 +17,7 @@ pool:
 jobs:
 
 - job: export
-  container: 
-    image: krizleebear/docker-osmium-tool:v1.18.0
-    endpoint: docker-krizleebear
+  container: osmium-tool-container
 
   strategy:
     matrix:
