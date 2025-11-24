@@ -663,7 +663,7 @@ jobs:
       targetPath: '$(System.DefaultWorkingDirectory)'
 
   - task: Bash@3
-    enabled: false
+    enabled: true
     displayName: 'filter and export polygons'
     inputs:
       targetType: 'inline'
