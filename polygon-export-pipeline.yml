@@ -690,11 +690,12 @@ jobs:
     displayName: 'Store polygon artifacts'
     inputs:
       targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
-      artifact: 'admin-polygons-$(OSM_REGION)'
+      artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
       publishLocation: 'pipeline'
 
 - job: simplify
   container: osm-tools
+  dependsOn: export
 
   steps:
   - checkout: none #skip checking out the default repository resource
