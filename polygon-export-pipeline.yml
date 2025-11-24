@@ -683,7 +683,7 @@ jobs:
         #omit polygons without name, admin_level and wikidata reference
         cat temp.geojsonseq | grep "admin_level" | grep "name" | grep "wikidata" > ${POLYGON_JSON}
 
-        gzip ${POLYGON_JSON}
+        #gzip ${POLYGON_JSON}
 
   - task: PublishPipelineArtifact@1
     enabled: false
@@ -710,6 +710,7 @@ jobs:
     enabled: true
     displayName: 'simplify polygons'
     inputs:
+      workingDirectory: '$(System.DefaultWorkingDirectory)'
       targetType: 'inline'
       script: |
         set -x
@@ -717,3 +718,4 @@ jobs:
         pwd
         java -version
         ls -a /
+        /simplify.sh *.geojsonseq
