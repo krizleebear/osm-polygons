@@ -719,6 +719,15 @@ jobs:
         #pwd
         #printenv
         #cd $(System.DefaultWorkingDirectory)
-        find . -maxdepth 2 -type f -name *.geojsonseq -exec ls -la {} \; -exec /simplify.sh {} \; 
-        #/simplify.sh *.geojsonseq
+        find . -maxdepth 2 -type f -name *.geojsonseq \
+          -exec ls -la {} \; \
+          -exec /simplify.sh {} \; \
+          -exec rm {} \;
 
+  - task: PublishPipelineArtifact@1
+    enabled: true
+    displayName: 'Store polygon artifacts'
+    inputs:
+      targetPath: 'admin-polygons.simplified.geojsonseq'
+      artifact: 'admin-polygons-simplified'
+      publishLocation: 'pipeline'
