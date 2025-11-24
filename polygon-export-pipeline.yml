@@ -715,9 +715,10 @@ jobs:
       targetType: 'inline'
       script: |
         set -x
-        ls -lar
-        pwd
-        printenv
+        ls -laR
+        #pwd
+        #printenv
         #cd $(System.DefaultWorkingDirectory)
-        find . -maxdepth 1 -type f -name *.geojsonseq -exec ls -la {} \; -exec /simplify.sh {} \; 
+        find . -maxdepth 2 -type f -name *.geojsonseq -exec ls -la {} \; -exec /simplify.sh {} \; 
         #/simplify.sh *.geojsonseq
+
