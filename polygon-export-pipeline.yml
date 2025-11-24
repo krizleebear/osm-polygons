@@ -689,7 +689,7 @@ jobs:
     enabled: false
     displayName: 'Store polygon artifacts'
     inputs:
-      targetPath: '$(OSM_REGION).admin-polygons.geojsonseq'
+      targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
       artifact: 'admin-polygons-$(OSM_REGION)'
       publishLocation: 'pipeline'
 
