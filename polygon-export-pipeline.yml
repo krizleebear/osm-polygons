@@ -717,5 +717,7 @@ jobs:
         ls -la
         pwd
         java -version
-        ls -a /
+        ls -a /home/vsts/work/1/s
+        printenv
+        cd $(System.DefaultWorkingDirectory)
         /simplify.sh *.geojsonseq
