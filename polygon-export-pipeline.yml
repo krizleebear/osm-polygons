@@ -704,7 +704,7 @@ jobs:
     inputs:
       buildType: 'current'
       buildVersionToDownload: 'latest'
-      itemPattern: '*.geojsonseq'
+      #itemPattern: '*.geojsonseq'
       targetPath: '$(System.DefaultWorkingDirectory)'
 
   - task: Bash@3
