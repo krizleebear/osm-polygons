@@ -663,7 +663,7 @@ jobs:
       targetPath: '$(System.DefaultWorkingDirectory)'
 
   - task: Bash@3
-    enabled: true
+    enabled: false
     displayName: 'filter and export polygons'
     inputs:
       targetType: 'inline'
@@ -724,10 +724,12 @@ jobs:
           -exec /simplify.sh {} \; \
           -exec rm {} \;
 
+#e.g.admin-polygons-DZ-algeria/DZ_algeria.admin-polygons.geojsonseq
+
   - task: PublishPipelineArtifact@1
     enabled: true
     displayName: 'Store polygon artifacts'
     inputs:
-      targetPath: 'admin-polygons.simplified.geojsonseq'
+      targetPath: '$(System.DefaultWorkingDirectory)'
       artifact: 'admin-polygons-simplified'
       publishLocation: 'pipeline'
