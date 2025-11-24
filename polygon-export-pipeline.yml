@@ -10,7 +10,6 @@ resources:
   - container: osm-tools
     image: krizleebear/osm-tools:latest
     endpoint: docker-krizleebear
-    options: '--entrypoint yes'
 
 trigger:
 - none
