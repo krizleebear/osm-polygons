@@ -653,7 +653,7 @@ jobs:
   steps:
 
   - task: DownloadPipelineArtifact@2
-    enabled: false
+    enabled: true
     inputs:
       buildType: 'specific'
       project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
@@ -663,7 +663,7 @@ jobs:
       targetPath: '$(System.DefaultWorkingDirectory)'
 
   - task: Bash@3
-    enabled: false
+    enabled: true
     displayName: 'filter and export polygons'
     inputs:
       targetType: 'inline'
@@ -686,7 +686,7 @@ jobs:
         #gzip ${POLYGON_JSON}
 
   - task: PublishPipelineArtifact@1
-    enabled: false
+    enabled: true
     displayName: 'Store polygon artifacts'
     inputs:
       targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
