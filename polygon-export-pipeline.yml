@@ -715,7 +715,7 @@ jobs:
       targetType: 'inline'
       script: |
         set -x
-        ls -laR
+        #ls -laR
         #pwd
         #printenv
         #cd $(System.DefaultWorkingDirectory)
@@ -723,6 +723,11 @@ jobs:
           -exec ls -la {} \; \
           -exec /simplify.sh {} \; \
           -exec rm {} \;
+        
+        ls -la *.geojsonseq
+        mkdir -f simplified
+        mv *.geojsonseq simplified/
+        
 
 #e.g.admin-polygons-DZ-algeria/DZ_algeria.admin-polygons.geojsonseq
 
@@ -730,6 +735,6 @@ jobs:
     enabled: true
     displayName: 'Store polygon artifacts'
     inputs:
-      targetPath: '$(System.DefaultWorkingDirectory)'
+      targetPath: '$(System.DefaultWorkingDirectory)/simplified/'
       artifact: 'admin-polygons-simplified'
       publishLocation: 'pipeline'
