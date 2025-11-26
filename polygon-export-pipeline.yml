@@ -732,8 +732,8 @@ jobs:
           -exec mv {} simplified/ \;
         
         ls -laR
-        tar --version
-        zip --version
+        tar cfz simplified.tar.gz simplified/
+        
         
         
 
@@ -743,6 +743,6 @@ jobs:
     enabled: true
     displayName: 'Store polygon artifacts'
     inputs:
-      targetPath: '$(System.DefaultWorkingDirectory)/simplified/'
+      targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
       artifact: 'admin-polygons-simplified'
       publishLocation: 'pipeline'
