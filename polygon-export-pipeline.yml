@@ -5,11 +5,13 @@ name: polygon-pipeline
 resources:
   containers:
   - container: osmium-tool
-    image: krizleebear/docker-osmium-tool:v1.18.0
-    endpoint: docker-krizleebear
+    #image: krizleebear/docker-osmium-tool:v1.18.0
+    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.18.0
+    #endpoint: docker-krizleebear
   - container: osm-tools
-    image: krizleebear/osm-tools:latest
-    endpoint: docker-krizleebear    
+    #image: krizleebear/osm-tools:latest
+    image: mirror.gcr.io/krizleebear/osm-tools:latest
+    #endpoint: docker-krizleebear
 
 trigger:
 - none
