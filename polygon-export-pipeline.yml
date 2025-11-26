@@ -719,14 +719,22 @@ jobs:
         #pwd
         #printenv
         #cd $(System.DefaultWorkingDirectory)
+
+        mkdir -p simplified
+        
         find . -maxdepth 2 -type f -name *.geojsonseq \
           -exec ls -la {} \; \
           -exec /simplify.sh {} \; \
           -exec rm {} \;
+
+        find . -maxdepth 2 -type f -name *.geojsonseq \
+          -exec ls -la {} \; \
+          -exec mv {} simplified/ \;
         
-        ls -la *.geojsonseq
-        mkdir -f simplified
-        mv *.geojsonseq simplified/
+        ls -laR
+        tar --version
+        zip --version
+        
         
 
 #e.g.admin-polygons-DZ-algeria/DZ_algeria.admin-polygons.geojsonseq
