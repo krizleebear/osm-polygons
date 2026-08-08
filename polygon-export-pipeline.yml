@@ -25,7 +25,9 @@ stages:
   jobs:
 
   - job: export
+    timeoutInMinutes: 360
     container: osmium-tool
+
 
     strategy:
       matrix:
@@ -703,6 +705,7 @@ stages:
   dependsOn: export
   jobs:
   - job: simplify
+    timeoutInMinutes: 360
     container: osm-tools
     strategy:
       matrix:
@@ -751,10 +754,9 @@ stages:
             done
           done
 
-          find . -maxdepth 2 -type f -name "*.geojsonseq" -exec mv {} simplified/ \;
-
           ls -laR simplified/
           tar cfz simplified-$(CONTINENT).tar.gz simplified/
+
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -769,7 +771,9 @@ stages:
   dependsOn: simplify
   jobs:
   - job: package
+    timeoutInMinutes: 360
     pool:
+
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: none
