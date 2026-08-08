@@ -754,8 +754,12 @@ stages:
             done
           done
 
+          # Save osm-tools container git version info
+          unzip -p /app/app.jar git.properties > simplified/osm-tools-version.info 2>/dev/null || true
+
           ls -laR simplified/
           tar cfz simplified-$(CONTINENT).tar.gz simplified/
+
 
 
     - task: PublishPipelineArtifact@1
@@ -797,15 +801,20 @@ stages:
             tar xfz "$archive" -C .
           done
 
+          OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "latest")
+          OSM_TOOLS_BUILD_TIME=$(grep "git.build.time" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
+
           cat <<EOF > simplified/build-info.json
           {
             "osm_data_extracted_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "osmium_tool_image": "mirror.gcr.io/krizleebear/docker-osmium-tool:v1.18.0",
-            "osm_tools_image": "mirror.gcr.io/krizleebear/osm-tools:latest",
+            "osmium_tool_image": "v1.18.0",
+            "osm_tools_commit": "${OSM_TOOLS_COMMIT}",
+            "osm_tools_build_time": "${OSM_TOOLS_BUILD_TIME}",
             "pipeline_commit": "$(Build.SourceVersion)",
             "pipeline_build_number": "$(Build.BuildNumber)"
           }
           EOF
+
 
 
           ls -la simplified/

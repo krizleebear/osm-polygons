@@ -51,9 +51,13 @@ jobs:
         # Generate Traceability Release Notes
         BUILD_TIME=$(jq -r '.osm_data_extracted_at // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
         OSMIUM_IMG=$(jq -r '.osmium_tool_image // "v1.18.0"' release-assets/build-info.json 2>/dev/null || echo "v1.18.0")
-        TOOLS_IMG=$(jq -r '.osm_tools_image // "latest"' release-assets/build-info.json 2>/dev/null || echo "latest")
+        TOOLS_COMMIT=$(jq -r '.osm_tools_commit // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
+        TOOLS_BUILD_TIME=$(jq -r '.osm_tools_build_time // ""' release-assets/build-info.json 2>/dev/null || echo "")
         COMMIT_SHA=$(jq -r '.pipeline_commit // "'$(Build.SourceVersion)'"' release-assets/build-info.json 2>/dev/null || echo "$(Build.SourceVersion)")
         BUILD_NUM=$(jq -r '.pipeline_build_number // "'$(Build.BuildNumber)'"' release-assets/build-info.json 2>/dev/null || echo "$(Build.BuildNumber)")
+
+        SHORT_TOOLS_SHA=${TOOLS_COMMIT:0:8}
+        SHORT_COMMIT_SHA=${COMMIT_SHA:0:8}
 
         cat <<EOF > release-notes.md
         ## 🔍 Traceability & Versioning Info
@@ -62,14 +66,15 @@ jobs:
         | :--- | :--- | :--- |
         | **OSM Data Snapshot** | \`${BUILD_TIME}\` | Extracted from Geofabrik PBF sources |
         | **\`osmium-tool\` Image** | \`${OSMIUM_IMG}\` | PBF filtering & GeoJSON sequence export |
-        | **\`osm-tools\` Image** | \`${TOOLS_IMG}\` | Polygon coverage simplification engine |
-        | **Pipeline Build** | Build \`${BUILD_NUM}\` | Commit [\`${COMMIT_SHA}\`](https://github.com/\$(Build.Repository.Name)/commit/\${COMMIT_SHA}) |
+        | **\`osm-tools\` Engine** | Commit [\`${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/commit/\${TOOLS_COMMIT}) | Built on \`${TOOLS_BUILD_TIME}\` |
+        | **Export Pipeline** | Build \`${BUILD_NUM}\` | Commit [\`${SHORT_COMMIT_SHA}\`](https://github.com/\$(Build.Repository.Name)/commit/\${COMMIT_SHA}) |
 
         ### 📦 Release Assets
         - **\`simplified-all.tar.gz\`**: Global combined archive containing all simplified administrative boundaries worldwide.
         - **\`simplified-<continent>.tar.gz\`**: Continental archives (Africa, Asia, Europe, Oceania, Central America).
         - **\`*.geojsonseq\`**: Individual per-country polygon stream files for targeted single-country downloads.
         EOF
+
 
 
         ls -la release-assets/
