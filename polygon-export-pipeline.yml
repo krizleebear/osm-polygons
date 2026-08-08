@@ -746,7 +746,13 @@ stages:
           osmium --version
 
           INPUT_PBF=osm-data-$(OSM_REGION)/$(OSM_REGION).osm.pbf
+          if [ ! -f "$INPUT_PBF" ]; then
+            echo "PBF file $INPUT_PBF not found in artifacts. Downloading directly from $(PBF_URL)..."
+            mkdir -p "osm-data-$(OSM_REGION)"
+            curl -L -sSL "$(PBF_URL)" -o "$INPUT_PBF"
+          fi
           ADMIN_PBF=$(OSM_REGION).admins.pbf
+
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
 
           osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} boundary=administrative
