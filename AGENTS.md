@@ -28,7 +28,12 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
 3. **Global Artifact Packaging:**
    - The `package` stage depends on `simplify`, extracts all continental archives into a unified `simplified/` folder, and publishes a single global artifact (`admin-polygons-simplified` containing `simplified.tar.gz`).
 
+4. **Standalone Manual GitHub Release Pipeline (`polygon-release-pipeline.yml`):**
+   - Releases are triggered manually on-demand (`trigger: none`).
+   - Downloads the latest build artifacts, packages global (`simplified-all.tar.gz`), continental (`simplified-*.tar.gz`), and individual country (`.geojsonseq`) files, and publishes them as GitHub Release assets.
+
 ---
+
 
 ## Git Workflow & Cleanliness
 

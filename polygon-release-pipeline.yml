@@ -1,0 +1,68 @@
+# OSM Polygon Manual GitHub Release Pipeline
+# Downloads latest build artifacts, packages global + continent + individual country files, and creates GitHub Release.
+name: polygon-release-pipeline
+
+trigger: none # Never runs automatically
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
+- job: release
+  displayName: 'Publish GitHub Release'
+  timeoutInMinutes: 360
+  steps:
+  - checkout: self
+
+  # Download latest global & continent artifacts from build definition '4' (krizleebear.osm-polygons)
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download latest build artifacts'
+    inputs:
+      buildType: 'specific'
+      project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+      definition: '4'
+      buildVersionToDownload: 'latest'
+      targetPath: '$(System.DefaultWorkingDirectory)/downloads'
+
+  - task: Bash@3
+    displayName: 'Prepare Release Assets (Global, Continents & Single Countries)'
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -x
+        mkdir -p release-assets
+
+        # 1. Global combined archive
+        find downloads -name "simplified.tar.gz" -exec cp {} release-assets/simplified-all.tar.gz \;
+
+        # 2. Continental archives
+        find downloads -name "simplified-*.tar.gz" -exec cp {} release-assets/ \;
+
+        # 3. Individual country .geojsonseq files
+        find downloads -name "simplified-*.tar.gz" | while read -r archive; do
+          tar xfz "$archive" -C release-assets/
+        done
+        if [ -d "release-assets/simplified" ]; then
+          mv release-assets/simplified/*.geojsonseq release-assets/ 2>/dev/null || true
+          rmdir release-assets/simplified
+        fi
+
+        ls -la release-assets/
+
+  - task: GitHubRelease@1
+    displayName: 'Create GitHub Release'
+    inputs:
+      gitHubConnection: '3c34db30-d57b-42e2-a970-857bd932c6c0'
+      repositoryName: '$(Build.Repository.Name)'
+      action: 'create'
+      target: '$(Build.SourceVersion)'
+      tagSource: 'userSpecifiedTag'
+      tag: 'v1.6-alpha'
+      title: 'OSM Admin Polygons Release'
+      releaseNotesInline: 'Automated release containing global archive, continental archives, and individual country polygon streams.'
+      assets: |
+        $(System.DefaultWorkingDirectory)/release-assets/*.tar.gz
+        $(System.DefaultWorkingDirectory)/release-assets/*.geojsonseq
+      assetUploadMode: 'delete'
+      isDraft: true
+      isPreRelease: true
