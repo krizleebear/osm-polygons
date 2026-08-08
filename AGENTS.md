@@ -19,11 +19,12 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
 
 1. **Full Region Export Invariance:**
    - Never disable or comment out region entries in the `export` job matrix unless explicitly instructed.
-   - The export matrix must retain all 153 region definitions across Africa, Asia, Europe, Oceania, and Central America.
+   - The export matrix must retain all 169 region definitions across Africa, Asia, Europe, Oceania, Central America, North America, and South America following Geofabrik hierarchy.
 
 2. **Continental Simplification Partitioning:**
-   - Heavy simplification steps must be partitioned by continent in the `simplify` stage using continent matrix jobs (`africa`, `asia`, `europe`, `australia_oceania`, `central_america`).
+   - Heavy simplification steps must be partitioned by continent in the `simplify` stage using continent matrix jobs (`africa`, `asia`, `europe`, `australia_oceania`, `central_america`, `north_america`, `south_america`, `canada`, `us`, `russia`).
    - Each continent job filters its respective `REGIONS` list from the downloaded export artifacts and creates a continental archive (`simplified-$(CONTINENT).tar.gz`).
+
 
 3. **Global Artifact Packaging:**
    - The `package` stage depends on `simplify`, extracts all continental archives into a unified `simplified/` folder, and publishes a single global artifact (`admin-polygons-simplified` containing `simplified.tar.gz`).

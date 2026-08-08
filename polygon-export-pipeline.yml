@@ -448,6 +448,71 @@ stages:
           OSM_REGION: 'nicaragua'
           PBF_URL: 'https://download.geofabrik.de/central-america/nicaragua-latest.osm.pbf'
           COUNTRY_CODE: 'NI'
+        canada:
+          OSM_REGION: 'canada'
+          PBF_URL: 'https://download.geofabrik.de/north-america/canada-latest.osm.pbf'
+          COUNTRY_CODE: 'CA'
+        greenland:
+          OSM_REGION: 'greenland'
+          PBF_URL: 'https://download.geofabrik.de/north-america/greenland-latest.osm.pbf'
+          COUNTRY_CODE: 'GL'
+        mexico:
+          OSM_REGION: 'mexico'
+          PBF_URL: 'https://download.geofabrik.de/north-america/mexico-latest.osm.pbf'
+          COUNTRY_CODE: 'MX'
+        us:
+          OSM_REGION: 'us'
+          PBF_URL: 'https://download.geofabrik.de/north-america/us-latest.osm.pbf'
+          COUNTRY_CODE: 'US'
+        argentina:
+          OSM_REGION: 'argentina'
+          PBF_URL: 'https://download.geofabrik.de/south-america/argentina-latest.osm.pbf'
+          COUNTRY_CODE: 'AR'
+        bolivia:
+          OSM_REGION: 'bolivia'
+          PBF_URL: 'https://download.geofabrik.de/south-america/bolivia-latest.osm.pbf'
+          COUNTRY_CODE: 'BO'
+        brazil:
+          OSM_REGION: 'brazil'
+          PBF_URL: 'https://download.geofabrik.de/south-america/brazil-latest.osm.pbf'
+          COUNTRY_CODE: 'BR'
+        chile:
+          OSM_REGION: 'chile'
+          PBF_URL: 'https://download.geofabrik.de/south-america/chile-latest.osm.pbf'
+          COUNTRY_CODE: 'CL'
+        colombia:
+          OSM_REGION: 'colombia'
+          PBF_URL: 'https://download.geofabrik.de/south-america/colombia-latest.osm.pbf'
+          COUNTRY_CODE: 'CO'
+        ecuador:
+          OSM_REGION: 'ecuador'
+          PBF_URL: 'https://download.geofabrik.de/south-america/ecuador-latest.osm.pbf'
+          COUNTRY_CODE: 'EC'
+        guyana:
+          OSM_REGION: 'guyana'
+          PBF_URL: 'https://download.geofabrik.de/south-america/guyana-latest.osm.pbf'
+          COUNTRY_CODE: 'GY'
+        paraguay:
+          OSM_REGION: 'paraguay'
+          PBF_URL: 'https://download.geofabrik.de/south-america/paraguay-latest.osm.pbf'
+          COUNTRY_CODE: 'PY'
+        peru:
+          OSM_REGION: 'peru'
+          PBF_URL: 'https://download.geofabrik.de/south-america/peru-latest.osm.pbf'
+          COUNTRY_CODE: 'PE'
+        suriname:
+          OSM_REGION: 'suriname'
+          PBF_URL: 'https://download.geofabrik.de/south-america/suriname-latest.osm.pbf'
+          COUNTRY_CODE: 'SR'
+        uruguay:
+          OSM_REGION: 'uruguay'
+          PBF_URL: 'https://download.geofabrik.de/south-america/uruguay-latest.osm.pbf'
+          COUNTRY_CODE: 'UY'
+        venezuela:
+          OSM_REGION: 'venezuela'
+          PBF_URL: 'https://download.geofabrik.de/south-america/venezuela-latest.osm.pbf'
+          COUNTRY_CODE: 'VE'
+
         albania:
           OSM_REGION: 'albania'
           PBF_URL: 'https://download.geofabrik.de/europe/albania-latest.osm.pbf'
@@ -721,6 +786,19 @@ stages:
         central_america:
           CONTINENT: 'central-america'
           REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
+        north_america:
+          CONTINENT: 'north-america'
+          REGIONS: 'greenland mexico'
+        canada:
+          CONTINENT: 'canada'
+          REGIONS: 'canada'
+        us:
+          CONTINENT: 'us'
+          REGIONS: 'us'
+        south_america:
+          CONTINENT: 'south-america'
+          REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
+
         europe:
           CONTINENT: 'europe'
           REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland turkey ukraine'
