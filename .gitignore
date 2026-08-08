@@ -26,3 +26,12 @@ hs_err_pid*
 /*.geojson
 /*.geojsonseq
 /*.pbf
+
+# IDE & Project Metadata
+.classpath
+.project
+.settings/
+.idea/
+*.iml
+.vscode/
+

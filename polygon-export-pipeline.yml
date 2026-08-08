@@ -699,20 +699,38 @@ stages:
         publishLocation: 'pipeline'
 
 - stage: simplify
-  displayName: 'Simplify polygons'
+  displayName: 'Simplify polygons by continent'
+  dependsOn: export
   jobs:
-
   - job: simplify
     container: osm-tools
+    strategy:
+      matrix:
+        africa:
+          CONTINENT: 'africa'
+          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon canary-islands cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
+        asia:
+          CONTINENT: 'asia'
+          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkmenistan uzbekistan vietnam yemen'
+        australia_oceania:
+          CONTINENT: 'australia-oceania'
+          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
+        central_america:
+          CONTINENT: 'central-america'
+          REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
+        europe:
+          CONTINENT: 'europe'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania russia serbia slovakia slovenia spain sweden switzerland turkey ukraine'
 
     steps:
     - checkout: none #skip checking out the default repository resource
     - task: DownloadPipelineArtifact@2
       enabled: true
+      displayName: 'Download export artifacts'
       inputs:
         buildType: 'current'
         buildVersionToDownload: 'latest'
-        #itemPattern: '*.geojsonseq'
+        itemPattern: 'admin-polygons-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: Bash@3
@@ -723,24 +741,62 @@ stages:
         targetType: 'inline'
         script: |
           set -x
-
           mkdir -p simplified
-          
-          find . -maxdepth 2 -type f -name *.geojsonseq \
-            -exec ls -la {} \; \
-            -exec /simplify.sh {} \; \
-            -exec rm {} \;
 
-          find . -maxdepth 2 -type f -name *.geojsonseq \
-            -exec ls -la {} \; \
-            -exec mv {} simplified/ \;
-          
-          ls -laR
-          tar cfz simplified.tar.gz simplified/
-          
+          for region in $(REGIONS); do
+            find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
+              echo "Simplifying $file..."
+              /simplify.sh "$file"
+              rm -f "$file"
+            done
+          done
+
+          find . -maxdepth 2 -type f -name "*.geojsonseq" -exec mv {} simplified/ \;
+
+          ls -laR simplified/
+          tar cfz simplified-$(CONTINENT).tar.gz simplified/
+
     - task: PublishPipelineArtifact@1
       enabled: true
-      displayName: 'Store polygon artifacts'
+      displayName: 'Store simplified continent artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/simplified-$(CONTINENT).tar.gz'
+        artifact: 'admin-polygons-simplified-$(CONTINENT)'
+        publishLocation: 'pipeline'
+
+- stage: package
+  displayName: 'Package global simplified polygons'
+  dependsOn: simplify
+  jobs:
+  - job: package
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: none
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download all simplified continent artifacts'
+      inputs:
+        buildType: 'current'
+        buildVersionToDownload: 'latest'
+        itemPattern: 'admin-polygons-simplified-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/archives'
+    - task: Bash@3
+      enabled: true
+      displayName: 'Bundle global artifact'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -x
+          mkdir -p simplified
+          find archives -name "simplified-*.tar.gz" | while read -r archive; do
+            tar xfz "$archive" -C .
+          done
+          ls -la simplified/
+          tar cfz simplified.tar.gz simplified/
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store global simplified artifact'
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
         artifact: 'admin-polygons-simplified'
