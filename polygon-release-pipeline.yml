@@ -25,7 +25,7 @@ jobs:
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
   - task: Bash@3
-    displayName: 'Prepare Release Assets (Global, Continents & Single Countries)'
+    displayName: 'Prepare Release Assets & Traceability Metadata'
     inputs:
       targetType: 'inline'
       script: |
@@ -38,16 +38,42 @@ jobs:
         # 2. Continental archives
         find downloads -name "simplified-*.tar.gz" -exec cp {} release-assets/ \;
 
-        # 3. Individual country .geojsonseq files
+        # 3. Individual country .geojsonseq files & build-info.json
         find downloads -name "simplified-*.tar.gz" | while read -r archive; do
           tar xfz "$archive" -C release-assets/
         done
         if [ -d "release-assets/simplified" ]; then
           mv release-assets/simplified/*.geojsonseq release-assets/ 2>/dev/null || true
-          rmdir release-assets/simplified
+          mv release-assets/simplified/build-info.json release-assets/ 2>/dev/null || true
+          rmdir release-assets/simplified 2>/dev/null || true
         fi
 
+        # Generate Traceability Release Notes
+        BUILD_TIME=$(jq -r '.osm_data_extracted_at // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
+        OSMIUM_IMG=$(jq -r '.osmium_tool_image // "v1.18.0"' release-assets/build-info.json 2>/dev/null || echo "v1.18.0")
+        TOOLS_IMG=$(jq -r '.osm_tools_image // "latest"' release-assets/build-info.json 2>/dev/null || echo "latest")
+        COMMIT_SHA=$(jq -r '.pipeline_commit // "'$(Build.SourceVersion)'"' release-assets/build-info.json 2>/dev/null || echo "$(Build.SourceVersion)")
+        BUILD_NUM=$(jq -r '.pipeline_build_number // "'$(Build.BuildNumber)'"' release-assets/build-info.json 2>/dev/null || echo "$(Build.BuildNumber)")
+
+        cat <<EOF > release-notes.md
+        ## 🔍 Traceability & Versioning Info
+
+        | Component | Version / Identifier | Details |
+        | :--- | :--- | :--- |
+        | **OSM Data Snapshot** | \`${BUILD_TIME}\` | Extracted from Geofabrik PBF sources |
+        | **\`osmium-tool\` Image** | \`${OSMIUM_IMG}\` | PBF filtering & GeoJSON sequence export |
+        | **\`osm-tools\` Image** | \`${TOOLS_IMG}\` | Polygon coverage simplification engine |
+        | **Pipeline Build** | Build \`${BUILD_NUM}\` | Commit [\`${COMMIT_SHA}\`](https://github.com/\$(Build.Repository.Name)/commit/\${COMMIT_SHA}) |
+
+        ### 📦 Release Assets
+        - **\`simplified-all.tar.gz\`**: Global combined archive containing all simplified administrative boundaries worldwide.
+        - **\`simplified-<continent>.tar.gz\`**: Continental archives (Africa, Asia, Europe, Oceania, Central America).
+        - **\`*.geojsonseq\`**: Individual per-country polygon stream files for targeted single-country downloads.
+        EOF
+
+
         ls -la release-assets/
+        cat release-notes.md
 
   - task: GitHubRelease@1
     displayName: 'Create GitHub Release'
@@ -59,10 +85,12 @@ jobs:
       tagSource: 'userSpecifiedTag'
       tag: 'v1.6-alpha'
       title: 'OSM Admin Polygons Release'
-      releaseNotesInline: 'Automated release containing global archive, continental archives, and individual country polygon streams.'
+      releaseNotesSource: 'filePath'
+      releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
       assets: |
         $(System.DefaultWorkingDirectory)/release-assets/*.tar.gz
         $(System.DefaultWorkingDirectory)/release-assets/*.geojsonseq
       assetUploadMode: 'delete'
       isDraft: true
       isPreRelease: true
+

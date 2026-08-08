@@ -796,8 +796,21 @@ stages:
           find archives -name "simplified-*.tar.gz" | while read -r archive; do
             tar xfz "$archive" -C .
           done
+
+          cat <<EOF > simplified/build-info.json
+          {
+            "osm_data_extracted_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "osmium_tool_image": "mirror.gcr.io/krizleebear/docker-osmium-tool:v1.18.0",
+            "osm_tools_image": "mirror.gcr.io/krizleebear/osm-tools:latest",
+            "pipeline_commit": "$(Build.SourceVersion)",
+            "pipeline_build_number": "$(Build.BuildNumber)"
+          }
+          EOF
+
+
           ls -la simplified/
           tar cfz simplified.tar.gz simplified/
+
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store global simplified artifact'
