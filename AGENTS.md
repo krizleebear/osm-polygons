@@ -44,3 +44,6 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - Use conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`).
 3. **Container Registry Mirrors:**
    - Preserve container registry mirror configurations (`mirror.gcr.io/krizleebear/...`) in pipeline definitions.
+4. **Feature Branch Pipeline Testing:**
+   - Azure DevOps pipelines can be triggered directly from feature branches. For major pipeline refactorings or matrix tests, work and test on a dedicated feature branch first before merging to `master`.
+
