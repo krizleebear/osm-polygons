@@ -79,7 +79,7 @@ jobs:
         SHORT_COMMIT_SHA=${COMMIT_SHA:0:8}
 
         cat <<EOF > release-notes.md
-        ## 🔍 Traceability & Versioning Info
+        ## Traceability & Versioning Info
 
         | Component | Version / Identifier | Details |
         | :--- | :--- | :--- |
@@ -88,7 +88,7 @@ jobs:
         | **\`osm-tools\` Engine** | Commit [\`${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/commit/\${TOOLS_COMMIT}) | Built on \`${TOOLS_BUILD_TIME}\` |
         | **Export Pipeline** | Build \`${BUILD_NUM}\` | Commit [\`${SHORT_COMMIT_SHA}\`](https://github.com/\$(Build.Repository.Name)/commit/\${COMMIT_SHA}) |
 
-        ### 📦 Release Assets
+        ### Release Assets
         - **\`simplified-all.tar.gz\`**: Global combined archive containing all simplified administrative boundaries worldwide.
         - **\`simplified-<continent>.tar.gz\`**: Continental archives (Africa, Asia, Europe, Oceania, Central America).
         - **\`*.geojsonseq\`**: Individual per-country polygon stream files for targeted single-country downloads.

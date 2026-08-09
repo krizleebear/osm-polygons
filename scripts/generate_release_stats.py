@@ -116,12 +116,12 @@ def main():
 
     # Generate Markdown Content
     md = []
-    md.append("\n## 📊 Dataset Statistics\n")
+    md.append("\n## Dataset Statistics\n")
     md.append(f"- **Total Administrative Polygons:** `{global_total:,}`")
     md.append(f"- **Regions / Countries Covered:** `{global_regions}`")
     md.append(f"- **Wikidata Linking Rate:** `{global_wikidata:,} / {global_total:,} ({global_wiki_pct:.1f}%)`\n")
 
-    md.append("### 🏛️ Global Administrative Level Breakdown\n")
+    md.append("### Global Administrative Level Breakdown\n")
     md.append("| Admin Level | Description | Polygon Count | % of Total |")
     md.append("| :--- | :--- | :--- | :--- |")
 
@@ -140,7 +140,7 @@ def main():
             pct = (cnt / global_total * 100) if global_total > 0 else 0.0
             md.append(f"| `admin_level={lvl}` | Unspecified / Other | `{cnt:,}` | `{pct:.1f}%` |")
 
-    md.append("\n### 🌍 Continental & Regional Breakdown\n")
+    md.append("\n### Continental & Regional Breakdown\n")
     md.append("| Region / Continent | Countries / Regions | Total Polygons | Wikidata % | Admin Levels Present |")
     md.append("| :--- | :--- | :--- | :--- | :--- |")
 
