@@ -38,6 +38,22 @@ jobs:
         # 2. Continental archives
         find downloads -name "simplified-*.tar.gz" -exec cp {} release-assets/ \;
 
+        # Check if artifacts were found
+        if [ ! -f "release-assets/simplified-all.tar.gz" ]; then
+          echo "****************************************************************"
+          echo " ERROR: No simplified polygon artifacts found in build downloads!"
+          echo ""
+          echo " Cause:"
+          echo " The latest build run of the export pipeline (definition 4) failed"
+          echo " or did not publish its final 'package' stage artifacts."
+          echo ""
+          echo " Solution:"
+          echo " Please run and verify that 'polygon-export-pipeline.yml' completes"
+          echo " successfully before triggering this GitHub release pipeline."
+          echo "****************************************************************"
+          exit 1
+        fi
+
         # 3. Individual country .geojsonseq files & build-info.json
         find downloads -name "simplified-*.tar.gz" | while read -r archive; do
           tar xfz "$archive" -C release-assets/
@@ -47,6 +63,7 @@ jobs:
           mv release-assets/simplified/build-info.json release-assets/ 2>/dev/null || true
           rmdir release-assets/simplified 2>/dev/null || true
         fi
+
 
         # Generate Traceability Release Notes
         BUILD_TIME=$(jq -r '.osm_data_extracted_at // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
