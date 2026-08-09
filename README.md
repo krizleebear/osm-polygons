@@ -40,7 +40,7 @@ The polygon export and release workflow is organized across three interconnected
 
 ```mermaid
 flowchart TD
-    A["1. PBF Download Pipeline<br/>(azure-pipelines-download-osm.yml in osm-tools)"] -->|Publishes osm-data-* PBF extracts| B["2. Polygon Export Pipeline<br/>(polygon-export-pipeline.yml in osm-polygons)"]
+    A["1. PBF Download Pipeline<br/>(azure-pipelines-download-osm.yml in osm-tools)"] -->|Stores internal osm-data-* PBF artifacts| B["2. Polygon Export Pipeline<br/>(polygon-export-pipeline.yml in osm-polygons)"]
     B -->|Generates & simplifies polygons| C["3. Build Artifacts<br/>(admin-polygons-simplified)"]
     C -->|Manual Release Trigger| D["4. GitHub Release Pipeline<br/>(polygon-release-pipeline.yml in osm-polygons)"]
     D -->|Publishes Assets & Release Notes| E["GitHub Release<br/>(simplified-all.tar.gz, *.geojsonseq)"]
@@ -50,8 +50,9 @@ flowchart TD
 
 1. **PBF Download Pipeline (`azure-pipelines-download-osm.yml` in `osm-tools`)**
    - Downloads 169 region PBF extracts worldwide from Geofabrik.
-   - Caches and publishes PBF extracts as pipeline artifacts (`osm-data-<region>`).
+   - Stores internal PBF extracts as pipeline artifacts (`osm-data-<region>`).
    - Supports incremental cache-reuse to preserve existing byte-for-byte baseline PBF data.
+
 
 2. **Polygon Export Pipeline (`polygon-export-pipeline.yml` in `osm-polygons`)**
    - **Export Stage**: Filters administrative boundary relations (`boundary=administrative`) using `osmium-tool`.
