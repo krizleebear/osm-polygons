@@ -926,6 +926,8 @@ stages:
 - stage: package
   displayName: 'Package global simplified polygons'
   dependsOn: simplify
+  condition: always()
+
   jobs:
   - job: package
     timeoutInMinutes: 360
