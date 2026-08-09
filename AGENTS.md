@@ -46,4 +46,10 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - Preserve container registry mirror configurations (`mirror.gcr.io/krizleebear/...`) in pipeline definitions.
 4. **Feature Branch Pipeline Testing:**
    - Azure DevOps pipelines can be triggered directly from feature branches. For major pipeline refactorings or matrix tests, work and test on a dedicated feature branch first before merging to `master`.
+5. **Transparent Failure Policy (No Hiding Errors / No Silent Fallbacks):**
+   - Pipeline scripts and processing stages must never mask missing input artifacts, swallow errors, or execute silent fallbacks to raw external URLs. If an expected upstream artifact or file is missing, the script must fail explicitly with a clear, diagnostic error message detailing the missing file, root cause, and remediation steps.
+6. **English Output Standard for CI/CD & Pipeline Logs:**
+   - All user-facing log outputs, diagnostic error messages, pipeline notices, and CLI reports must be written strictly in clear, professional English to maintain consistency across international developer environments and automated CI/CD runners.
+
+
 

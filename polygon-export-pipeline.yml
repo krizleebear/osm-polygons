@@ -747,11 +747,25 @@ stages:
 
           INPUT_PBF=osm-data-$(OSM_REGION)/$(OSM_REGION).osm.pbf
           if [ ! -f "$INPUT_PBF" ]; then
-            echo "PBF file $INPUT_PBF not found in artifacts. Downloading directly from $(PBF_URL)..."
-            mkdir -p "osm-data-$(OSM_REGION)"
-            curl -L -sSL "$(PBF_URL)" -o "$INPUT_PBF"
+            echo "****************************************************************"
+            echo " ERROR: Missing PBF file for region '$(OSM_REGION)'!"
+            echo ""
+            echo " File '$INPUT_PBF' was not found."
+            echo ""
+            echo " Cause:"
+            echo " The PBF download pipeline has not been executed for '$(OSM_REGION)' yet."
+            echo ""
+            echo " Solution:"
+            echo " Please run the PBF download pipeline ('osm-download') in Azure DevOps"
+            echo " first to generate the required PBF dataset for '$(OSM_REGION)'."
+            echo "****************************************************************"
+            exit 1
           fi
           ADMIN_PBF=$(OSM_REGION).admins.pbf
+
+
+
+
 
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
 
