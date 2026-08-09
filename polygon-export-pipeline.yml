@@ -24,6 +24,10 @@ parameters:
   displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
   type: boolean
   default: false
+- name: requireWikidata
+  displayName: 'Require wikidata tag on exported polygons (If false, only require admin_level and name)'
+  type: boolean
+  default: true
 
 stages:
 - stage: export
@@ -34,6 +38,8 @@ stages:
 
   - job: export
     timeoutInMinutes: 360
+    workspace:
+      clean: all
     container: osmium-tool
 
 
@@ -770,20 +776,26 @@ stages:
             exit 1
           fi
           ADMIN_PBF=$(OSM_REGION).admins.pbf
-
-
-
-
-
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
 
+          # Step 1: Filter administrative boundaries
           osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} boundary=administrative
-          osmium export ${ADMIN_PBF} --output=temp.geojsonseq --overwrite --config=osmium-export-config.json
 
-          #omit polygons without name, admin_level and wikidata reference
-          cat temp.geojsonseq | grep "admin_level" | grep "name" | grep "wikidata" > ${POLYGON_JSON}
+          # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
+          rm -rf osm-data-$(OSM_REGION)
 
-          #gzip ${POLYGON_JSON}
+          # Step 2: Stream export directly to stdout and filter with grep (no temp.geojsonseq file)
+          # omit polygons without name, admin_level (and optionally wikidata reference)
+          if [ "${{ parameters.requireWikidata }}" = "true" ]; then
+            osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
+              | grep "admin_level" | grep "name" | grep "wikidata" > ${POLYGON_JSON}
+          else
+            osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
+              | grep "admin_level" | grep "name" > ${POLYGON_JSON}
+          fi
+
+          # Reclaim disk space: Remove intermediate admin PBF immediately
+          rm -f ${ADMIN_PBF}
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -793,6 +805,14 @@ stages:
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
 
+    - task: Bash@3
+      displayName: 'Cleanup workspace'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          rm -rf $(System.DefaultWorkingDirectory)/*
+
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
@@ -801,6 +821,8 @@ stages:
   jobs:
   - job: simplify
     timeoutInMinutes: 360
+    workspace:
+      clean: all
     container: osm-tools
     strategy:
       matrix:
@@ -893,12 +915,22 @@ stages:
         artifact: 'admin-polygons-simplified-$(CONTINENT)'
         publishLocation: 'pipeline'
 
+    - task: Bash@3
+      displayName: 'Cleanup workspace'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          rm -rf $(System.DefaultWorkingDirectory)/*
+
 - stage: package
   displayName: 'Package global simplified polygons'
   dependsOn: simplify
   jobs:
   - job: package
     timeoutInMinutes: 360
+    workspace:
+      clean: all
     pool:
 
       vmImage: 'ubuntu-latest'
@@ -950,3 +982,11 @@ stages:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
         artifact: 'admin-polygons-simplified'
         publishLocation: 'pipeline'
+
+    - task: Bash@3
+      displayName: 'Cleanup workspace'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          rm -rf $(System.DefaultWorkingDirectory)/*
