@@ -34,6 +34,35 @@ Here's an example of one of the exported GeoJSON objects:
 }
 ```
 
+## Pipeline Architecture & Release Workflow
+
+The polygon export and release workflow is organized across three interconnected Azure DevOps pipelines and GitHub Releases:
+
+```mermaid
+flowchart TD
+    A["1. PBF Download Pipeline<br/>(azure-pipelines-download-osm.yml in osm-tools)"] -->|Publishes osm-data-* PBF extracts| B["2. Polygon Export Pipeline<br/>(polygon-export-pipeline.yml in osm-polygons)"]
+    B -->|Generates & simplifies polygons| C["3. Build Artifacts<br/>(admin-polygons-simplified)"]
+    C -->|Manual Release Trigger| D["4. GitHub Release Pipeline<br/>(polygon-release-pipeline.yml in osm-polygons)"]
+    D -->|Publishes Assets & Release Notes| E["GitHub Release<br/>(simplified-all.tar.gz, *.geojsonseq)"]
+```
+
+### Pipeline Overview
+
+1. **PBF Download Pipeline (`azure-pipelines-download-osm.yml` in `osm-tools`)**
+   - Downloads 169 region PBF extracts worldwide from Geofabrik.
+   - Caches and publishes PBF extracts as pipeline artifacts (`osm-data-<region>`).
+   - Supports incremental cache-reuse to preserve existing byte-for-byte baseline PBF data.
+
+2. **Polygon Export Pipeline (`polygon-export-pipeline.yml` in `osm-polygons`)**
+   - **Export Stage**: Filters administrative boundary relations (`boundary=administrative`) using `osmium-tool`.
+   - **Simplify Stage**: Runs `CoverageSimplifier` from `osm-tools` in Docker (`krizleebear/osm-tools:latest`) to simplify geometries while preserving topology, tags, and maritime coastline buffers (~1.1 km into the sea).
+   - **Package Stage**: Packages all continental archives (`simplified-<continent>.tar.gz`) and individual country `.geojsonseq` files into a unified global archive (`simplified.tar.gz`) with full build metadata (`build-info.json`).
+
+3. **Standalone Manual GitHub Release Pipeline (`polygon-release-pipeline.yml` in `osm-polygons`)**
+   - **Manual Trigger**: Executed on-demand (`trigger: none`) when a verified build is ready for release.
+   - **Traceability**: Generates GitHub Release notes containing a Markdown traceability matrix linking directly to exact Git commit SHAs of both `osm-tools` and `osm-polygons`.
+   - **Assets**: Uploads `simplified-all.tar.gz`, continental archives (`simplified-*.tar.gz`), and individual country `.geojsonseq` stream files.
+
 ## License
 This osm-polygons data is made available under the Open Database License: http://opendatacommons.org/licenses/odbl/1.0/. Any rights in individual contents of the database are licensed under the Database Contents License: http://opendatacommons.org/licenses/dbcl/1.0/
 
@@ -48,3 +77,4 @@ Be aware that you must adhere to ODbL (as stated above) also while reverse geoco
 
 
 https://github.com/krizleebear/osm-polygons/releases/tag/v1.0
+
