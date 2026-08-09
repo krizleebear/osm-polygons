@@ -54,15 +54,17 @@ jobs:
           exit 1
         fi
 
-        # 3. Individual country .geojsonseq files & build-info.json
-        find downloads -name "simplified-*.tar.gz" | while read -r archive; do
+        # 3. Extract build-info.json and individual country .geojsonseq files
+        find downloads -name "*.tar.gz" | while read -r archive; do
           tar xfz "$archive" -C release-assets/
         done
         if [ -d "release-assets/simplified" ]; then
           mv release-assets/simplified/*.geojsonseq release-assets/ 2>/dev/null || true
           mv release-assets/simplified/build-info.json release-assets/ 2>/dev/null || true
+          rm release-assets/simplified/osm-tools-version.info 2>/dev/null || true
           rmdir release-assets/simplified 2>/dev/null || true
         fi
+
 
 
         # Generate Traceability Release Notes
