@@ -76,6 +76,17 @@ So if you're trying to reverse-geocode huge amounts of data, voilá.
 ### License considerations
 Be aware that you must adhere to ODbL (as stated above) also while reverse geocoding. There's a special guide for that: https://wiki.osmfoundation.org/wiki/Licence/Community_Guidelines/Geocoding_-_Guideline
 
+### Administrative Hierarchy Notes for Geocoders (`admin_level`)
+* **National Level Variations**: Countries with overseas territories (such as France, the Netherlands, or the United Kingdom) structure their administrative relations differently in OSM:
+  * `admin_level=2`: Represents the entire global sovereign state (e.g., *République française*, relation 2202162). In single-country PBF extracts (such as `france-latest.osm.pbf`), `admin_level=2` relations may be incomplete due to member relations located outside the extract.
+  * `admin_level=3`: Represents the mainland territory (e.g., *France métropolitaine*, relation 1403916). Reverse geocoders should query both `admin_level=2` and `admin_level=3` to properly capture mainland country polygons.
+
+### Non-Polygonal Features (`LineString`, `Point`)
+* The exported `.geojsonseq` stream files preserve all valid `boundary=administrative` entities with `name`, `admin_level`, and `wikidata` attributes, including non-polygonal geometries (`LineString`, `Point`).
+* **Maritime & Boundary Lines**: Linear features represent 12-nautical-mile territorial waters boundaries, EEZs, and bilateral border segments.
+* **Point Features & Admin Centres**: Point features contain administrative centre coordinates (e.g., city centres, capitals), providing valuable auxiliary metadata for spatial indices alongside boundary polygons.
+
 
 https://github.com/krizleebear/osm-polygons/releases/tag/v1.0
+
 
