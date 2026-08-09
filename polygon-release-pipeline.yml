@@ -94,7 +94,8 @@ jobs:
         - **\`*.geojsonseq\`**: Individual per-country polygon stream files for targeted single-country downloads.
         EOF
 
-
+        # Generate Dataset Statistics
+        python3 scripts/generate_release_stats.py release-assets release-notes.md || true
 
         ls -la release-assets/
         cat release-notes.md
