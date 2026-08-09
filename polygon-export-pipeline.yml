@@ -19,9 +19,17 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+parameters:
+- name: reuseExportArtifacts
+  displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
+  type: boolean
+  default: false
+
 stages:
 - stage: export
   displayName: 'Export polygons from OSM PBF'
+  condition: eq('${{ parameters.reuseExportArtifacts }}', false)
+
   jobs:
 
   - job: export
@@ -788,6 +796,8 @@ stages:
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
+  condition: always()
+
   jobs:
   - job: simplify
     timeoutInMinutes: 360
@@ -832,10 +842,15 @@ stages:
       enabled: true
       displayName: 'Download export artifacts'
       inputs:
-        buildType: 'current'
+        buildType: 'specific'
+        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+        definition: '4'
         buildVersionToDownload: 'latest'
+        allowFailedBuilds: true
+        allowPartiallySucceededBuilds: true
         itemPattern: 'admin-polygons-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)'
+
 
     - task: Bash@3
       enabled: true
