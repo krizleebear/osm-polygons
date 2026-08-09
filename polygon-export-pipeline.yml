@@ -853,9 +853,14 @@ stages:
             find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
               echo "Simplifying $file..."
               /simplify.sh "$file"
+              SIMPLIFIED_OUTPUT=$(find $(dirname "$file") -name "*.simplified.geojsonseq" | head -n 1)
+              if [ -n "$SIMPLIFIED_OUTPUT" ] && [ -f "$SIMPLIFIED_OUTPUT" ]; then
+                mv "$SIMPLIFIED_OUTPUT" "simplified/$(basename "$file")"
+              fi
               rm -f "$file"
             done
           done
+
 
           # Save osm-tools container git version info
           unzip -p /app/app.jar git.properties > simplified/osm-tools-version.info 2>/dev/null || true
