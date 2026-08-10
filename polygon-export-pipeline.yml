@@ -5,8 +5,9 @@ name: polygon-pipeline
 resources:
   containers:
   - container: osmium-tool
-    #image: krizleebear/docker-osmium-tool:v1.18.0
-    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.18.0
+    # Use mirror.gcr.io to prevent Docker Hub pull rate limits during multi-job matrix execution
+    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.19.0
+    #image: krizleebear/docker-osmium-tool:v1.19.0
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
