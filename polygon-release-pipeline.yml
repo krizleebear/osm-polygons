@@ -65,7 +65,20 @@ jobs:
           rmdir release-assets/simplified 2>/dev/null || true
         fi
 
-
+        GEOJSON_COUNT=$(find release-assets -name "*.geojsonseq" | wc -l)
+        if [ "$GEOJSON_COUNT" -eq 0 ]; then
+          echo "****************************************************************"
+          echo " ERROR: No polygon stream files (.geojsonseq) were found in downloaded artifacts!"
+          echo ""
+          echo " Cause:"
+          echo " The build artifacts downloaded from pipeline definition 4 are empty."
+          echo ""
+          echo " Solution:"
+          echo " Re-run 'polygon-export-pipeline.yml' and ensure it generates valid"
+          echo " simplified polygon files before triggering this release."
+          echo "****************************************************************"
+          exit 1
+        fi
 
         # Generate Traceability Release Notes
         BUILD_TIME=$(jq -r '.osm_data_extracted_at // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
@@ -95,7 +108,7 @@ jobs:
         EOF
 
         # Generate Dataset Statistics
-        python3 scripts/generate_release_stats.py release-assets release-notes.md || true
+        python3 scripts/generate_release_stats.py release-assets release-notes.md
 
         ls -la release-assets/
         cat release-notes.md

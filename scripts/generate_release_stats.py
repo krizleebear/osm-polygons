@@ -109,8 +109,8 @@ def main():
         })
 
     if global_total == 0:
-        print("No polygon data found to summarize.")
-        return
+        print("ERROR: No polygon data found to summarize.", file=sys.stderr)
+        sys.exit(1)
 
     global_wiki_pct = (global_wikidata / global_total * 100) if global_total > 0 else 0.0
 

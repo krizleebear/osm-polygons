@@ -868,18 +868,27 @@ stages:
 
     steps:
     - checkout: none #skip checking out the default repository resource
-    - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download export artifacts'
-      inputs:
-        buildType: 'specific'
-        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-        definition: '4'
-        buildVersionToDownload: 'latest'
-        allowFailedBuilds: true
-        allowPartiallySucceededBuilds: true
-        itemPattern: 'admin-polygons-*/**'
-        targetPath: '$(System.DefaultWorkingDirectory)'
+    ${{ if eq(parameters.reuseExportArtifacts, true) }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from latest build'
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'latest'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-*/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+    ${{ if eq(parameters.reuseExportArtifacts, false) }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from current build'
+        inputs:
+          buildType: 'current'
+          itemPattern: 'admin-polygons-*/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
 
 
     - task: Bash@3
@@ -917,6 +926,23 @@ stages:
           unzip -p /app/app.jar git.properties > simplified/osm-tools-version.info 2>/dev/null || true
 
           ls -laR simplified/
+
+          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
+          if [ "$SIMPLIFIED_COUNT" -eq 0 ]; then
+            echo "****************************************************************"
+            echo " ERROR: No simplified polygon files were produced for continent '$(CONTINENT)'!"
+            echo ""
+            echo " Cause:"
+            echo " Upstream export artifacts for regions in '$(CONTINENT)' were missing"
+            echo " or contained 0 features."
+            echo ""
+            echo " Solution:"
+            echo " Check upstream 'export' stage logs to verify .geojsonseq artifacts"
+            echo " were generated and downloaded correctly."
+            echo "****************************************************************"
+            exit 1
+          fi
+
           tar cfz simplified-$(CONTINENT).tar.gz simplified/
 
 
@@ -971,6 +997,21 @@ stages:
           find archives -name "simplified-*.tar.gz" | while read -r archive; do
             tar xfz "$archive" -C .
           done
+
+          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
+          if [ "$SIMPLIFIED_COUNT" -eq 0 ]; then
+            echo "****************************************************************"
+            echo " ERROR: No simplified polygon files were extracted from continent archives!"
+            echo ""
+            echo " Cause:"
+            echo " The 'simplify' stage produced empty continent archives."
+            echo ""
+            echo " Solution:"
+            echo " Verify that the 'simplify' stage completed successfully and generated"
+            echo " valid .geojsonseq files before running the 'package' stage."
+            echo "****************************************************************"
+            exit 1
+          fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "latest")
           OSM_TOOLS_BUILD_TIME=$(grep "git.build.time" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
