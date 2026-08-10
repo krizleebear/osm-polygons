@@ -7,6 +7,7 @@ resources:
   - container: osmium-tool
     #image: krizleebear/docker-osmium-tool:v1.18.0
     image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.18.0
+    options: --user 0:0
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
@@ -784,9 +785,6 @@ stages:
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
-
-          # Ensure python3 is available in container
-          which python3 || (apt-get update -qq && apt-get install -y -qq python3)
 
           # Step 2: Stream export directly to stdout and filter/enhance with filter_polygons.py
           # Purpose of filter_polygons.py:
