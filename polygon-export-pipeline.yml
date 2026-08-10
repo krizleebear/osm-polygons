@@ -7,7 +7,6 @@ resources:
   - container: osmium-tool
     #image: krizleebear/docker-osmium-tool:v1.18.0
     image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.18.0
-    options: --user 0:0
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
