@@ -50,6 +50,14 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - Pipeline scripts and processing stages must never mask missing input artifacts, swallow errors, or execute silent fallbacks to raw external URLs. If an expected upstream artifact or file is missing, the script must fail explicitly with a clear, diagnostic error message detailing the missing file, root cause, and remediation steps.
 6. **English Output Standard for CI/CD & Pipeline Logs:**
    - All user-facing log outputs, diagnostic error messages, pipeline notices, and CLI reports must be written strictly in clear, professional English to maintain consistency across international developer environments and automated CI/CD runners.
+7. **Container Dependency Invariance (No Runtime Package Install):**
+   - Pipeline container images must pre-install all required execution binaries (e.g., Python 3). Pipeline steps must never attempt dynamic runtime package installation (`apt-get install`) or grant root privileges (`--user 0:0`).
+8. **Language Preference Hierarchy for Scripts & Tools:**
+   - Select implementation languages based on the available execution environment following the priority hierarchy: **Java > Python > Bash > others**. Do not introduce unapproved secondary languages (such as Perl) outside this hierarchy.
+9. **Local Clean-Room Container Verification:**
+   - Before committing pipeline modifications or scripts, verify execution inside the local Docker container environment to prevent missing-dependency failures in CI runners.
+10. **Workspace Boundary Scoping:**
+   - Limit all grep and file searches strictly to active workspace directories (`osm-polygons`, `osm-tools`, `docker-osmium-tool`) without traversing parent directories.
 
 
 
