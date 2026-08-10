@@ -866,27 +866,26 @@ stages:
     steps:
     - checkout: none #skip checking out the default repository resource
     ${{ if eq(parameters.reuseExportArtifacts, true) }}:
-      - task: DownloadPipelineArtifact@2
-        enabled: true
-        displayName: 'Download export artifacts from latest build'
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '4'
-          buildVersionToDownload: 'latest'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
-          targetPath: '$(System.DefaultWorkingDirectory)'
-    ${{ if eq(parameters.reuseExportArtifacts, false) }}:
-      - task: DownloadPipelineArtifact@2
-        enabled: true
-        displayName: 'Download export artifacts from current build'
-        inputs:
-          buildType: 'current'
-          itemPattern: 'admin-polygons-*/**'
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download export artifacts from latest build'
+      inputs:
+        buildType: 'specific'
+        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+        definition: '4'
+        buildVersionToDownload: 'latest'
+        allowFailedBuilds: true
+        allowPartiallySucceededBuilds: true
+        itemPattern: 'admin-polygons-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)'
+    ${{ else }}:
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download export artifacts from current build'
+      inputs:
+        buildType: 'current'
+        itemPattern: 'admin-polygons-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: Bash@3
       enabled: true
