@@ -865,10 +865,11 @@ stages:
 
     steps:
     - checkout: none #skip checking out the default repository resource
-    ${{ if eq(parameters.reuseExportArtifacts, true) }}:
+
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download export artifacts from latest build'
+      condition: eq('${{ parameters.reuseExportArtifacts }}', true)
       inputs:
         buildType: 'specific'
         project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
@@ -878,10 +879,11 @@ stages:
         allowPartiallySucceededBuilds: true
         itemPattern: 'admin-polygons-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)'
-    ${{ else }}:
+
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download export artifacts from current build'
+      condition: eq('${{ parameters.reuseExportArtifacts }}', false)
       inputs:
         buildType: 'current'
         itemPattern: 'admin-polygons-*/**'

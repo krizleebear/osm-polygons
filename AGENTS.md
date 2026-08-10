@@ -58,6 +58,8 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - Before committing pipeline modifications or scripts, verify execution inside the local Docker container environment to prevent missing-dependency failures in CI runners.
 10. **Workspace Boundary Scoping:**
    - Limit all grep and file searches strictly to active workspace directories (`osm-polygons`, `osm-tools`, `docker-osmium-tool`) without traversing parent directories.
+11. **Mandatory Pipeline YAML Syntax Pre-Verification:**
+   - Before committing modifications to pipeline definition files (`.yml`), validate full YAML structural parsing inside Docker using `scripts/validate_azure_yaml.py` (`docker run --rm -v $(pwd):/workspace -w /workspace python:3-alpine sh -c "pip install -q pyyaml && python3 scripts/validate_azure_yaml.py <pipeline.yml>"`). Commits with unverified YAML syntax are strictly prohibited.
 
 
 
