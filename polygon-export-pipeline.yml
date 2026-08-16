@@ -11,7 +11,7 @@ resources:
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
-    image: mirror.gcr.io/krizleebear/osm-tools:latest
+    image: mirror.gcr.io/krizleebear/osm-tools:master-1ae4a98df8b7f0f2fe8faf384883fab92d26003c
     #endpoint: docker-krizleebear
 
 trigger:
@@ -780,8 +780,15 @@ stages:
           ADMIN_PBF=$(OSM_REGION).admins.pbf
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
 
-          # Step 1: Filter administrative boundaries
-          osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} boundary=administrative
+          # Step 1: Filter administrative boundaries (broad osmium filter, expressions OR-combined;
+          # precise sub-municipal refinement happens in filter_polygons.py per SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
+          # - Rule 1: boundary=administrative (admin_level 2..11)
+          # - Rule 2: boundary=statistical/local_authority/political/borough
+          # - Rule 3: relations with place=suburb/quarter/borough/neighbourhood (type=boundary/multipolygon checked in Python)
+          osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} \
+            boundary=administrative \
+            boundary=statistical,local_authority,political,borough \
+            r/place=suburb,quarter,borough,neighbourhood
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
@@ -792,6 +799,8 @@ stages:
           # 2. Prevent tag loss: fallback missing/null 'name' tags to name:en, official_name, ISO3166-1, or ref.
           # 3. Flag territorial sea boundaries (border_type=territorial, maritime=yes) to prioritize landmasses.
           # 4. Map fallback admin_level_mapped="4" for countries lacking native admin_level=4 relations (EE, HR, ME, SI, XK, etc.).
+          # 5. Synthesize admin_level for sub-municipal boundaries: boundary=statistical/local_authority/political/borough
+          #    -> "10", place=suburb/quarter/neighbourhood/borough on type=boundary/multipolygon relations -> 9/10/11/9.
           if [ "${{ parameters.requireWikidata }}" = "true" ]; then
             osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
               | python3 scripts/filter_polygons.py --require-wikidata --country-code $(COUNTRY_CODE) > ${POLYGON_JSON}

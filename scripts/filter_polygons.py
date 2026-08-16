@@ -7,6 +7,10 @@ Main tasks:
 2. Prevent tag loss: fallback missing or null 'name' tags to name:en, official_name, ISO3166-1, or default.
 3. Flag maritime / territorial sea polygons (border_type=territorial, maritime=yes) to prioritize landmasses.
 4. Provide mapped level-4 fallback properties for countries lacking native admin_level=4 relations.
+5. Synthesize admin_level for sub-municipal boundaries per SPEC_OSM_POLYGONS_SUBDIVISIONS.md:
+   - Rule 2: boundary=statistical/local_authority/political/borough without admin_level -> default "10".
+   - Rule 3: type=boundary/multipolygon relations with place=suburb/quarter/neighbourhood/borough -> default 9/10/11/9.
+6. Keep nameless admin_level=2 land borders that carry ISO3166-1 (instead of dropping them).
 """
 
 import sys
@@ -26,12 +30,34 @@ LEVEL_4_FALLBACK_COUNTRIES = {
     "EE", "HR", "ME", "SI", "XK", "CY", "IS", "LV", "MK"
 }
 
+# Sub-municipal boundary tag values (Rule 2 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
+# boundary IN (statistical, local_authority, political, borough) without admin_level -> default admin_level.
+SUBMUNICIPAL_BOUNDARY_VALUES = ("statistical", "local_authority", "political", "borough")
+DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL = "10"
+
+# Place-based boundary relations (Rule 3 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
+# type=boundary OR type=multipolygon combined with place -> default admin_level.
+PLACE_TO_ADMIN_LEVEL = {
+    "suburb": "9",
+    "quarter": "10",
+    "neighbourhood": "11",
+    "borough": "9",
+}
+PLACE_RELATION_TYPES = ("boundary", "multipolygon")
+
 def process_feature(data, require_wikidata=False, country_code=None):
     if data.get("type") != "Feature":
         return None
 
     props = data.get("properties")
     if not props or not isinstance(props, dict):
+        return None
+
+    # Spec §4.2: only Polygon / MultiPolygon geometries are emitted.
+    # osmium tags-filter pulls in referenced member nodes/ways which osmium export
+    # would otherwise leak through as Point/LineString features.
+    geometry_type = (data.get("geometry") or {}).get("type")
+    if geometry_type not in ("Polygon", "MultiPolygon"):
         return None
 
     # Check admin_level presence
@@ -52,6 +78,22 @@ def process_feature(data, require_wikidata=False, country_code=None):
         if not props.get("ISO3166-1"):
             props["ISO3166-1"] = info["country"]
 
+    # Task 5: Synthesize admin_level for sub-municipal boundaries (Rule 3 takes precedence over Rule 2)
+    element_type = str(props.get("@type", "")).strip().lower()
+    rel_type = str(props.get("type", "")).strip().lower()
+    place_val = str(props.get("place", "")).strip().lower()
+    if (element_type == "relation" and rel_type in PLACE_RELATION_TYPES
+            and place_val in PLACE_TO_ADMIN_LEVEL
+            and (not raw_level or raw_level == "None")):
+        props["admin_level"] = PLACE_TO_ADMIN_LEVEL[place_val]
+        raw_level = PLACE_TO_ADMIN_LEVEL[place_val]
+
+    boundary_val = str(props.get("boundary", "")).strip().lower()
+    if (boundary_val in SUBMUNICIPAL_BOUNDARY_VALUES
+            and (not raw_level or raw_level == "None")):
+        props["admin_level"] = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
+        raw_level = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
+
     if not raw_level or raw_level == "None":
         return None
 
@@ -70,8 +112,12 @@ def process_feature(data, require_wikidata=False, country_code=None):
         if fallback_name and str(fallback_name).strip() != "":
             props["name"] = str(fallback_name).strip()
         else:
-            # Drop features without any identifiable name
-            return None
+            # Drop features without any identifiable name, EXCEPT national land borders
+            # (admin_level=2 with ISO3166-1, per SPEC_OSM_POLYGONS_SUBDIVISIONS.md §3).
+            if raw_level == "2" and props.get("ISO3166-1"):
+                props["name"] = str(props.get("ISO3166-1")).strip()
+            else:
+                return None
 
     if require_wikidata and not props.get("wikidata"):
         return None
