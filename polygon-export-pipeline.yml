@@ -965,7 +965,7 @@ stages:
 - stage: package
   displayName: 'Package global simplified polygons'
   dependsOn: simplify
-  condition: always()
+  condition: succeeded()
 
   jobs:
   - job: package

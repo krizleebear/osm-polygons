@@ -60,6 +60,15 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - Limit all grep and file searches strictly to active workspace directories (`osm-polygons`, `osm-tools`, `docker-osmium-tool`) without traversing parent directories.
 11. **Mandatory Pipeline YAML Syntax Pre-Verification:**
    - Before committing modifications to pipeline definition files (`.yml`), validate full YAML structural parsing inside Docker using `scripts/validate_azure_yaml.py` (`docker run --rm -v $(pwd):/workspace -w /workspace python:3-alpine sh -c "pip install -q pyyaml && python3 scripts/validate_azure_yaml.py <pipeline.yml>"`). Commits with unverified YAML syntax are strictly prohibited.
-
-
+12. **Azure DevOps Job Container Entrypoint Safety:**
+   - Docker images intended for Azure DevOps job containers (`container: <image>`) must NOT define an exec-form `ENTRYPOINT` that exits on unknown arguments (such as `ENTRYPOINT ["/app/entrypoint.sh"]`), because Azure DevOps starts job containers with `sleep infinity`. Use `CMD ["/bin/bash"]` in the Dockerfile and invoke processing scripts explicitly in pipeline steps.
+13. **Docker Schema 2 Manifest Requirement for `mirror.gcr.io`**:
+    - Container images pushed to Docker Hub for `mirror.gcr.io` consumption must be built in Docker Schema 2 format (`application/vnd.docker.distribution.manifest.v2+json`) using standard `docker build` or `docker buildx build --provenance=false`. Modern OCI attestation/provenance blobs cause `unknown blob` 404 errors on `mirror.gcr.io`.
+14. **DuckDB Script Template Substitution Invariant:**
+    - DuckDB `COPY ... TO` statements require string literal paths. Do not attempt `getvariable()` inside `COPY TO`. Use `sed` token substitution (`__INPUT_PBF__`, `__OUTPUT_PARQUET__`) on SQL templates before piping into `duckdb`.
+15. **Azure DevOps Parameter Condition Syntax**:
+    - In Azure DevOps task/job `condition:` expressions, template parameters MUST be wrapped in `${{ eq(parameters.name, value) }}`. Raw `parameters.name` references outside `${{ }}` trigger `Unrecognized value: 'parameters'` errors.
+    - In Bash scripts, handle both `"false"` and `"False"` because template expansion converts boolean false to `"False"`.
+16. **Packaging Stage Dependency Safety (`condition: succeeded()`):**
+    - Packaging and bundling stages (such as `stage: package`) that aggregate artifacts from upstream parallel matrix jobs MUST use `condition: succeeded()`. Never use `condition: always()` on final bundling stages, as cancellation or upstream failure would trigger incomplete artifact archiving.
 
