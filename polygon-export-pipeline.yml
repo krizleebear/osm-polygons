@@ -1069,13 +1069,17 @@ stages:
             exit 1
           fi
 
-          OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "latest")
+          OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
           OSM_TOOLS_BUILD_TIME=$(grep "git.build.time" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
+
+          if [ -z "$OSM_TOOLS_COMMIT" ] || [ "$OSM_TOOLS_COMMIT" = "latest" ]; then
+            OSM_TOOLS_COMMIT="943cb234614deb02f9deca381f14cccc684e666b"
+          fi
 
           cat <<EOF > simplified/build-info.json
           {
             "osm_data_extracted_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "osmium_tool_image": "v1.18.0",
+            "osmium_tool_image": "v1.19.0",
             "osm_tools_commit": "${OSM_TOOLS_COMMIT}",
             "osm_tools_build_time": "${OSM_TOOLS_BUILD_TIME}",
             "pipeline_commit": "$(Build.SourceVersion)",

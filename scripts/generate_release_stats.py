@@ -12,9 +12,15 @@ from collections import defaultdict
 
 ADMIN_LEVEL_DESCRIPTIONS = {
     '2': 'National Boundaries / Countries',
+    '3': 'Statistical / Autonomous Regions',
     '4': 'States / Provinces / Regions',
+    '5': 'Districts / Departments',
     '6': 'Counties / Landkreise / Districts',
+    '7': 'Arrondissements / Intercommunal',
     '8': 'Municipalities / Cities / Gemeinden',
+    '9': 'Sub-municipalities / Wards',
+    '10': 'Sub-localities / Quarters',
+    '11': 'Neighborhoods / Localities',
 }
 
 def analyze_archive(tar_path):
@@ -45,10 +51,14 @@ def analyze_archive(tar_path):
                     
                     try:
                         data = json.loads(line_str)
-                        lvl = str(data.get('properties', {}).get('admin_level', 'other')).strip()
+                        raw_lvl = str(data.get('properties', {}).get('admin_level', '')).strip()
+                        if raw_lvl.isdigit() and 2 <= int(raw_lvl) <= 11:
+                            lvl = raw_lvl
+                        else:
+                            lvl = 'other'
                         stats['admin_levels'][lvl] += 1
                     except Exception:
-                        pass
+                        stats['admin_levels']['other'] += 1
     except Exception as e:
         print(f"Warning: Failed to process archive {tar_path}: {e}", file=sys.stderr)
         
@@ -125,20 +135,16 @@ def main():
     md.append("| Admin Level | Description | Polygon Count | % of Total |")
     md.append("| :--- | :--- | :--- | :--- |")
 
-    # Standard levels: 2, 4, 6, 8
-    known_levels = ['2', '4', '6', '8']
-    other_total = 0
-
     for lvl in sorted([l for l in global_admin_levels.keys() if l.isdigit()], key=int):
         cnt = global_admin_levels[lvl]
         pct = (cnt / global_total * 100) if global_total > 0 else 0.0
-        desc = ADMIN_LEVEL_DESCRIPTIONS.get(lvl, f"Sub-level / Locality Boundary (Level {lvl})")
+        desc = ADMIN_LEVEL_DESCRIPTIONS.get(lvl, f"Level {lvl} Boundary")
         md.append(f"| `admin_level={lvl}` | {desc} | `{cnt:,}` | `{pct:.1f}%` |")
 
-    for lvl, cnt in global_admin_levels.items():
-        if not lvl.isdigit():
-            pct = (cnt / global_total * 100) if global_total > 0 else 0.0
-            md.append(f"| `admin_level={lvl}` | Unspecified / Other | `{cnt:,}` | `{pct:.1f}%` |")
+    other_cnt = sum(cnt for lvl, cnt in global_admin_levels.items() if not lvl.isdigit())
+    if other_cnt > 0:
+        pct = (other_cnt / global_total * 100) if global_total > 0 else 0.0
+        md.append(f"| `other` | Minor / Non-standard Localities | `{other_cnt:,}` | `{pct:.1f}%` |")
 
     md.append("\n### Continental & Regional Breakdown\n")
     md.append("| Region / Continent | Countries / Regions | Total Polygons | Wikidata % | Admin Levels Present |")
