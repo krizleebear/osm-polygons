@@ -26,9 +26,9 @@ parameters:
   type: boolean
   default: false
 - name: exportBuildId
-  displayName: 'Specific Build ID to reuse export artifacts from (e.g. 262; leave empty for latest build)'
+  displayName: 'Specific Build ID to reuse export artifacts from (default "auto" uses latest export build)'
   type: string
-  default: ''
+  default: 'auto'
 - name: requireWikidata
   displayName: 'Require wikidata tag on exported polygons (If false, only require admin_level and name)'
   type: boolean
@@ -892,7 +892,7 @@ stages:
     steps:
     - checkout: none #skip checking out the default repository resource
 
-    - ${{ if ne(parameters.exportBuildId, '') }}:
+    - ${{ if and(ne(parameters.exportBuildId, 'auto'), ne(parameters.exportBuildId, '')) }}:
       - task: DownloadPipelineArtifact@2
         enabled: true
         displayName: 'Download export artifacts from specific build (${{ parameters.exportBuildId }})'
@@ -908,7 +908,7 @@ stages:
           itemPattern: 'admin-polygons-*/**'
           targetPath: '$(System.DefaultWorkingDirectory)'
 
-    - ${{ if eq(parameters.exportBuildId, '') }}:
+    - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
       - task: DownloadPipelineArtifact@2
         enabled: true
         displayName: 'Download export artifacts from latest build with export artifacts'
