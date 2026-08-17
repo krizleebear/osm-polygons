@@ -25,6 +25,10 @@ parameters:
   displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
   type: boolean
   default: false
+- name: exportBuildId
+  displayName: 'Specific Build ID to reuse export artifacts from (e.g. 262; leave empty for latest build)'
+  type: string
+  default: ''
 - name: requireWikidata
   displayName: 'Require wikidata tag on exported polygons (If false, only require admin_level and name)'
   type: boolean
@@ -828,6 +832,18 @@ stages:
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
 
+  - job: tag_export
+    displayName: 'Tag build with export artifacts'
+    dependsOn: export
+    condition: succeeded()
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: none
+    - script: |
+        echo "##vso[build.addbuildtag]has-export-artifacts"
+      displayName: 'Add has-export-artifacts build tag'
+
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
@@ -876,24 +892,42 @@ stages:
     steps:
     - checkout: none #skip checking out the default repository resource
 
-    - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download export artifacts from latest build'
-      condition: eq('${{ parameters.reuseExportArtifacts }}', true)
-      inputs:
-        buildType: 'specific'
-        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-        definition: '4'
-        buildVersionToDownload: 'latest'
-        allowFailedBuilds: true
-        allowPartiallySucceededBuilds: true
-        itemPattern: 'admin-polygons-*/**'
-        targetPath: '$(System.DefaultWorkingDirectory)'
+    - ${{ if ne(parameters.exportBuildId, '') }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from specific build (${{ parameters.exportBuildId }})'
+        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'specific'
+          pipelineId: '${{ parameters.exportBuildId }}'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-*/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - ${{ if eq(parameters.exportBuildId, '') }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from latest build with export artifacts'
+        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'latest'
+          tags: 'has-export-artifacts'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-*/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download export artifacts from current build'
-      condition: eq('${{ parameters.reuseExportArtifacts }}', false)
+      condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
       inputs:
         buildType: 'current'
         itemPattern: 'admin-polygons-*/**'
