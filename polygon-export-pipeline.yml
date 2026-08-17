@@ -910,6 +910,20 @@ stages:
           export JAVA_TOOL_OPTIONS="-Xmx6g"
           mkdir -p simplified
 
+          # Prune export directories belonging to other continents to conserve runner disk space
+          for dir in admin-polygons-*; do
+            [ -d "$dir" ] || continue
+            keep=false
+            for region in $(REGIONS); do
+              if [[ "$dir" == *"-${region}"* ]] || [[ "$dir" == *"_${region}"* ]]; then
+                keep=true
+                break
+              fi
+            done
+            if [ "$keep" = "false" ]; then
+              rm -rf "$dir"
+            fi
+          done
 
           for region in $(REGIONS); do
             find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
@@ -924,7 +938,7 @@ stages:
               if [ -n "$SIMPLIFIED_OUTPUT" ] && [ -f "$SIMPLIFIED_OUTPUT" ]; then
                 mv "$SIMPLIFIED_OUTPUT" "simplified/$(basename "$file")"
               fi
-              rm -f "$file"
+              rm -rf "$(dirname "$file")"
             done
           done
 
