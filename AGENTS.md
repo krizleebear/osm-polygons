@@ -69,6 +69,6 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
 15. **Azure DevOps Parameter Condition Syntax**:
     - In Azure DevOps task/job `condition:` expressions, template parameters MUST be wrapped in `${{ eq(parameters.name, value) }}`. Raw `parameters.name` references outside `${{ }}` trigger `Unrecognized value: 'parameters'` errors.
     - In Bash scripts, handle both `"false"` and `"False"` because template expansion converts boolean false to `"False"`.
-16. **Packaging Stage Dependency Safety (`condition: succeeded()`):**
-    - Packaging and bundling stages (such as `stage: package`) that aggregate artifacts from upstream parallel matrix jobs MUST use `condition: succeeded()`. Never use `condition: always()` on final bundling stages, as cancellation or upstream failure would trigger incomplete artifact archiving.
+16. **Packaging Stage Dependency Safety (`condition: succeeded('simplify')`):**
+    - Packaging and bundling stages (such as `stage: package`) that aggregate artifacts from upstream parallel matrix jobs MUST use `condition: succeeded('<stage>')` (e.g. `succeeded('simplify')`). Using parameterless `succeeded()` causes the stage to be skipped if any upstream stage (such as `export`) was skipped via conditional parameters (`reuseExportArtifacts`). Never use `condition: always()` on final bundling stages, as cancellation or upstream failure would trigger incomplete artifact archiving.
 
