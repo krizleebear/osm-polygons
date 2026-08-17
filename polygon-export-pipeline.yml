@@ -11,7 +11,7 @@ resources:
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
-    image: mirror.gcr.io/krizleebear/osm-tools:master-1ae4a98df8b7f0f2fe8faf384883fab92d26003c
+    image: mirror.gcr.io/krizleebear/osm-tools:master-e96e7ec54696a9560e8e6c479154a53f9b7c8236
     #endpoint: docker-krizleebear
 
 trigger:
