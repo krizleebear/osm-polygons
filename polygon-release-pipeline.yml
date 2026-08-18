@@ -14,7 +14,7 @@ jobs:
   steps:
   - checkout: self
 
-  # Download latest global & continent artifacts from build definition '4' (krizleebear.osm-polygons)
+  # Download latest simplified global & continent artifacts from build definition '4' (krizleebear.osm-polygons)
   - task: DownloadPipelineArtifact@2
     displayName: 'Download latest build artifacts'
     inputs:
@@ -22,6 +22,7 @@ jobs:
       project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
       definition: '4'
       buildVersionToDownload: 'latest'
+      itemPattern: 'admin-polygons-simplified*/**'
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
   - task: Bash@3
@@ -29,7 +30,7 @@ jobs:
     inputs:
       targetType: 'inline'
       script: |
-        set -x
+        set -e
         mkdir -p release-assets
 
         # 1. Global combined archive
@@ -54,16 +55,17 @@ jobs:
           exit 1
         fi
 
-        # 3. Extract build-info.json and individual country .geojsonseq files
-        find downloads -name "*.tar.gz" | while read -r archive; do
-          tar xfz "$archive" -C release-assets/
-        done
+        # 3. Extract build-info.json and individual country .geojsonseq files from the global archive
+        tar xfz release-assets/simplified-all.tar.gz -C release-assets/
         if [ -d "release-assets/simplified" ]; then
           mv release-assets/simplified/*.geojsonseq release-assets/ 2>/dev/null || true
           mv release-assets/simplified/build-info.json release-assets/ 2>/dev/null || true
           rm release-assets/simplified/osm-tools-version.info 2>/dev/null || true
           rmdir release-assets/simplified 2>/dev/null || true
         fi
+
+        # Reclaim runner disk space immediately by removing downloaded archives
+        rm -rf downloads
 
         GEOJSON_COUNT=$(find release-assets -name "*.geojsonseq" | wc -l)
         if [ "$GEOJSON_COUNT" -eq 0 ]; then
