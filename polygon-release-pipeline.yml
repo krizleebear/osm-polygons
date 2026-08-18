@@ -87,6 +87,10 @@ jobs:
         BUILD_TIME=$(jq -r '.osm_data_extracted_at // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
         OSMIUM_IMG=$(jq -r '.osmium_tool_image // "v1.19.0"' release-assets/build-info.json 2>/dev/null || echo "v1.19.0")
         TOOLS_COMMIT=$(jq -r '.osm_tools_commit // ""' release-assets/build-info.json 2>/dev/null || echo "")
+        REUSED_EXPORT=$(jq -r '.reused_export_artifacts // false' release-assets/build-info.json 2>/dev/null || echo "false")
+        EXPORT_COMMIT=$(jq -r '.export_pipeline_commit // ""' release-assets/build-info.json 2>/dev/null || echo "")
+        EXPORT_BUILD_NUM=$(jq -r '.export_build_number // ""' release-assets/build-info.json 2>/dev/null || echo "")
+        SIMP_COMMIT=$(jq -r '.simplification_pipeline_commit // ""' release-assets/build-info.json 2>/dev/null || echo "")
         
         # Fallback if TOOLS_COMMIT is empty or N/A
         if [ -z "$TOOLS_COMMIT" ] || [ "$TOOLS_COMMIT" = "N/A" ] || [ "$TOOLS_COMMIT" = "latest" ]; then
@@ -94,6 +98,13 @@ jobs:
         fi
 
         SHORT_TOOLS_SHA=${TOOLS_COMMIT:0:8}
+        SHORT_EXPORT_SHA=${EXPORT_COMMIT:0:8}
+        SHORT_SIMP_SHA=${SIMP_COMMIT:0:8}
+
+        EXPORT_DETAILS="Direct Build ${EXPORT_BUILD_NUM}"
+        if [ "$REUSED_EXPORT" = "true" ] || [ "$REUSED_EXPORT" = "True" ]; then
+          EXPORT_DETAILS="Reused from Build ${EXPORT_BUILD_NUM}"
+        fi
 
         # Query previous GitHub release to find previous osm-tools commit for comparison link
         PREV_RELEASE_BODY=$(curl -s "https://api.github.com/repos/krizleebear/osm-polygons/releases" | jq -r '.[0].body // ""' 2>/dev/null || echo "")
@@ -111,7 +122,9 @@ jobs:
 
         | Component | Version / Identifier | Details |
         | :--- | :--- | :--- |
-        | **OSM Data Snapshot** | \`${BUILD_TIME}\` | Extracted from Geofabrik PBF sources |
+        | **OSM Data Extraction** | \`${BUILD_TIME}\` | Extracted from Geofabrik PBF sources |
+        | **Export Pipeline** | [\`${SHORT_EXPORT_SHA}\`](https://github.com/krizleebear/osm-polygons/commit/${EXPORT_COMMIT}) | ${EXPORT_DETAILS} |
+        | **Simplification Pipeline** | [\`${SHORT_SIMP_SHA}\`](https://github.com/krizleebear/osm-polygons/commit/${SIMP_COMMIT}) | Polygons build pipeline |
         | **\`osmium-tool\` Image** | \`${OSMIUM_IMG}\` | PBF filtering & GeoJSON sequence export |
         | **\`osm-tools\` Engine** | [\`${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/commit/${TOOLS_COMMIT}) | Topology-preserving polygon simplification |
 
@@ -121,6 +134,8 @@ jobs:
         - **\`simplified-all.tar.gz\`**: Global combined archive containing all simplified administrative boundaries worldwide.
         - **\`simplified-<continent>.tar.gz\`**: Continental archives (Africa, Asia, Europe, Australia/Oceania, Central America, North America, South America, Russia).
         - **\`*.geojsonseq\`**: Individual per-country polygon stream files for targeted single-country downloads.
+        - **\`admin-levels-summary.md\` / \`.csv\` / \`.json\`**: Complete per-country matrix of polygon counts per \`admin_level\`.
+        - **\`VERSION.txt\` / \`build-info.json\`**: Release metadata and version traceability.
         EOF
 
         # Generate Dataset Statistics
@@ -128,6 +143,7 @@ jobs:
 
         ls -la release-assets/
         cat release-notes.md
+
 
   - task: PublishPipelineArtifact@1
     displayName: 'Store admin-level statistics artifact'
