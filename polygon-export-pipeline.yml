@@ -11,7 +11,7 @@ resources:
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
-    image: mirror.gcr.io/krizleebear/osm-tools:master-943cb234614deb02f9deca381f14cccc684e666b
+    image: mirror.gcr.io/krizleebear/osm-tools:master-162b5151fe6d06423b0246e64e41cb0c00519bd0
     #endpoint: docker-krizleebear
 
 trigger:
@@ -1091,7 +1091,7 @@ stages:
           OSM_TOOLS_BUILD_TIME=$(grep "git.build.time" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
 
           if [ -z "$OSM_TOOLS_COMMIT" ] || [ "$OSM_TOOLS_COMMIT" = "latest" ]; then
-            OSM_TOOLS_COMMIT="943cb234614deb02f9deca381f14cccc684e666b"
+            OSM_TOOLS_COMMIT="162b5151fe6d06423b0246e64e41cb0c00519bd0"
           fi
 
           cat <<EOF > simplified/build-info.json
