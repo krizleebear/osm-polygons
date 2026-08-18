@@ -72,4 +72,6 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - In Bash scripts, handle both `"false"` and `"False"` because template expansion converts boolean false to `"False"`.
 16. **Packaging Stage Dependency Safety (`condition: succeeded('simplify')`):**
     - Packaging and bundling stages (such as `stage: package`) that aggregate artifacts from upstream parallel matrix jobs MUST use `condition: succeeded('<stage>')` (e.g. `succeeded('simplify')`). Using parameterless `succeeded()` causes the stage to be skipped if any upstream stage (such as `export`) was skipped via conditional parameters (`reuseExportArtifacts`). Never use `condition: always()` on final bundling stages, as cancellation or upstream failure would trigger incomplete artifact archiving.
+17. **Upstream Container Image Synchronization:**
+    - Whenever modifications or optimizations are made to `osm-tools` and committed/pushed to `master`, downstream pipeline definitions (especially `resources.containers.osm-tools` in `polygon-export-pipeline.yml` and fallback commit definitions in `polygon-release-pipeline.yml`) MUST immediately and proactively be updated to reference the new commit SHA (`mirror.gcr.io/krizleebear/osm-tools:master-<SHA>`). Never leave downstream pipelines pointing to stale container versions.
 
