@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 import json
-from filter_polygons import process_feature
+from filter_polygons import process_feature, filter_features
 
 # Minimal valid polygon geometry shared by most fixtures (real osmium export always emits geometry).
 POLY_GEOM = {"type": "Polygon", "coordinates": [[[11.0, 48.0], [11.1, 48.0], [11.1, 48.1], [11.0, 48.0]]]}
@@ -100,6 +100,52 @@ class TestFilterPolygons(unittest.TestCase):
             "properties": {"admin_level": "8", "name": "Stadt"}
         }
         self.assertIsNotNone(process_feature(polygon))
+
+    def test_synthetic_funchal_reconstruction(self):
+        # Given child freguesias of Funchal without the parent relation 8421413
+        stream = [
+            feat({"id": 8427682, "admin_level": "8", "name": "Sé", "wikidata": "Q10860292"}),
+            feat({"id": 8427683, "admin_level": "8", "name": "Monte", "wikidata": "Q10860293"}),
+            feat({"id": 8427684, "admin_level": "8", "name": "São Martinho", "wikidata": "Q10860294"}),
+        ]
+        results = list(filter_features(stream))
+        # 3 children + 1 synthesized parent
+        self.assertEqual(len(results), 4)
+
+        funchal = [f for f in results if f["properties"].get("id") == 8421413][0]
+        self.assertEqual(funchal["properties"]["name"], "Funchal")
+        self.assertEqual(funchal["properties"]["admin_level"], "7")
+        self.assertEqual(funchal["properties"]["wikidata"], "Q25444")
+        self.assertEqual(funchal["geometry"]["type"], "MultiPolygon")
+        self.assertEqual(len(funchal["geometry"]["coordinates"]), 3)
+
+    def test_synthetic_funchal_not_duplicated_if_present(self):
+        # When parent relation is already present, no duplicate is created
+        stream = [
+            feat({"id": 8421413, "admin_level": "7", "name": "Funchal", "wikidata": "Q25444"}),
+            feat({"id": 8427682, "admin_level": "8", "name": "Sé", "wikidata": "Q10860292"}),
+        ]
+        results = list(filter_features(stream))
+        funchal_features = [f for f in results if f["properties"].get("id") == 8421413]
+        self.assertEqual(len(funchal_features), 1)
+
+    def test_synthetic_kaohsiung_reconstruction(self):
+        # Given child districts of Kaohsiung without the parent relation 2127079
+        stream = [
+            feat({"admin_level": "7", "name": "三民區", "name:en": "Sanmin District"}),
+            feat({"admin_level": "7", "name": "鼓山區", "name:en": "Gushan District"}),
+            feat({"admin_level": "7", "name": "苓雅區", "name:en": "Lingya District"}),
+        ]
+        results = list(filter_features(stream))
+        self.assertEqual(len(results), 4)
+
+        kaohsiung = [f for f in results if f["properties"].get("id") == 2127079][0]
+        self.assertEqual(kaohsiung["properties"]["name"], "高雄市")
+        self.assertEqual(kaohsiung["properties"]["admin_level"], "4")
+        self.assertEqual(kaohsiung["properties"]["wikidata"], "Q181557")
+        self.assertEqual(kaohsiung["properties"]["ISO3166-2"], "TW-KHH")
+        self.assertEqual(kaohsiung["geometry"]["type"], "MultiPolygon")
+        self.assertEqual(len(kaohsiung["geometry"]["coordinates"]), 3)
 
 if __name__ == "__main__":
     unittest.main()

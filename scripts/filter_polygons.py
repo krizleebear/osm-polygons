@@ -11,6 +11,8 @@ Main tasks:
    - Rule 2: boundary=statistical/local_authority/political/borough without admin_level -> default "10".
    - Rule 3: type=boundary/multipolygon relations with place=suburb/quarter/neighbourhood/borough -> default 9/10/11/9.
 6. Keep nameless admin_level=2 land borders that carry ISO3166-1 (instead of dropping them).
+7. Synthesize missing major parent entities (e.g. Funchal, Kaohsiung) from constituent sub-divisions
+   per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md when unclosed island/coastal rings cause osmium export drop.
 """
 
 import sys
@@ -44,6 +46,55 @@ PLACE_TO_ADMIN_LEVEL = {
     "borough": "9",
 }
 PLACE_RELATION_TYPES = ("boundary", "multipolygon")
+
+# Synthetic parent entity definitions per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md
+SYNTHETIC_PARENT_DEFINITIONS = {
+    # Portugal: Funchal (relation 8421413, admin_level 7)
+    8421413: {
+        "properties": {
+            "@id": 8421413,
+            "@type": "relation",
+            "id": 8421413,
+            "admin_level": "7",
+            "boundary": "administrative",
+            "name": "Funchal",
+            "official_name": "Município do Funchal",
+            "wikidata": "Q25444",
+            "ISO3166-1": "PT",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8427682, 8427683, 8427684, 8426650, 8426651, 8426652, 8426653, 8426654, 8426655, 8426656},
+        "child_names": {
+            "São Martinho", "Santa Maria Maior", "São Pedro", "São Roque",
+            "Santo António", "Santa Luzia", "Monte", "Imaculado Coração de Maria",
+            "São Gonçalo", "Sé"
+        },
+        "child_admin_level": "8",
+    },
+    # Taiwan: Kaohsiung City (relation 2127079, admin_level 4)
+    2127079: {
+        "properties": {
+            "@id": 2127079,
+            "@type": "relation",
+            "id": 2127079,
+            "admin_level": "4",
+            "boundary": "administrative",
+            "name": "高雄市",
+            "name:en": "Kaohsiung City",
+            "wikidata": "Q181557",
+            "ISO3166-2": "TW-KHH",
+            "ISO3166-1": "TW",
+        },
+        "child_names": {
+            "鹽埕區", "鼓山區", "左營區", "楠梓區", "三民區", "新興區", "前金區", "苓雅區",
+            "前鎮區", "旗津區", "小港區", "鳳山區", "林園區", "大寮區", "大樹區", "大社區",
+            "仁武區", "鳥松區", "岡山區", "橋頭區", "燕巢區", "田寮區", "阿蓮區", "路竹區",
+            "湖內區", "茄萣區", "永安區", "彌陀區", "梓官區", "旗山區", "美濃區", "六龜區",
+            "甲仙區", "杉林區", "內門區", "茂林區", "桃源區", "那瑪夏區"
+        },
+        "child_admin_level": "7",
+    }
+}
 
 def process_feature(data, require_wikidata=False, country_code=None):
     if data.get("type") != "Feature":
@@ -145,6 +196,112 @@ def process_feature(data, require_wikidata=False, country_code=None):
 
     return data
 
+class StreamProcessor:
+    """
+    Processes a stream of GeoJSON features, tracking known entities and synthesizing
+    missing parent divisions from constituent child divisions per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md.
+    """
+    def __init__(self, require_wikidata=False, country_code=None):
+        self.require_wikidata = require_wikidata
+        self.country_code = country_code
+        self.seen_parents = set()
+        self.parent_collected_polygons = {pid: [] for pid in SYNTHETIC_PARENT_DEFINITIONS}
+
+    def process_line(self, line_str):
+        if not line_str or not line_str.strip():
+            return None
+        try:
+            data = json.loads(line_str.strip())
+        except json.JSONDecodeError:
+            return None
+
+        processed = process_feature(data, require_wikidata=self.require_wikidata, country_code=self.country_code)
+        if not processed:
+            return None
+
+        props = processed.get("properties", {})
+        osm_id = props.get("id") or props.get("@id") or props.get("osm_id")
+        try:
+            osm_id_num = int(osm_id) if osm_id else None
+        except (ValueError, TypeError):
+            osm_id_num = None
+
+        if osm_id_num in SYNTHETIC_PARENT_DEFINITIONS:
+            self.seen_parents.add(osm_id_num)
+
+        # Track child polygons for potential parent synthesis
+        geom = processed.get("geometry")
+        name = props.get("name", "")
+        name_en = props.get("name:en", "")
+        admin_lvl = str(props.get("admin_level", "")).strip()
+
+        for pid, pdef in SYNTHETIC_PARENT_DEFINITIONS.items():
+            if pid in self.seen_parents:
+                continue
+            child_ids = pdef.get("child_relation_ids", set())
+            child_names = pdef.get("child_names", set())
+            target_child_lvl = str(pdef.get("child_admin_level", "")).strip()
+
+            is_match = False
+            if osm_id_num and osm_id_num in child_ids:
+                is_match = True
+            elif target_child_lvl and admin_lvl == target_child_lvl:
+                if name in child_names or name_en in child_names:
+                    is_match = True
+
+            if is_match and geom:
+                self.parent_collected_polygons[pid].append(geom)
+
+        return processed
+
+    def get_synthetic_parents(self):
+        synthesized = []
+        for pid, pdef in SYNTHETIC_PARENT_DEFINITIONS.items():
+            if pid in self.seen_parents:
+                continue
+            geoms = self.parent_collected_polygons.get(pid, [])
+            if not geoms:
+                continue
+
+            # Combine child polygon coordinates into a MultiPolygon
+            coords = []
+            for g in geoms:
+                gtype = g.get("type")
+                gcoords = g.get("coordinates")
+                if not gcoords:
+                    continue
+                if gtype == "Polygon":
+                    coords.append(gcoords)
+                elif gtype == "MultiPolygon":
+                    coords.extend(gcoords)
+
+            if not coords:
+                continue
+
+            synth_feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "MultiPolygon",
+                    "coordinates": coords
+                },
+                "properties": dict(pdef["properties"])
+            }
+            synthesized.append(synth_feature)
+        return synthesized
+
+def filter_features(feature_iterable, require_wikidata=False, country_code=None):
+    """
+    Generator that processes features and yields output features including synthesized parents.
+    """
+    processor = StreamProcessor(require_wikidata=require_wikidata, country_code=country_code)
+    for item in feature_iterable:
+        line_str = json.dumps(item) if isinstance(item, dict) else str(item)
+        res = processor.process_line(line_str)
+        if res:
+            yield res
+    for synth in processor.get_synthetic_parents():
+        yield synth
+
 def main():
     parser = argparse.ArgumentParser(description="Filter and enhance GeoJSON sequence stream for osm-polygons exporter.")
     parser.add_argument("--require-wikidata", action="store_true", help="Require wikidata property")
@@ -152,22 +309,20 @@ def main():
     parser.add_argument("input_file", nargs="?", help="Input geojsonseq file (or stdin if omitted)")
     args = parser.parse_args()
 
+    processor = StreamProcessor(require_wikidata=args.require_wikidata, country_code=args.country_code)
+
     if args.input_file:
         input_stream = open(args.input_file, "r", encoding="utf-8")
     else:
         input_stream = sys.stdin
 
     for line in input_stream:
-        line_str = line.strip()
-        if not line_str:
-            continue
-        try:
-            data = json.loads(line_str)
-            processed = process_feature(data, require_wikidata=args.require_wikidata, country_code=args.country_code)
-            if processed:
-                sys.stdout.write(json.dumps(processed, ensure_ascii=False) + "\n")
-        except json.JSONDecodeError:
-            continue
+        res = processor.process_line(line)
+        if res:
+            sys.stdout.write(json.dumps(res, ensure_ascii=False) + "\n")
+
+    for synth in processor.get_synthetic_parents():
+        sys.stdout.write(json.dumps(synth, ensure_ascii=False) + "\n")
 
     if args.input_file:
         input_stream.close()
