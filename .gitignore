@@ -35,4 +35,8 @@ hs_err_pid*
 *.iml
 .vscode/
 .DS_Store
-
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
