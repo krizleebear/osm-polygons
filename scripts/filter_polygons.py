@@ -3,15 +3,17 @@
 Filter and enhance OSM admin polygon GeoJSON sequence streams for osm-polygons pipeline.
 
 Main tasks:
-1. Enforce admin_level=2 for key national mainland relations (FR 2202162, GB 62149, NO 2978650, PT 295438).
-2. Prevent tag loss: fallback missing or null 'name' tags to name:en, official_name, ISO3166-1, or default.
-3. Flag maritime / territorial sea polygons (border_type=territorial, maritime=yes) to prioritize landmasses.
-4. Provide mapped level-4 fallback properties for countries lacking native admin_level=4 relations.
-5. Synthesize admin_level for sub-municipal boundaries per SPEC_OSM_POLYGONS_SUBDIVISIONS.md:
-   - Rule 2: boundary=statistical/local_authority/political/borough without admin_level -> default "10".
+1. Enforce admin_level=2 for key national mainland relations (FR 11980/2202162, NL 47796/2323309, GB 62149, NO 2978650, PT 295438).
+2. Exclude non-administrative and political boundaries (boundary IN ('political', 'statistical', 'census', 'historic'), political=*, election=*).
+3. Exclude non-relation border sliver ways (@type=way) tagged admin_level=2 lacking official ISO3166-1 tags.
+4. Prevent tag loss: fallback missing or null 'name' tags to name:en, official_name, ISO3166-1, or default.
+5. Flag maritime / territorial sea polygons (border_type=territorial, maritime=yes) to prioritize landmasses.
+6. Provide mapped level-4 fallback properties for countries lacking native admin_level=4 relations.
+7. Synthesize admin_level for sub-municipal boundaries per SPEC_OSM_POLYGONS_SUBDIVISIONS.md:
+   - Rule 2: boundary=local_authority/borough without admin_level -> default "10".
    - Rule 3: type=boundary/multipolygon relations with place=suburb/quarter/neighbourhood/borough -> default 9/10/11/9.
-6. Keep nameless admin_level=2 land borders that carry ISO3166-1 (instead of dropping them).
-7. Synthesize missing major parent entities (e.g. Funchal, Kaohsiung) from constituent sub-divisions
+8. Keep nameless admin_level=2 land borders that carry ISO3166-1 (instead of dropping them).
+9. Synthesize missing major parent entities (e.g. Funchal, Kaohsiung) from constituent sub-divisions
    per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md when unclosed island/coastal rings cause osmium export drop.
 """
 
@@ -21,11 +23,17 @@ import argparse
 
 # National mainland relations that must be preserved as admin_level=2
 MAINLAND_RELATION_IDS = {
+    11980:   {"country": "FR", "default_name": "France"},
     2202162: {"country": "FR", "default_name": "France (Métropole)"},
+    47796:   {"country": "NL", "default_name": "Nederland"},
+    2323309: {"country": "NL", "default_name": "Nederland"},
     62149:   {"country": "GB", "default_name": "Great Britain"},
     2978650: {"country": "NO", "default_name": "Norway (Mainland)"},
     295438:  {"country": "PT", "default_name": "Portugal (Continental)"},
 }
+
+# Non-administrative boundary tag values that must be excluded:
+EXCLUDED_BOUNDARY_VALUES = {"political", "statistical", "census", "historic"}
 
 # Countries known to lack native admin_level=4 relations, mapping fallback levels (e.g., level 6 -> 4)
 LEVEL_4_FALLBACK_COUNTRIES = {
@@ -33,8 +41,8 @@ LEVEL_4_FALLBACK_COUNTRIES = {
 }
 
 # Sub-municipal boundary tag values (Rule 2 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
-# boundary IN (statistical, local_authority, political, borough) without admin_level -> default admin_level.
-SUBMUNICIPAL_BOUNDARY_VALUES = ("statistical", "local_authority", "political", "borough")
+# boundary IN (local_authority, borough) without admin_level -> default admin_level.
+SUBMUNICIPAL_BOUNDARY_VALUES = ("local_authority", "borough")
 DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL = "10"
 
 # Place-based boundary relations (Rule 3 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
@@ -111,6 +119,22 @@ def process_feature(data, require_wikidata=False, country_code=None):
     if geometry_type not in ("Polygon", "MultiPolygon"):
         return None
 
+    # Exclude non-administrative boundaries (political, statistical, census, historic, electoral districts)
+    boundary_val = str(props.get("boundary", "")).strip().lower()
+    if boundary_val in EXCLUDED_BOUNDARY_VALUES:
+        return None
+
+    political_val = str(props.get("political", "")).strip().lower()
+    if political_val and political_val not in ("no", "false", "0"):
+        return None
+
+    if props.get("election:parliament") or props.get("election") or props.get("electoral_district"):
+        return None
+
+    border_type = str(props.get("border_type", "")).strip().lower()
+    if border_type in EXCLUDED_BOUNDARY_VALUES:
+        return None
+
     # Check admin_level presence
     raw_level = str(props.get("admin_level", "")).strip()
     osm_id = props.get("id") or props.get("@id") or props.get("osm_id")
@@ -126,11 +150,16 @@ def process_feature(data, require_wikidata=False, country_code=None):
         raw_level = "2"
         if not props.get("name"):
             props["name"] = info["default_name"]
-        if not props.get("ISO3166-1"):
-            props["ISO3166-1"] = info["country"]
+        props["ISO3166-1"] = info["country"]
+
+    # Filter L2 border ways: Exclude non-relation border ways (@type=way) tagged admin_level=2 without ISO3166-1
+    element_type = str(props.get("@type", props.get("osm_type", ""))).strip().lower()
+    if (element_type == "way" or element_type != "relation") and raw_level == "2":
+        iso_val = str(props.get("ISO3166-1", "")).strip()
+        if not iso_val or iso_val.lower() in ("none", "null"):
+            return None
 
     # Task 5: Synthesize admin_level for sub-municipal boundaries (Rule 3 takes precedence over Rule 2)
-    element_type = str(props.get("@type", "")).strip().lower()
     rel_type = str(props.get("type", "")).strip().lower()
     place_val = str(props.get("place", "")).strip().lower()
     if (element_type == "relation" and rel_type in PLACE_RELATION_TYPES
@@ -139,7 +168,6 @@ def process_feature(data, require_wikidata=False, country_code=None):
         props["admin_level"] = PLACE_TO_ADMIN_LEVEL[place_val]
         raw_level = PLACE_TO_ADMIN_LEVEL[place_val]
 
-    boundary_val = str(props.get("boundary", "")).strip().lower()
     if (boundary_val in SUBMUNICIPAL_BOUNDARY_VALUES
             and (not raw_level or raw_level == "None")):
         props["admin_level"] = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL

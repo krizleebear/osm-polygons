@@ -9,11 +9,11 @@ POLYGON_JSON=${BASENAME}.admin-polygons.geojsonseq
 
 # Broad osmium filter (expressions are OR-combined; precise refinement happens in filter_polygons.py):
 # - Rule 1: boundary=administrative (admin_level 2..11)
-# - Rule 2: boundary=statistical/local_authority/political/borough
+# - Rule 2: boundary=local_authority/borough
 # - Rule 3: relations with place=suburb/quarter/borough/neighbourhood (type=boundary/multipolygon checked in Python)
 osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} \
     boundary=administrative \
-    boundary=statistical,local_authority,political,borough \
+    boundary=local_authority,borough \
     r/place=suburb,quarter,borough,neighbourhood
 osmium export ${ADMIN_PBF} --output=temp.geojsonseq --overwrite --config=osmium-export-config.json
 

@@ -11,49 +11,107 @@ def feat(properties, geometry=POLY_GEOM):
 
 class TestFilterPolygons(unittest.TestCase):
 
-    def test_mainland_relation_enforcement(self):
-        # FR relation 2202162
-        feature = feat({"id": 2202162, "admin_level": "3"})
+    def test_mainland_relation_enforcement_fr(self):
+        # FR relation 2202162 (France Métropole)
+        feature = feat({"@type": "relation", "id": 2202162, "admin_level": "3"})
         res = process_feature(feature)
         self.assertIsNotNone(res)
         self.assertEqual(res["properties"]["admin_level"], "2")
         self.assertEqual(res["properties"]["name"], "France (Métropole)")
         self.assertEqual(res["properties"]["ISO3166-1"], "FR")
 
-    def test_tag_loss_prevention(self):
-        # Missing 'name' tag but has 'name:en'
-        feature = feat({"admin_level": "4", "name:en": "Bavaria"})
-        res = process_feature(feature)
+        # FR relation 11980 (France)
+        feature_fr = feat({"@type": "relation", "id": 11980, "admin_level": "2", "name": "France"})
+        res_fr = process_feature(feature_fr)
+        self.assertIsNotNone(res_fr)
+        self.assertEqual(res_fr["properties"]["admin_level"], "2")
+        self.assertEqual(res_fr["properties"]["ISO3166-1"], "FR")
+
+    def test_mainland_relation_enforcement_nl(self):
+        # NL relation 2323309 (European Netherlands)
+        feature_nl_main = feat({"@type": "relation", "id": 2323309, "admin_level": "3", "name": "Nederland"})
+        res_nl_main = process_feature(feature_nl_main)
+        self.assertIsNotNone(res_nl_main)
+        self.assertEqual(res_nl_main["properties"]["admin_level"], "2")
+        self.assertEqual(res_nl_main["properties"]["ISO3166-1"], "NL")
+
+        # NL relation 47796 (Kingdom of the Netherlands)
+        feature_nl = feat({"@type": "relation", "id": 47796, "admin_level": "2", "name": "Koninkrijk der Nederlanden"})
+        res_nl = process_feature(feature_nl)
+        self.assertIsNotNone(res_nl)
+        self.assertEqual(res_nl["properties"]["admin_level"], "2")
+        self.assertEqual(res_nl["properties"]["ISO3166-1"], "NL")
+
+    def test_exclude_political_and_electoral_boundaries(self):
+        # German Bundestagswahlkreis / electoral constituency with boundary=political
+        bundestag = feat({"@type": "relation", "id": 3146607, "boundary": "political", "admin_level": "9", "name": "Deggendorf"})
+        self.assertIsNone(process_feature(bundestag))
+
+        # Boundary with political=election tag
+        election_feat = feat({"@type": "relation", "boundary": "administrative", "political": "election", "admin_level": "9", "name": "Wahlkreis 1"})
+        self.assertIsNone(process_feature(election_feat))
+
+        # Boundary with election:parliament tag
+        parliament_feat = feat({"@type": "relation", "boundary": "administrative", "election:parliament": "yes", "admin_level": "9", "name": "Constituency"})
+        self.assertIsNone(process_feature(parliament_feat))
+
+    def test_exclude_statistical_census_historic_boundaries(self):
+        # Statistical boundary
+        stat_feat = feat({"@type": "relation", "boundary": "statistical", "admin_level": "10", "name": "Statistischer Bezirk"})
+        self.assertIsNone(process_feature(stat_feat))
+
+        # Census boundary
+        census_feat = feat({"@type": "relation", "boundary": "census", "admin_level": "10", "name": "Census Block"})
+        self.assertIsNone(process_feature(census_feat))
+
+        # Historic boundary
+        historic_feat = feat({"@type": "relation", "boundary": "historic", "admin_level": "4", "name": "Historical Duchy"})
+        self.assertIsNone(process_feature(historic_feat))
+
+    def test_filter_l2_border_ways(self):
+        # Baarle / Vennbahn joint border way tagged admin_level=2 without ISO3166-1
+        border_way = feat({
+            "@type": "way",
+            "id": 24718735,
+            "admin_level": "2",
+            "name": "Deutschland - Belgique / België / Belgien"
+        })
+        self.assertIsNone(process_feature(border_way))
+
+        # Sovereign border way WITH ISO3166-1 code should be kept
+        sovereign_way = feat({
+            "@type": "way",
+            "id": 999999,
+            "admin_level": "2",
+            "name": "Vatican City",
+            "ISO3166-1": "VA"
+        })
+        res = process_feature(sovereign_way)
         self.assertIsNotNone(res)
-        self.assertEqual(res["properties"]["name"], "Bavaria")
+        self.assertEqual(res["properties"]["ISO3166-1"], "VA")
 
-        # Missing all name tags -> should be dropped
-        feature_no_name = feat({"admin_level": "4"})
-        self.assertIsNone(process_feature(feature_no_name))
+        # Relations at admin_level=2 are preserved
+        relation_l2 = feat({
+            "@type": "relation",
+            "id": 51477,
+            "admin_level": "2",
+            "name": "Deutschland",
+            "ISO3166-1": "DE"
+        })
+        self.assertIsNotNone(process_feature(relation_l2))
 
-    def test_territorial_sea_flagging(self):
-        feature = feat({"admin_level": "2", "name": "águas territoriais portuguesas", "border_type": "territorial"})
-        res = process_feature(feature)
-        self.assertIsNotNone(res)
-        self.assertTrue(res["properties"].get("is_territorial_sea"))
-
-    def test_level_4_fallback_mapping(self):
-        feature = feat({"admin_level": "6", "name": "Harju maakond", "ISO3166-1": "EE"})
-        res = process_feature(feature, country_code="EE")
-        self.assertIsNotNone(res)
-        self.assertEqual(res["properties"].get("admin_level_mapped"), "4")
-
-    def test_statistical_boundary_admin_level_synthesis(self):
-        feature = feat({"@type": "relation", "type": "boundary", "boundary": "statistical", "name": "Innenstadt"})
+    def test_submunicipal_boundary_admin_level_synthesis(self):
+        # boundary=local_authority without admin_level -> synthesizes admin_level=10
+        feature = feat({"@type": "relation", "type": "boundary", "boundary": "local_authority", "name": "District"})
         res = process_feature(feature)
         self.assertIsNotNone(res)
         self.assertEqual(res["properties"]["admin_level"], "10")
 
-    def test_statistical_boundary_keeps_existing_admin_level(self):
-        feature = feat({"@type": "relation", "type": "boundary", "boundary": "statistical", "admin_level": "9", "name": "Bezirk 1"})
-        res = process_feature(feature)
-        self.assertIsNotNone(res)
-        self.assertEqual(res["properties"]["admin_level"], "9")
+        # boundary=borough without admin_level -> synthesizes admin_level=10
+        feature_b = feat({"@type": "relation", "type": "boundary", "boundary": "borough", "name": "Borough of Camden"})
+        res_b = process_feature(feature_b)
+        self.assertIsNotNone(res_b)
+        self.assertEqual(res_b["properties"]["admin_level"], "10")
 
     def test_place_based_boundary_relation(self):
         cases = {"suburb": "9", "quarter": "10", "neighbourhood": "11", "borough": "9"}

@@ -74,4 +74,7 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - Packaging and bundling stages (such as `stage: package`) that aggregate artifacts from upstream parallel matrix jobs MUST use `condition: succeeded('<stage>')` (e.g. `succeeded('simplify')`). Using parameterless `succeeded()` causes the stage to be skipped if any upstream stage (such as `export`) was skipped via conditional parameters (`reuseExportArtifacts`). Never use `condition: always()` on final bundling stages, as cancellation or upstream failure would trigger incomplete artifact archiving.
 17. **Upstream Container Image Synchronization:**
     - Whenever modifications or optimizations are made to `osm-tools` and committed/pushed to `master`, downstream pipeline definitions (especially `resources.containers.osm-tools` in `polygon-export-pipeline.yml` and fallback commit definitions in `polygon-release-pipeline.yml`) MUST immediately and proactively be updated to reference the new commit SHA (`mirror.gcr.io/krizleebear/osm-tools:master-<SHA>`). Never leave downstream pipelines pointing to stale container versions.
+18. **GeoJSONSeq Verification & Profiling with DuckDB:**
+    - Use DuckDB's native vectorised `read_ndjson()` for fast ad-hoc inspection and quality verification on `.geojsonseq` stream files (e.g. `SELECT json_extract_string(properties, '$.admin_level') AS lvl, count(*) FROM read_ndjson('<file>.geojsonseq') GROUP BY 1`).
+
 

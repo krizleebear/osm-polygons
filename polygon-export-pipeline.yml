@@ -787,11 +787,11 @@ stages:
           # Step 1: Filter administrative boundaries (broad osmium filter, expressions OR-combined;
           # precise sub-municipal refinement happens in filter_polygons.py per SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
           # - Rule 1: boundary=administrative (admin_level 2..11)
-          # - Rule 2: boundary=statistical/local_authority/political/borough
+          # - Rule 2: boundary=local_authority/borough
           # - Rule 3: relations with place=suburb/quarter/borough/neighbourhood (type=boundary/multipolygon checked in Python)
           osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} \
             boundary=administrative \
-            boundary=statistical,local_authority,political,borough \
+            boundary=local_authority,borough \
             r/place=suburb,quarter,borough,neighbourhood
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
@@ -799,11 +799,13 @@ stages:
 
           # Step 2: Stream export directly to stdout and filter/enhance with filter_polygons.py
           # Purpose of filter_polygons.py:
-          # 1. Enforce admin_level=2 for key national mainland relations (FR 2202162, GB 62149, NO 2978650, PT 295438).
-          # 2. Prevent tag loss: fallback missing/null 'name' tags to name:en, official_name, ISO3166-1, or ref.
-          # 3. Flag territorial sea boundaries (border_type=territorial, maritime=yes) to prioritize landmasses.
-          # 4. Map fallback admin_level_mapped="4" for countries lacking native admin_level=4 relations (EE, HR, ME, SI, XK, etc.).
-          # 5. Synthesize admin_level for sub-municipal boundaries: boundary=statistical/local_authority/political/borough
+          # 1. Enforce admin_level=2 for key national mainland relations (FR 11980/2202162, NL 47796/2323309, GB 62149, NO 2978650, PT 295438).
+          # 2. Exclude non-administrative & political boundaries (boundary IN ('political', 'statistical', 'census', 'historic'), political=*, election=*).
+          # 3. Exclude non-relation border sliver ways (@type=way) tagged admin_level=2 lacking official ISO3166-1 tags.
+          # 4. Prevent tag loss: fallback missing/null 'name' tags to name:en, official_name, ISO3166-1, or ref.
+          # 5. Flag territorial sea boundaries (border_type=territorial, maritime=yes) to prioritize landmasses.
+          # 6. Map fallback admin_level_mapped="4" for countries lacking native admin_level=4 relations (EE, HR, ME, SI, XK, etc.).
+          # 7. Synthesize admin_level for sub-municipal boundaries: boundary=local_authority/borough
           #    -> "10", place=suburb/quarter/neighbourhood/borough on type=boundary/multipolygon relations -> 9/10/11/9.
           if [ "${{ parameters.requireWikidata }}" = "true" ]; then
             osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \

@@ -87,6 +87,24 @@ Be aware that you must adhere to ODbL (as stated above) also while reverse geoco
 * **Point Features & Admin Centres**: Point features contain administrative centre coordinates (e.g., city centres, capitals), providing valuable auxiliary metadata for spatial indices alongside boundary polygons.
 
 
+### Inspecting & Profiling Datasets with DuckDB
+You can quickly query and inspect `.geojsonseq` stream files directly from the command line using [DuckDB](https://duckdb.org/):
+
+```bash
+# Breakdown features by admin_level and check name/wikidata completeness:
+duckdb -c "
+SELECT 
+    json_extract_string(properties, '$.admin_level') AS admin_level,
+    count(*) AS count,
+    count(json_extract_string(properties, '$.name')) AS count_with_name,
+    count(json_extract_string(properties, '$.wikidata')) AS count_with_wikidata
+FROM read_ndjson('<country>.admin-polygons.geojsonseq')
+GROUP BY 1
+ORDER BY TRY_CAST(admin_level AS INT);
+"
+```
+
 https://github.com/krizleebear/osm-polygons/releases/tag/v1.0
+
 
 
