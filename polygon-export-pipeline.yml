@@ -957,7 +957,7 @@ stages:
         workingDirectory: '$(System.DefaultWorkingDirectory)'
         targetType: 'inline'
         script: |
-          set -x
+          set -e
           export JAVA_TOOL_OPTIONS="-Xmx6g"
           mkdir -p simplified
 
@@ -975,6 +975,7 @@ stages:
               rm -rf "$dir"
             fi
           done
+          echo "Pruned non-target region directories from workspace."
 
           for region in $(REGIONS); do
             find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
