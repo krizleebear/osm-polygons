@@ -55,11 +55,12 @@ jobs:
           exit 1
         fi
 
-        # 3. Extract build-info.json and individual country .geojsonseq files from the global archive
+        # 3. Extract build-info.json, VERSION.txt, and individual country .geojsonseq files from the global archive
         tar xfz release-assets/simplified-all.tar.gz -C release-assets/
         if [ -d "release-assets/simplified" ]; then
           mv release-assets/simplified/*.geojsonseq release-assets/ 2>/dev/null || true
           mv release-assets/simplified/build-info.json release-assets/ 2>/dev/null || true
+          mv release-assets/simplified/VERSION.txt release-assets/ 2>/dev/null || true
           rm release-assets/simplified/osm-tools-version.info 2>/dev/null || true
           rmdir release-assets/simplified 2>/dev/null || true
         fi
@@ -151,8 +152,11 @@ jobs:
         $(System.DefaultWorkingDirectory)/release-assets/*.tar.gz
         $(System.DefaultWorkingDirectory)/release-assets/*.geojsonseq
         $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.*
+        $(System.DefaultWorkingDirectory)/release-assets/build-info.json
+        $(System.DefaultWorkingDirectory)/release-assets/VERSION.txt
       assetUploadMode: 'delete'
       isDraft: true
       isPreRelease: true
+
 
 

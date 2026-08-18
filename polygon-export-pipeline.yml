@@ -1096,13 +1096,28 @@ stages:
 
           cat <<EOF > simplified/build-info.json
           {
+            "schema_version": "1.0",
+            "dataset_name": "osm-polygons-simplified",
             "osm_data_extracted_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
             "osmium_tool_image": "v1.19.0",
             "osm_tools_commit": "${OSM_TOOLS_COMMIT}",
             "osm_tools_build_time": "${OSM_TOOLS_BUILD_TIME}",
             "pipeline_commit": "$(Build.SourceVersion)",
-            "pipeline_build_number": "$(Build.BuildNumber)"
+            "pipeline_build_number": "$(Build.BuildNumber)",
+            "pipeline_build_id": "$(Build.BuildId)"
           }
+          EOF
+
+          cat <<EOF > simplified/VERSION.txt
+          ================================================================================
+          OSM Administrative Polygons Dataset
+          ================================================================================
+          Pipeline Commit:       $(Build.SourceVersion)
+          Pipeline Build Number: $(Build.BuildNumber) (Build ID: $(Build.BuildId))
+          Extraction Timestamp:  $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          osm-tools Engine:      ${OSM_TOOLS_COMMIT} (${OSM_TOOLS_BUILD_TIME})
+          osmium-tool Image:     v1.19.0
+          ================================================================================
           EOF
 
           # Generate global and per-country admin_level matrix statistics (MD, CSV, JSON)
@@ -1110,6 +1125,7 @@ stages:
 
           ls -la simplified/
           tar cfz simplified.tar.gz simplified/
+
 
     - task: PublishPipelineArtifact@1
       enabled: true
