@@ -94,7 +94,7 @@ jobs:
         
         # Fallback if TOOLS_COMMIT is empty or N/A
         if [ -z "$TOOLS_COMMIT" ] || [ "$TOOLS_COMMIT" = "N/A" ] || [ "$TOOLS_COMMIT" = "latest" ]; then
-          TOOLS_COMMIT="ce8f90b7cff39a2b6863b296ec718db1c52288fa"
+          TOOLS_COMMIT="1f8361caf2ec4e68dc8e97d007e66bbc8e0fdb25"
         fi
 
         SHORT_TOOLS_SHA=${TOOLS_COMMIT:0:8}
