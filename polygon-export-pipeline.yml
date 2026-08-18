@@ -882,9 +882,26 @@ stages:
           CONTINENT: 'south-america'
           REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
 
-        europe:
-          CONTINENT: 'europe'
-          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland turkey ukraine'
+        # European heavyweights partitioned into dedicated matrix jobs to avoid runner bottlenecks:
+        # - france: ~35,000 administrative communes (admin_level 8)
+        # - germany: ~11,000 municipalities/Gemeinden (admin_level 8)
+        # - great_britain: ~12,500 civil parishes & wards (admin_level 10)
+        # - ireland: >65,000 features (>61,800 historic Townlands/baile fearainn mapped in OSM as admin_level 10)
+        france:
+          CONTINENT: 'france'
+          REGIONS: 'france'
+        germany:
+          CONTINENT: 'germany'
+          REGIONS: 'germany'
+        great_britain:
+          CONTINENT: 'great-britain'
+          REGIONS: 'great-britain'
+        ireland:
+          CONTINENT: 'ireland'
+          REGIONS: 'ireland-and-northern-ireland'
+        europe_rest:
+          CONTINENT: 'europe-rest'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland georgia greece hungary iceland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland turkey ukraine'
         russia:
           CONTINENT: 'russia'
           REGIONS: 'russia'

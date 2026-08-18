@@ -22,8 +22,9 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - The export matrix must retain all 169 region definitions across Africa, Asia, Europe, Oceania, Central America, North America, and South America following Geofabrik hierarchy.
 
 2. **Continental Simplification Partitioning:**
-   - Heavy simplification steps must be partitioned by continent in the `simplify` stage using continent matrix jobs (`africa`, `asia`, `europe`, `australia_oceania`, `central_america`, `north_america`, `south_america`, `canada`, `us`, `russia`).
-   - Each continent job filters its respective `REGIONS` list from the downloaded export artifacts and creates a continental archive (`simplified-$(CONTINENT).tar.gz`).
+   - Heavy simplification steps must be partitioned by continent / heavy regions in the `simplify` stage using matrix jobs (`africa`, `asia`, `france`, `germany`, `great_britain`, `ireland`, `europe_rest`, `australia_oceania`, `central_america`, `north_america`, `south_america`, `canada`, `us`, `russia`).
+   - Dedicated heavyweight jobs exist for `ireland` (over 65,000 features due to ~61,800 historic townlands mapped as `admin_level=10`), `great_britain` (~12,500 parishes/wards), `france` (~35,000 communes), `germany` (~11,000 municipalities), `canada`, `us`, and `russia` to prevent runner timeouts and pipeline bottlenecks.
+   - Each job filters its respective `REGIONS` list from the downloaded export artifacts and creates an archive (`simplified-$(CONTINENT).tar.gz`).
 
 
 3. **Global Artifact Packaging:**
