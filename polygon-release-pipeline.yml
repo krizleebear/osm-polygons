@@ -128,6 +128,13 @@ jobs:
         ls -la release-assets/
         cat release-notes.md
 
+  - task: PublishPipelineArtifact@1
+    displayName: 'Store admin-level statistics artifact'
+    inputs:
+      targetPath: '$(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.md'
+      artifact: 'admin-levels-summary'
+      publishLocation: 'pipeline'
+
   - task: GitHubRelease@1
     displayName: 'Create GitHub Release'
     inputs:
@@ -143,7 +150,9 @@ jobs:
       assets: |
         $(System.DefaultWorkingDirectory)/release-assets/*.tar.gz
         $(System.DefaultWorkingDirectory)/release-assets/*.geojsonseq
+        $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.*
       assetUploadMode: 'delete'
       isDraft: true
       isPreRelease: true
+
 

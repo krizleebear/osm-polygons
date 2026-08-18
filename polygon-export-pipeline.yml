@@ -1051,7 +1051,7 @@ stages:
 
       vmImage: 'ubuntu-latest'
     steps:
-    - checkout: none
+    - checkout: self
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download all simplified continent artifacts'
@@ -1062,7 +1062,7 @@ stages:
         targetPath: '$(System.DefaultWorkingDirectory)/archives'
     - task: Bash@3
       enabled: true
-      displayName: 'Bundle global artifact'
+      displayName: 'Bundle global artifact & generate admin_level statistics'
       inputs:
         targetType: 'inline'
         script: |
@@ -1105,7 +1105,8 @@ stages:
           }
           EOF
 
-
+          # Generate global and per-country admin_level matrix statistics (MD, CSV, JSON)
+          python3 scripts/generate_release_stats.py simplified
 
           ls -la simplified/
           tar cfz simplified.tar.gz simplified/
@@ -1118,6 +1119,14 @@ stages:
         artifact: 'admin-polygons-simplified'
         publishLocation: 'pipeline'
 
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store admin-level statistics artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
+        artifact: 'admin-levels-summary'
+        publishLocation: 'pipeline'
+
     - task: Bash@3
       displayName: 'Cleanup workspace'
       condition: always()
@@ -1125,3 +1134,4 @@ stages:
         targetType: 'inline'
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
+
