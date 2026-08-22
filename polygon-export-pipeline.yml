@@ -932,7 +932,11 @@ stages:
           pipelineId: '${{ parameters.exportBuildId }}'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
+          itemPattern: |
+            admin-polygons-*/**
+            !admin-polygons-simplified*/**
+            !admin-polygons-parquet*/**
+            !admin-polygons-export-metadata/**
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
@@ -948,7 +952,11 @@ stages:
           tags: 'has-export-artifacts'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
+          itemPattern: |
+            admin-polygons-*/**
+            !admin-polygons-simplified*/**
+            !admin-polygons-parquet*/**
+            !admin-polygons-export-metadata/**
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
@@ -957,7 +965,11 @@ stages:
       condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
       inputs:
         buildType: 'current'
-        itemPattern: 'admin-polygons-*/**'
+        itemPattern: |
+          admin-polygons-*/**
+          !admin-polygons-simplified*/**
+          !admin-polygons-parquet*/**
+          !admin-polygons-export-metadata/**
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: Bash@3
@@ -968,6 +980,9 @@ stages:
         script: |
           set -e
           mkdir -p parquet
+
+          echo "=== Downloaded region directories ==="
+          find . -maxdepth 2 -type d -name "admin-polygons-*" || true
 
           # Prune export directories belonging to other continents to conserve runner disk space
           for dir in admin-polygons-*; do
@@ -984,17 +999,22 @@ stages:
             fi
           done
 
+          echo "=== Retained region directories for continent '$(CONTINENT)' ==="
+          find . -maxdepth 2 -type d -name "admin-polygons-*" || true
+
           chmod +x scripts/convert_to_parquet.sh
 
           for region in $(REGIONS); do
-            find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
               [ -s "$file" ] || continue
               filename=$(basename "$file")
               country_code=$(echo "$filename" | cut -d'_' -f1)
               parquet_out="parquet/${filename%.geojsonseq}.parquet"
+              echo "Processing $file -> $parquet_out ..."
               ./scripts/convert_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$parquet_out"
               rm -rf "$(dirname "$file")"
-            done
+            done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \))
           done
 
           PARQUET_COUNT=$(find parquet -name "*.parquet" | wc -l)
@@ -1101,7 +1121,11 @@ stages:
           pipelineId: '${{ parameters.exportBuildId }}'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
+          itemPattern: |
+            admin-polygons-*/**
+            !admin-polygons-simplified*/**
+            !admin-polygons-parquet*/**
+            !admin-polygons-export-metadata/**
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
@@ -1117,7 +1141,11 @@ stages:
           tags: 'has-export-artifacts'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
+          itemPattern: |
+            admin-polygons-*/**
+            !admin-polygons-simplified*/**
+            !admin-polygons-parquet*/**
+            !admin-polygons-export-metadata/**
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
@@ -1126,7 +1154,11 @@ stages:
       condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
       inputs:
         buildType: 'current'
-        itemPattern: 'admin-polygons-*/**'
+        itemPattern: |
+          admin-polygons-*/**
+          !admin-polygons-simplified*/**
+          !admin-polygons-parquet*/**
+          !admin-polygons-export-metadata/**
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: Bash@3
