@@ -192,8 +192,11 @@ COPY (
     FROM (
         SELECT 
             properties,
-            ST_GeomFromGeoJSON(to_json(geometry)) AS geom
-        FROM read_json('__INPUT_GEOJSONSEQ__', format='auto')
+            ST_GeomFromGeoJSON(geometry) AS geom
+        FROM read_json('__INPUT_GEOJSONSEQ__', 
+            format='newline_delimited', 
+            columns={'properties': 'JSON', 'geometry': 'JSON'}, 
+            ignore_errors=true)
         WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
           AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral')
           AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
