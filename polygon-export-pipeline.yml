@@ -28,6 +28,10 @@ parameters:
   displayName: 'Generate GeoParquet artifacts (OGC GeoParquet 1.1 unsimplified, 0% border-bleeding)'
   type: boolean
   default: true
+- name: simplifyPolygons
+  displayName: 'Run polygon simplification (osm-tools Java simplifier)'
+  type: boolean
+  default: true
 - name: reuseExportArtifacts
   displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
   type: boolean
@@ -1022,7 +1026,7 @@ stages:
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
-  condition: always()
+  condition: and(always(), eq('${{ parameters.simplifyPolygons }}', 'true'))
 
   jobs:
   - job: simplify
@@ -1354,7 +1358,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store global simplified artifact'
-      condition: and(succeeded(), eq(variables['SIMPLIFIED_COUNT'], ''))
+      condition: and(succeeded(), eq('${{ parameters.simplifyPolygons }}', 'true'))
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
         artifact: 'admin-polygons-simplified'
