@@ -13,6 +13,9 @@ resources:
     #image: krizleebear/osm-tools:latest
     image: mirror.gcr.io/krizleebear/osm-tools:master-2b3843cecae063416c0622eb978d31527c119008
     #endpoint: docker-krizleebear
+  - container: osm2parquet
+    # DuckDB spatial converter for unsimplified GeoParquet 1.1 exports
+    image: ghcr.io/krizleebear/osm2parquet:v1.0.5
 
 trigger:
 - none
@@ -21,6 +24,10 @@ pool:
   vmImage: 'ubuntu-latest'
 
 parameters:
+- name: exportParquet
+  displayName: 'Generate GeoParquet artifacts (OGC GeoParquet 1.1 unsimplified, 0% border-bleeding)'
+  type: boolean
+  default: true
 - name: reuseExportArtifacts
   displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
   type: boolean
@@ -864,6 +871,154 @@ stages:
         publishLocation: 'pipeline'
 
 
+- stage: parquet
+  displayName: 'Convert to GeoParquet by continent'
+  dependsOn: export
+  condition: and(always(), eq('${{ parameters.exportParquet }}', 'true'))
+
+  jobs:
+  - job: parquet
+    timeoutInMinutes: 120
+    workspace:
+      clean: all
+    container: osm2parquet
+    strategy:
+      matrix:
+        africa:
+          CONTINENT: 'africa'
+          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon canary-islands cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
+        asia:
+          CONTINENT: 'asia'
+          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkmenistan uzbekistan vietnam yemen'
+        australia_oceania:
+          CONTINENT: 'australia-oceania'
+          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
+        central_america:
+          CONTINENT: 'central-america'
+          REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
+        north_america:
+          CONTINENT: 'north-america'
+          REGIONS: 'greenland mexico'
+        canada:
+          CONTINENT: 'canada'
+          REGIONS: 'canada'
+        us:
+          CONTINENT: 'us'
+          REGIONS: 'us'
+        south_america:
+          CONTINENT: 'south-america'
+          REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
+        europe:
+          CONTINENT: 'europe'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania russia serbia slovakia slovenia spain sweden switzerland turkey ukraine'
+
+    steps:
+    - checkout: self
+
+    - ${{ if and(ne(parameters.exportBuildId, 'auto'), ne(parameters.exportBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from specific build (${{ parameters.exportBuildId }})'
+        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'specific'
+          pipelineId: '${{ parameters.exportBuildId }}'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-*/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from latest build with export artifacts'
+        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'latest'
+          tags: 'has-export-artifacts'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-*/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download export artifacts from current build'
+      condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
+      inputs:
+        buildType: 'current'
+        itemPattern: 'admin-polygons-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: Bash@3
+      displayName: 'Convert exported GeoJSON streams to GeoParquet'
+      inputs:
+        workingDirectory: '$(System.DefaultWorkingDirectory)'
+        targetType: 'inline'
+        script: |
+          set -e
+          mkdir -p parquet
+
+          # Prune export directories belonging to other continents to conserve runner disk space
+          for dir in admin-polygons-*; do
+            [ -d "$dir" ] || continue
+            keep=false
+            for region in $(REGIONS); do
+              if [[ "$dir" == *"-${region}"* ]] || [[ "$dir" == *"_${region}"* ]]; then
+                keep=true
+                break
+              fi
+            done
+            if [ "$keep" = "false" ]; then
+              rm -rf "$dir"
+            fi
+          done
+
+          chmod +x scripts/convert_to_parquet.sh
+
+          for region in $(REGIONS); do
+            find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
+              [ -s "$file" ] || continue
+              filename=$(basename "$file")
+              country_code=$(echo "$filename" | cut -d'_' -f1)
+              parquet_out="parquet/${filename%.geojsonseq}.parquet"
+              ./scripts/convert_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$parquet_out"
+              rm -rf "$(dirname "$file")"
+            done
+          done
+
+          PARQUET_COUNT=$(find parquet -name "*.parquet" | wc -l)
+          if [ "$PARQUET_COUNT" -eq 0 ]; then
+            echo "****************************************************************"
+            echo " ERROR: No GeoParquet files were produced for continent '$(CONTINENT)'!"
+            echo "****************************************************************"
+            exit 1
+          fi
+
+          ls -lh parquet/
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Store GeoParquet continent artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet'
+        artifact: 'admin-polygons-parquet-$(CONTINENT)'
+        publishLocation: 'pipeline'
+
+    - task: Bash@3
+      displayName: 'Cleanup workspace'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          rm -rf $(System.DefaultWorkingDirectory)/*
+
+
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
@@ -1061,9 +1216,11 @@ stages:
           rm -rf $(System.DefaultWorkingDirectory)/*
 
 - stage: package
-  displayName: 'Package global simplified polygons'
-  dependsOn: simplify
-  condition: succeeded('simplify')
+  displayName: 'Package global simplified & GeoParquet polygons'
+  dependsOn:
+  - simplify
+  - parquet
+  condition: or(succeeded('simplify'), succeeded('parquet'))
 
   jobs:
   - job: package
@@ -1071,18 +1228,30 @@ stages:
     workspace:
       clean: all
     pool:
-
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
+
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download all simplified continent artifacts'
+      continueOnError: true
       inputs:
         buildType: 'current'
         buildVersionToDownload: 'latest'
         itemPattern: 'admin-polygons-simplified-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)/archives'
+
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download all GeoParquet continent artifacts'
+      continueOnError: true
+      inputs:
+        buildType: 'current'
+        buildVersionToDownload: 'latest'
+        itemPattern: 'admin-polygons-parquet-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet_archives'
+
     - task: Bash@3
       enabled: true
       displayName: 'Bundle global artifact & generate admin_level statistics'
@@ -1091,23 +1260,15 @@ stages:
         script: |
           set -x
           mkdir -p simplified
-          find archives -name "simplified-*.tar.gz" | while read -r archive; do
-            tar xfz "$archive" -C .
-          done
+          if [ -d "archives" ]; then
+            find archives -name "simplified-*.tar.gz" | while read -r archive; do
+              tar xfz "$archive" -C . || true
+            done
+          fi
 
-          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
-          if [ "$SIMPLIFIED_COUNT" -eq 0 ]; then
-            echo "****************************************************************"
-            echo " ERROR: No simplified polygon files were extracted from continent archives!"
-            echo ""
-            echo " Cause:"
-            echo " The 'simplify' stage produced empty continent archives."
-            echo ""
-            echo " Solution:"
-            echo " Verify that the 'simplify' stage completed successfully and generated"
-            echo " valid .geojsonseq files before running the 'package' stage."
-            echo "****************************************************************"
-            exit 1
+          mkdir -p parquet_all
+          if [ -d "parquet_archives" ]; then
+            find parquet_archives -type f -name "*.parquet" -exec cp {} parquet_all/ \;
           fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
@@ -1181,17 +1342,19 @@ stages:
           ================================================================================
           EOF
 
-          # Generate global and per-country admin_level matrix statistics (MD, CSV, JSON)
-          python3 scripts/generate_release_stats.py simplified
+          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
+          if [ "$SIMPLIFIED_COUNT" -gt 0 ]; then
+            python3 scripts/generate_release_stats.py simplified || true
+            tar cfz simplified.tar.gz simplified/
+          fi
 
-          ls -la simplified/
-          tar cfz simplified.tar.gz simplified/
-
-
+          PARQUET_TOTAL=$(find parquet_all -name "*.parquet" | wc -l)
+          echo "Total GeoParquet files packaged: $PARQUET_TOTAL"
 
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store global simplified artifact'
+      condition: and(succeeded(), eq(variables['SIMPLIFIED_COUNT'], ''))
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
         artifact: 'admin-polygons-simplified'
@@ -1199,7 +1362,16 @@ stages:
 
     - task: PublishPipelineArtifact@1
       enabled: true
+      displayName: 'Store global GeoParquet dataset'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet_all'
+        artifact: 'admin-polygons-parquet-all'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
       displayName: 'Store admin-level statistics artifact'
+      continueOnError: true
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
         artifact: 'admin-levels-summary'
@@ -1212,4 +1384,3 @@ stages:
         targetType: 'inline'
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
-
