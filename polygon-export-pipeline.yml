@@ -1143,7 +1143,7 @@ stages:
         targetType: 'inline'
         script: |
           set -e
-          mkdir -p parquet
+          mkdir -p temp_parquet parquet
 
           echo "=== Downloaded region directories ==="
           find . -maxdepth 2 -type d -name "admin-polygons-*" || true
@@ -1174,27 +1174,39 @@ stages:
               [ -s "$file" ] || continue
               filename=$(basename "$file")
               country_code=$(echo "$filename" | cut -d'_' -f1)
-              parquet_out="parquet/${filename%.geojsonseq}.parquet"
+              parquet_out="temp_parquet/${filename%.geojsonseq}.parquet"
               echo "Processing $file -> $parquet_out ..."
               ./scripts/convert_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$parquet_out"
               rm -rf "$(dirname "$file")"
             done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \))
           done
 
-          PARQUET_COUNT=$(find parquet -name "*.parquet" | wc -l)
-          if [ "$PARQUET_COUNT" -eq 0 ]; then
+          TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
+          if [ "$TEMP_COUNT" -eq 0 ]; then
             echo "****************************************************************"
             echo " ERROR: No GeoParquet files were produced for continent '$(CONTINENT)'!"
             echo "****************************************************************"
             exit 1
           fi
 
+          echo "Merging $TEMP_COUNT country Parquet files into single unified continent Parquet: parquet/admin-polygons-$(CONTINENT).parquet"
+          duckdb -c "LOAD spatial;
+          COPY (
+            SELECT * FROM read_parquet('temp_parquet/*.parquet')
+            ORDER BY continent, country_code, admin_level, bbox_miny, bbox_minx
+          ) TO 'parquet/admin-polygons-$(CONTINENT).parquet' (
+            FORMAT PARQUET,
+            COMPRESSION ZSTD,
+            ROW_GROUP_SIZE 5000
+          );"
+
+          rm -rf temp_parquet
           ls -lh parquet/
 
     - task: PublishPipelineArtifact@1
       displayName: 'Store GeoParquet continent artifact'
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet'
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet/admin-polygons-$(CONTINENT).parquet'
         artifact: 'admin-polygons-parquet-$(CONTINENT)'
         publishLocation: 'pipeline'
 
@@ -1469,6 +1481,19 @@ stages:
           mkdir -p parquet_all
           if [ -d "parquet_archives" ]; then
             find parquet_archives -type f -name "*.parquet" -exec cp {} parquet_all/ \;
+            PARQUET_FILE_COUNT=$(find parquet_all -type f -name "*.parquet" | wc -l)
+            if [ "$PARQUET_FILE_COUNT" -gt 0 ]; then
+              echo "Merging $PARQUET_FILE_COUNT continental GeoParquet files into global admin-polygons-all.parquet..."
+              docker run --rm -v $(pwd):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.5 duckdb -c "LOAD spatial;
+              COPY (
+                SELECT * FROM read_parquet('parquet_all/*.parquet')
+                ORDER BY continent, country_code, admin_level, bbox_miny, bbox_minx
+              ) TO 'parquet_all/admin-polygons-all.parquet' (
+                FORMAT PARQUET,
+                COMPRESSION ZSTD,
+                ROW_GROUP_SIZE 5000
+              );"
+            fi
           fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
@@ -1508,39 +1533,23 @@ stages:
             REUSED_EXPORT=true
           fi
 
-          cat <<EOF > simplified/build-info.json
+          # Generate export-info.json and metadata artifact
+          cat <<EOF > export-info.json
           {
-            "schema_version": "1.0",
-            "dataset_name": "osm-polygons-simplified",
-            "reused_export_artifacts": ${REUSED_EXPORT},
-            "osm_data_extracted_at": "${EXPORTED_AT}",
-            "export_pipeline_commit": "${EXPORT_COMMIT}",
-            "export_build_number": "${EXPORT_BUILD_NUM}",
-            "export_build_id": "${EXPORT_BUILD_ID}",
-            "simplification_pipeline_commit": "$(Build.SourceVersion)",
-            "simplification_build_number": "$(Build.BuildNumber)",
-            "simplification_build_id": "$(Build.BuildId)",
-            "osm_tools_commit": "${OSM_TOOLS_COMMIT}",
-            "osm_tools_build_time": "${OSM_TOOLS_BUILD_TIME}",
-            "osmium_tool_image": "v1.19.0"
+            "exported_at": "$EXPORTED_AT",
+            "export_pipeline_commit": "$EXPORT_COMMIT",
+            "export_build_id": "$EXPORT_BUILD_ID",
+            "export_build_number": "$EXPORT_BUILD_NUM",
+            "release_pipeline_commit": "$(Build.SourceVersion)",
+            "release_build_id": "$(Build.BuildId)",
+            "release_build_number": "$(Build.BuildNumber)",
+            "osm_tools_commit": "$OSM_TOOLS_COMMIT",
+            "osm_tools_build_time": "$OSM_TOOLS_BUILD_TIME",
+            "reused_export_artifacts": $REUSED_EXPORT
           }
           EOF
 
-          cat <<EOF > simplified/VERSION.txt
-          ================================================================================
-          OSM Administrative Polygons Dataset
-          ================================================================================
-          Extraction Timestamp:      ${EXPORTED_AT}
-          Reused Export Artifacts:   ${REUSED_EXPORT}
-          Export Pipeline Commit:    ${EXPORT_COMMIT}
-          Export Build Number:       ${EXPORT_BUILD_NUM} (Build ID: ${EXPORT_BUILD_ID})
-          --------------------------------------------------------------------------------
-          Simplification Commit:     $(Build.SourceVersion)
-          Simplification Build:      $(Build.BuildNumber) (Build ID: $(Build.BuildId))
-          osm-tools Engine:          ${OSM_TOOLS_COMMIT} (${OSM_TOOLS_BUILD_TIME})
-          osmium-tool Image:         v1.19.0
-          ================================================================================
-          EOF
+          cat export-info.json
 
           SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
           if [ "$SIMPLIFIED_COUNT" -gt 0 ]; then
@@ -1550,6 +1559,7 @@ stages:
 
           PARQUET_TOTAL=$(find parquet_all -name "*.parquet" | wc -l)
           echo "Total GeoParquet files packaged: $PARQUET_TOTAL"
+          ls -lh parquet_all/
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -1564,7 +1574,7 @@ stages:
       enabled: true
       displayName: 'Store global GeoParquet dataset'
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet_all'
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet_all/admin-polygons-all.parquet'
         artifact: 'admin-polygons-parquet-all'
         publishLocation: 'pipeline'
 
