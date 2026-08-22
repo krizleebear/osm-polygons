@@ -1573,6 +1573,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store global GeoParquet dataset'
+      condition: and(succeeded(), eq('${{ parameters.exportParquet }}', 'true'))
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/parquet_all/admin-polygons-all.parquet'
         artifact: 'admin-polygons-parquet-all'
@@ -1581,6 +1582,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store admin-level statistics artifact'
+      condition: and(succeeded(), eq('${{ parameters.simplifyPolygons }}', 'true'))
       continueOnError: true
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
