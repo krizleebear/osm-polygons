@@ -15,11 +15,15 @@ Main tasks:
 8. Keep nameless admin_level=2 land borders that carry ISO3166-1 (instead of dropping them).
 9. Synthesize missing major parent entities (e.g. Funchal, Kaohsiung) from constituent sub-divisions
    per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md when unclosed island/coastal rings cause osmium export drop.
+10. Enrich administrative boundary relations with official admin_centre and label member coordinates
+    (center_lat, center_lon, admin_centre:lat, admin_centre:lon, label:lat, label:lon) per SPEC_ADMINISTRATIVE_CENTERS.md.
 """
 
+import os
 import sys
 import json
 import argparse
+import subprocess
 
 # National mainland relations that must be preserved as admin_level=2
 MAINLAND_RELATION_IDS = {
@@ -104,7 +108,119 @@ SYNTHETIC_PARENT_DEFINITIONS = {
     }
 }
 
-def process_feature(data, require_wikidata=False, country_code=None):
+def extract_relation_centres(admin_pbf_path):
+    """
+    Extracts admin_centre and label member coordinates from an OSM admin PBF extract.
+    Uses 'osmium cat -f opl' to parse relation members and node coordinates efficiently.
+    Returns a dict: { rel_id (int): { 'admin_centre': (lon, lat), 'label': (lon, lat) } }
+    """
+    if not admin_pbf_path or not os.path.exists(admin_pbf_path):
+        return {}
+
+    rel_centres = {}
+    needed_nodes = set()
+
+    try:
+        proc_rel = subprocess.Popen(
+            ['osmium', 'cat', admin_pbf_path, '-f', 'opl', '-t', 'relation'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True
+        )
+        for line in proc_rel.stdout:
+            if not line.startswith('r'):
+                continue
+            parts = line.rstrip('\n').split(' ')
+            try:
+                rel_id = int(parts[0][1:])
+            except (ValueError, IndexError):
+                continue
+            for part in parts:
+                if part.startswith('M'):
+                    for m in part[1:].split(','):
+                        if not m or not m.startswith('n'):
+                            continue
+                        if '@admin_centre' in m or '@admin_center' in m:
+                            at_idx = m.find('@')
+                            try:
+                                node_id = int(m[1:at_idx])
+                                if rel_id not in rel_centres:
+                                    rel_centres[rel_id] = {}
+                                rel_centres[rel_id]['admin_centre_id'] = node_id
+                                needed_nodes.add(node_id)
+                            except ValueError:
+                                pass
+                        elif '@label' in m:
+                            at_idx = m.find('@')
+                            try:
+                                node_id = int(m[1:at_idx])
+                                if rel_id not in rel_centres:
+                                    rel_centres[rel_id] = {}
+                                rel_centres[rel_id]['label_id'] = node_id
+                                needed_nodes.add(node_id)
+                            except ValueError:
+                                pass
+        proc_rel.wait()
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to extract relation members from {admin_pbf_path}: {e}\n")
+        return {}
+
+    if not needed_nodes:
+        return {}
+
+    node_coords = {}
+    try:
+        proc_node = subprocess.Popen(
+            ['osmium', 'cat', admin_pbf_path, '-f', 'opl', '-t', 'node'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True
+        )
+        for line in proc_node.stdout:
+            if not line.startswith('n'):
+                continue
+            parts = line.rstrip('\n').split(' ')
+            try:
+                node_id = int(parts[0][1:])
+            except (ValueError, IndexError):
+                continue
+            if node_id in needed_nodes:
+                lon, lat = None, None
+                for p in parts:
+                    if p.startswith('x'):
+                        try:
+                            lon = float(p[1:])
+                        except ValueError:
+                            pass
+                    elif p.startswith('y'):
+                        try:
+                            lat = float(p[1:])
+                        except ValueError:
+                            pass
+                if lon is not None and lat is not None:
+                    node_coords[node_id] = (lon, lat)
+        proc_node.wait()
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to extract node coordinates from {admin_pbf_path}: {e}\n")
+        return {}
+
+    resolved = {}
+    for rel_id, members in rel_centres.items():
+        res = {}
+        if 'admin_centre_id' in members:
+            nid = members['admin_centre_id']
+            if nid in node_coords:
+                res['admin_centre'] = node_coords[nid]
+        if 'label_id' in members:
+            nid = members['label_id']
+            if nid in node_coords:
+                res['label'] = node_coords[nid]
+        if res:
+            resolved[rel_id] = res
+
+    return resolved
+
+def process_feature(data, require_wikidata=False, country_code=None, relation_centres=None):
     if data.get("type") != "Feature":
         return None
 
@@ -222,6 +338,25 @@ def process_feature(data, require_wikidata=False, country_code=None):
         if raw_level in ("5", "6", "7") and "admin_level_mapped" not in props:
             props["admin_level_mapped"] = "4"
 
+    # Task 10: Centerpoint & Label coordinates enrichment (SPEC_ADMINISTRATIVE_CENTERS.md)
+    if osm_id_num is not None and relation_centres and osm_id_num in relation_centres:
+        centres = relation_centres[osm_id_num]
+        if "admin_centre" in centres:
+            c_lon, c_lat = centres["admin_centre"]
+            props["admin_centre:lat"] = c_lat
+            props["admin_centre:lon"] = c_lon
+        if "label" in centres:
+            l_lon, l_lat = centres["label"]
+            props["label:lat"] = l_lat
+            props["label:lon"] = l_lon
+
+        if "admin_centre" in centres:
+            props["center_lat"] = centres["admin_centre"][1]
+            props["center_lon"] = centres["admin_centre"][0]
+        elif "label" in centres:
+            props["center_lat"] = centres["label"][1]
+            props["center_lon"] = centres["label"][0]
+
     return data
 
 class StreamProcessor:
@@ -229,11 +364,23 @@ class StreamProcessor:
     Processes a stream of GeoJSON features, tracking known entities and synthesizing
     missing parent divisions from constituent child divisions per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md.
     """
-    def __init__(self, require_wikidata=False, country_code=None):
+    def __init__(self, require_wikidata=False, country_code=None, relation_centres=None, admin_pbf=None):
         self.require_wikidata = require_wikidata
         self.country_code = country_code
         self.seen_parents = set()
         self.parent_collected_polygons = {pid: [] for pid in SYNTHETIC_PARENT_DEFINITIONS}
+        if relation_centres is not None:
+            self.relation_centres = relation_centres
+        elif admin_pbf:
+            self.relation_centres = extract_relation_centres(admin_pbf)
+        else:
+            self.relation_centres = {}
+
+        self.count_total = 0
+        self.count_with_center = 0
+        self.count_with_admin_centre = 0
+        self.count_with_label = 0
+        self.count_synthesized = 0
 
     def process_line(self, line_str):
         if not line_str or not line_str.strip():
@@ -243,11 +390,24 @@ class StreamProcessor:
         except json.JSONDecodeError:
             return None
 
-        processed = process_feature(data, require_wikidata=self.require_wikidata, country_code=self.country_code)
+        processed = process_feature(
+            data,
+            require_wikidata=self.require_wikidata,
+            country_code=self.country_code,
+            relation_centres=self.relation_centres
+        )
         if not processed:
             return None
 
+        self.count_total += 1
         props = processed.get("properties", {})
+        if "center_lat" in props:
+            self.count_with_center += 1
+        if "admin_centre:lat" in props:
+            self.count_with_admin_centre += 1
+        if "label:lat" in props:
+            self.count_with_label += 1
+
         osm_id = props.get("id") or props.get("@id") or props.get("osm_id")
         try:
             osm_id_num = int(osm_id) if osm_id else None
@@ -314,14 +474,35 @@ class StreamProcessor:
                 },
                 "properties": dict(pdef["properties"])
             }
+            self.count_total += 1
+            self.count_synthesized += 1
             synthesized.append(synth_feature)
         return synthesized
 
-def filter_features(feature_iterable, require_wikidata=False, country_code=None):
+    def print_summary(self, stream_name=None):
+        pct = (self.count_with_center / self.count_total * 100.0) if self.count_total > 0 else 0.0
+        label = f": {stream_name}" if stream_name else ""
+        sys.stderr.write("============================================================\n")
+        sys.stderr.write(f" filter_polygons Execution Summary{label}\n")
+        sys.stderr.write(f" Total Features Emitted:    {self.count_total:,}\n")
+        sys.stderr.write(f" With Center Coordinates:   {self.count_with_center:,} ({pct:.1f}%)\n")
+        sys.stderr.write(f"   - From admin_centre:     {self.count_with_admin_centre:,}\n")
+        sys.stderr.write(f"   - From label:            {self.count_with_label:,}\n")
+        if self.count_synthesized > 0:
+            sys.stderr.write(f" Synthesized Parents:       {self.count_synthesized:,}\n")
+        sys.stderr.write("============================================================\n")
+        sys.stderr.flush()
+
+def filter_features(feature_iterable, require_wikidata=False, country_code=None, relation_centres=None, admin_pbf=None):
     """
     Generator that processes features and yields output features including synthesized parents.
     """
-    processor = StreamProcessor(require_wikidata=require_wikidata, country_code=country_code)
+    processor = StreamProcessor(
+        require_wikidata=require_wikidata,
+        country_code=country_code,
+        relation_centres=relation_centres,
+        admin_pbf=admin_pbf
+    )
     for item in feature_iterable:
         line_str = json.dumps(item) if isinstance(item, dict) else str(item)
         res = processor.process_line(line_str)
@@ -334,10 +515,17 @@ def main():
     parser = argparse.ArgumentParser(description="Filter and enhance GeoJSON sequence stream for osm-polygons exporter.")
     parser.add_argument("--require-wikidata", action="store_true", help="Require wikidata property")
     parser.add_argument("--country-code", type=str, help="Optional country code ISO override")
+    parser.add_argument("--admin-pbf", type=str, help="Optional path to filtered admin PBF file to extract relation center coordinates")
     parser.add_argument("input_file", nargs="?", help="Input geojsonseq file (or stdin if omitted)")
     args = parser.parse_args()
 
-    processor = StreamProcessor(require_wikidata=args.require_wikidata, country_code=args.country_code)
+    processor = StreamProcessor(
+        require_wikidata=args.require_wikidata,
+        country_code=args.country_code,
+        admin_pbf=args.admin_pbf
+    )
+
+    stream_name = os.path.basename(args.input_file) if args.input_file else (args.country_code or "stdin")
 
     if args.input_file:
         input_stream = open(args.input_file, "r", encoding="utf-8")
@@ -354,6 +542,8 @@ def main():
 
     if args.input_file:
         input_stream.close()
+
+    processor.print_summary(stream_name=stream_name)
 
 if __name__ == "__main__":
     main()

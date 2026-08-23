@@ -13,6 +13,9 @@ resources:
     #image: krizleebear/osm-tools:latest
     image: mirror.gcr.io/krizleebear/osm-tools:master-2b3843cecae063416c0622eb978d31527c119008
     #endpoint: docker-krizleebear
+  - container: osm2parquet
+    # DuckDB spatial converter for unsimplified GeoParquet 1.1 exports
+    image: ghcr.io/krizleebear/osm2parquet:v1.0.5
 
 trigger:
 - none
@@ -21,6 +24,14 @@ pool:
   vmImage: 'ubuntu-latest'
 
 parameters:
+- name: exportParquet
+  displayName: 'Generate GeoParquet artifacts (OGC GeoParquet 1.1 unsimplified, 0% border-bleeding)'
+  type: boolean
+  default: true
+- name: simplifyPolygons
+  displayName: 'Run polygon simplification (osm-tools Java simplifier)'
+  type: boolean
+  default: true
 - name: reuseExportArtifacts
   displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
   type: boolean
@@ -805,14 +816,14 @@ stages:
           # 4. Prevent tag loss: fallback missing/null 'name' tags to name:en, official_name, ISO3166-1, or ref.
           # 5. Flag territorial sea boundaries (border_type=territorial, maritime=yes) to prioritize landmasses.
           # 6. Map fallback admin_level_mapped="4" for countries lacking native admin_level=4 relations (EE, HR, ME, SI, XK, etc.).
-          # 7. Synthesize admin_level for sub-municipal boundaries: boundary=local_authority/borough
-          #    -> "10", place=suburb/quarter/neighbourhood/borough on type=boundary/multipolygon relations -> 9/10/11/9.
+          # 8. Enrich administrative boundary relations with official admin_centre and label member coordinates
+          #    (center_lat, center_lon, admin_centre:lat, admin_centre:lon, label:lat, label:lon) per SPEC_ADMINISTRATIVE_CENTERS.md.
           if [ "${{ parameters.requireWikidata }}" = "true" ]; then
             osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-              | python3 scripts/filter_polygons.py --require-wikidata --country-code $(COUNTRY_CODE) > ${POLYGON_JSON}
+              | python3 scripts/filter_polygons.py --require-wikidata --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
           else
             osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-              | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) > ${POLYGON_JSON}
+              | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
           fi
 
           # Reclaim disk space: Remove intermediate admin PBF immediately
@@ -864,10 +875,354 @@ stages:
         publishLocation: 'pipeline'
 
 
+- stage: parquet
+  displayName: 'Convert to GeoParquet by continent'
+  dependsOn: export
+  condition: and(always(), eq('${{ parameters.exportParquet }}', 'true'))
+
+  jobs:
+  - job: parquet
+    timeoutInMinutes: 120
+    workspace:
+      clean: all
+    container: osm2parquet
+    strategy:
+      matrix:
+        africa:
+          CONTINENT: 'africa'
+          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon canary-islands cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-algeria/**
+            admin-polygons-*-angola/**
+            admin-polygons-*-benin/**
+            admin-polygons-*-botswana/**
+            admin-polygons-*-burkina-faso/**
+            admin-polygons-*-burundi/**
+            admin-polygons-*-cameroon/**
+            admin-polygons-*-canary-islands/**
+            admin-polygons-*-cape-verde/**
+            admin-polygons-*-central-african-republic/**
+            admin-polygons-*-chad/**
+            admin-polygons-*-comores/**
+            admin-polygons-*-congo-brazzaville/**
+            admin-polygons-*-congo-democratic-republic/**
+            admin-polygons-*-djibouti/**
+            admin-polygons-*-egypt/**
+            admin-polygons-*-equatorial-guinea/**
+            admin-polygons-*-eritrea/**
+            admin-polygons-*-ethiopia/**
+            admin-polygons-*-gabon/**
+            admin-polygons-*-ghana/**
+            admin-polygons-*-guinea/**
+            admin-polygons-*-guinea-bissau/**
+            admin-polygons-*-ivory-coast/**
+            admin-polygons-*-kenya/**
+            admin-polygons-*-lesotho/**
+            admin-polygons-*-liberia/**
+            admin-polygons-*-libya/**
+            admin-polygons-*-madagascar/**
+            admin-polygons-*-malawi/**
+            admin-polygons-*-mali/**
+            admin-polygons-*-mauritania/**
+            admin-polygons-*-mauritius/**
+            admin-polygons-*-morocco/**
+            admin-polygons-*-mozambique/**
+            admin-polygons-*-namibia/**
+            admin-polygons-*-niger/**
+            admin-polygons-*-nigeria/**
+            admin-polygons-*-rwanda/**
+            admin-polygons-*-saint-helena-ascension-and-tristan-da-cunha/**
+            admin-polygons-*-sao-tome-and-principe/**
+            admin-polygons-*-senegal-and-gambia/**
+            admin-polygons-*-seychelles/**
+            admin-polygons-*-sierra-leone/**
+            admin-polygons-*-somalia/**
+            admin-polygons-*-south-africa/**
+            admin-polygons-*-south-sudan/**
+            admin-polygons-*-sudan/**
+            admin-polygons-*-swaziland/**
+            admin-polygons-*-tanzania/**
+            admin-polygons-*-togo/**
+            admin-polygons-*-tunisia/**
+            admin-polygons-*-uganda/**
+            admin-polygons-*-zambia/**
+            admin-polygons-*-zimbabwe/**
+        asia:
+          CONTINENT: 'asia'
+          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkmenistan uzbekistan vietnam yemen'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-afghanistan/**
+            admin-polygons-*-armenia/**
+            admin-polygons-*-azerbaijan/**
+            admin-polygons-*-bangladesh/**
+            admin-polygons-*-bhutan/**
+            admin-polygons-*-cambodia/**
+            admin-polygons-*-china/**
+            admin-polygons-*-gcc-states/**
+            admin-polygons-*-india/**
+            admin-polygons-*-indonesia/**
+            admin-polygons-*-iran/**
+            admin-polygons-*-iraq/**
+            admin-polygons-*-israel-and-palestine/**
+            admin-polygons-*-japan/**
+            admin-polygons-*-jordan/**
+            admin-polygons-*-kazakhstan/**
+            admin-polygons-*-kyrgyzstan/**
+            admin-polygons-*-laos/**
+            admin-polygons-*-lebanon/**
+            admin-polygons-*-malaysia-singapore-brunei/**
+            admin-polygons-*-maldives/**
+            admin-polygons-*-mongolia/**
+            admin-polygons-*-myanmar/**
+            admin-polygons-*-nepal/**
+            admin-polygons-*-north-korea/**
+            admin-polygons-*-pakistan/**
+            admin-polygons-*-philippines/**
+            admin-polygons-*-south-korea/**
+            admin-polygons-*-sri-lanka/**
+            admin-polygons-*-syria/**
+            admin-polygons-*-taiwan/**
+            admin-polygons-*-tajikistan/**
+            admin-polygons-*-thailand/**
+            admin-polygons-*-turkmenistan/**
+            admin-polygons-*-uzbekistan/**
+            admin-polygons-*-vietnam/**
+            admin-polygons-*-yemen/**
+        australia_oceania:
+          CONTINENT: 'australia-oceania'
+          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-australia/**
+            admin-polygons-*-fiji/**
+            admin-polygons-*-new-caledonia/**
+            admin-polygons-*-new-zealand/**
+            admin-polygons-*-papua-new-guinea/**
+        central_america:
+          CONTINENT: 'central-america'
+          REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-bahamas/**
+            admin-polygons-*-belize/**
+            admin-polygons-*-cuba/**
+            admin-polygons-*-guatemala/**
+            admin-polygons-*-haiti-and-domrep/**
+            admin-polygons-*-jamaica/**
+            admin-polygons-*-nicaragua/**
+        north_america:
+          CONTINENT: 'north-america'
+          REGIONS: 'greenland mexico'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-greenland/**
+            admin-polygons-*-mexico/**
+        canada:
+          CONTINENT: 'canada'
+          REGIONS: 'canada'
+          ARTIFACT_PATTERNS: 'admin-polygons-*-canada/**'
+        us:
+          CONTINENT: 'us'
+          REGIONS: 'us'
+          ARTIFACT_PATTERNS: 'admin-polygons-*-us/**'
+        south_america:
+          CONTINENT: 'south-america'
+          REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-argentina/**
+            admin-polygons-*-bolivia/**
+            admin-polygons-*-brazil/**
+            admin-polygons-*-chile/**
+            admin-polygons-*-colombia/**
+            admin-polygons-*-ecuador/**
+            admin-polygons-*-guyana/**
+            admin-polygons-*-paraguay/**
+            admin-polygons-*-peru/**
+            admin-polygons-*-suriname/**
+            admin-polygons-*-uruguay/**
+            admin-polygons-*-venezuela/**
+        europe:
+          CONTINENT: 'europe'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania russia serbia slovakia slovenia spain sweden switzerland turkey ukraine'
+          ARTIFACT_PATTERNS: |
+            admin-polygons-*-albania/**
+            admin-polygons-*-andorra/**
+            admin-polygons-*-austria/**
+            admin-polygons-*-azores/**
+            admin-polygons-*-belarus/**
+            admin-polygons-*-belgium/**
+            admin-polygons-*-bosnia-herzegovina/**
+            admin-polygons-*-bulgaria/**
+            admin-polygons-*-croatia/**
+            admin-polygons-*-cyprus/**
+            admin-polygons-*-czech-republic/**
+            admin-polygons-*-denmark/**
+            admin-polygons-*-estonia/**
+            admin-polygons-*-faroe-islands/**
+            admin-polygons-*-finland/**
+            admin-polygons-*-france/**
+            admin-polygons-*-georgia/**
+            admin-polygons-*-germany/**
+            admin-polygons-*-great-britain/**
+            admin-polygons-*-greece/**
+            admin-polygons-*-hungary/**
+            admin-polygons-*-iceland/**
+            admin-polygons-*-ireland-and-northern-ireland/**
+            admin-polygons-*-isle-of-man/**
+            admin-polygons-*-italy/**
+            admin-polygons-*-kosovo/**
+            admin-polygons-*-latvia/**
+            admin-polygons-*-liechtenstein/**
+            admin-polygons-*-lithuania/**
+            admin-polygons-*-luxembourg/**
+            admin-polygons-*-macedonia/**
+            admin-polygons-*-malta/**
+            admin-polygons-*-moldova/**
+            admin-polygons-*-monaco/**
+            admin-polygons-*-montenegro/**
+            admin-polygons-*-netherlands/**
+            admin-polygons-*-norway/**
+            admin-polygons-*-poland/**
+            admin-polygons-*-portugal/**
+            admin-polygons-*-romania/**
+            admin-polygons-*-russia/**
+            admin-polygons-*-serbia/**
+            admin-polygons-*-slovakia/**
+            admin-polygons-*-slovenia/**
+            admin-polygons-*-spain/**
+            admin-polygons-*-sweden/**
+            admin-polygons-*-switzerland/**
+            admin-polygons-*-turkey/**
+            admin-polygons-*-ukraine/**
+
+    steps:
+    - checkout: self
+
+    - ${{ if and(ne(parameters.exportBuildId, 'auto'), ne(parameters.exportBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from specific build (${{ parameters.exportBuildId }})'
+        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'specific'
+          pipelineId: '${{ parameters.exportBuildId }}'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: $(ARTIFACT_PATTERNS)
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        enabled: true
+        displayName: 'Download export artifacts from latest build with export artifacts'
+        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'latest'
+          tags: 'has-export-artifacts'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: $(ARTIFACT_PATTERNS)
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download export artifacts from current build'
+      condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
+      inputs:
+        buildType: 'current'
+        itemPattern: $(ARTIFACT_PATTERNS)
+        targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: Bash@3
+      displayName: 'Convert exported GeoJSON streams to GeoParquet'
+      inputs:
+        workingDirectory: '$(System.DefaultWorkingDirectory)'
+        targetType: 'inline'
+        script: |
+          set -e
+          mkdir -p temp_parquet parquet
+
+          echo "=== Downloaded region directories ==="
+          find . -maxdepth 2 -type d -name "admin-polygons-*" || true
+
+          # Prune export directories belonging to other continents to conserve runner disk space
+          for dir in admin-polygons-*; do
+            [ -d "$dir" ] || continue
+            keep=false
+            for region in $(REGIONS); do
+              if [[ "$dir" == *"-${region}"* ]] || [[ "$dir" == *"_${region}"* ]]; then
+                keep=true
+                break
+              fi
+            done
+            if [ "$keep" = "false" ]; then
+              rm -rf "$dir"
+            fi
+          done
+
+          echo "=== Retained region directories for continent '$(CONTINENT)' ==="
+          find . -maxdepth 2 -type d -name "admin-polygons-*" || true
+
+          chmod +x scripts/convert_to_parquet.sh
+
+          for region in $(REGIONS); do
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              [ -s "$file" ] || continue
+              filename=$(basename "$file")
+              country_code=$(echo "$filename" | cut -d'_' -f1)
+              parquet_out="temp_parquet/${filename%.geojsonseq}.parquet"
+              echo "Processing $file -> $parquet_out ..."
+              ./scripts/convert_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$parquet_out"
+              rm -rf "$(dirname "$file")"
+            done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \))
+          done
+
+          TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
+          if [ "$TEMP_COUNT" -eq 0 ]; then
+            echo "****************************************************************"
+            echo " ERROR: No GeoParquet files were produced for continent '$(CONTINENT)'!"
+            echo "****************************************************************"
+            exit 1
+          fi
+
+          echo "Merging $TEMP_COUNT country Parquet files into single unified continent Parquet: parquet/admin-polygons-$(CONTINENT).parquet"
+          duckdb -c "LOAD spatial;
+          COPY (
+            SELECT * FROM read_parquet('temp_parquet/*.parquet')
+            ORDER BY continent, country_code, admin_level, bbox_miny, bbox_minx
+          ) TO 'parquet/admin-polygons-$(CONTINENT).parquet' (
+            FORMAT PARQUET,
+            COMPRESSION ZSTD,
+            ROW_GROUP_SIZE 5000
+          );"
+
+          rm -rf temp_parquet
+          ls -lh parquet/
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Store GeoParquet continent artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet/admin-polygons-$(CONTINENT).parquet'
+        artifact: 'admin-polygons-parquet-$(CONTINENT)'
+        publishLocation: 'pipeline'
+
+    - task: Bash@3
+      displayName: 'Cleanup workspace'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          rm -rf $(System.DefaultWorkingDirectory)/*
+
+
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
-  condition: always()
+  condition: and(always(), eq('${{ parameters.simplifyPolygons }}', 'true'))
 
   jobs:
   - job: simplify
@@ -942,7 +1297,11 @@ stages:
           pipelineId: '${{ parameters.exportBuildId }}'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
+          itemPattern: |
+            admin-polygons-*/**
+            !admin-polygons-simplified*/**
+            !admin-polygons-parquet*/**
+            !admin-polygons-export-metadata/**
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
@@ -958,7 +1317,11 @@ stages:
           tags: 'has-export-artifacts'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-*/**'
+          itemPattern: |
+            admin-polygons-*/**
+            !admin-polygons-simplified*/**
+            !admin-polygons-parquet*/**
+            !admin-polygons-export-metadata/**
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
@@ -967,7 +1330,11 @@ stages:
       condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
       inputs:
         buildType: 'current'
-        itemPattern: 'admin-polygons-*/**'
+        itemPattern: |
+          admin-polygons-*/**
+          !admin-polygons-simplified*/**
+          !admin-polygons-parquet*/**
+          !admin-polygons-export-metadata/**
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: Bash@3
@@ -1061,9 +1428,11 @@ stages:
           rm -rf $(System.DefaultWorkingDirectory)/*
 
 - stage: package
-  displayName: 'Package global simplified polygons'
-  dependsOn: simplify
-  condition: succeeded('simplify')
+  displayName: 'Package global simplified & GeoParquet polygons'
+  dependsOn:
+  - simplify
+  - parquet
+  condition: or(succeeded('simplify'), succeeded('parquet'))
 
   jobs:
   - job: package
@@ -1071,43 +1440,33 @@ stages:
     workspace:
       clean: all
     pool:
-
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
+
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download all simplified continent artifacts'
+      continueOnError: true
       inputs:
         buildType: 'current'
         buildVersionToDownload: 'latest'
         itemPattern: 'admin-polygons-simplified-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)/archives'
+
     - task: Bash@3
       enabled: true
       displayName: 'Bundle global artifact & generate admin_level statistics'
       inputs:
         targetType: 'inline'
         script: |
+          set -e
           set -x
           mkdir -p simplified
-          find archives -name "simplified-*.tar.gz" | while read -r archive; do
-            tar xfz "$archive" -C .
-          done
-
-          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
-          if [ "$SIMPLIFIED_COUNT" -eq 0 ]; then
-            echo "****************************************************************"
-            echo " ERROR: No simplified polygon files were extracted from continent archives!"
-            echo ""
-            echo " Cause:"
-            echo " The 'simplify' stage produced empty continent archives."
-            echo ""
-            echo " Solution:"
-            echo " Verify that the 'simplify' stage completed successfully and generated"
-            echo " valid .geojsonseq files before running the 'package' stage."
-            echo "****************************************************************"
-            exit 1
+          if [ -d "archives" ]; then
+            find archives -name "simplified-*.tar.gz" | while read -r archive; do
+              tar xfz "$archive" -C . || true
+            done
           fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
@@ -1147,51 +1506,34 @@ stages:
             REUSED_EXPORT=true
           fi
 
-          cat <<EOF > simplified/build-info.json
+          # Generate export-info.json and metadata artifact
+          cat <<EOF > export-info.json
           {
-            "schema_version": "1.0",
-            "dataset_name": "osm-polygons-simplified",
-            "reused_export_artifacts": ${REUSED_EXPORT},
-            "osm_data_extracted_at": "${EXPORTED_AT}",
-            "export_pipeline_commit": "${EXPORT_COMMIT}",
-            "export_build_number": "${EXPORT_BUILD_NUM}",
-            "export_build_id": "${EXPORT_BUILD_ID}",
-            "simplification_pipeline_commit": "$(Build.SourceVersion)",
-            "simplification_build_number": "$(Build.BuildNumber)",
-            "simplification_build_id": "$(Build.BuildId)",
-            "osm_tools_commit": "${OSM_TOOLS_COMMIT}",
-            "osm_tools_build_time": "${OSM_TOOLS_BUILD_TIME}",
-            "osmium_tool_image": "v1.19.0"
+            "exported_at": "$EXPORTED_AT",
+            "export_pipeline_commit": "$EXPORT_COMMIT",
+            "export_build_id": "$EXPORT_BUILD_ID",
+            "export_build_number": "$EXPORT_BUILD_NUM",
+            "release_pipeline_commit": "$(Build.SourceVersion)",
+            "release_build_id": "$(Build.BuildId)",
+            "release_build_number": "$(Build.BuildNumber)",
+            "osm_tools_commit": "$OSM_TOOLS_COMMIT",
+            "osm_tools_build_time": "$OSM_TOOLS_BUILD_TIME",
+            "reused_export_artifacts": $REUSED_EXPORT
           }
           EOF
 
-          cat <<EOF > simplified/VERSION.txt
-          ================================================================================
-          OSM Administrative Polygons Dataset
-          ================================================================================
-          Extraction Timestamp:      ${EXPORTED_AT}
-          Reused Export Artifacts:   ${REUSED_EXPORT}
-          Export Pipeline Commit:    ${EXPORT_COMMIT}
-          Export Build Number:       ${EXPORT_BUILD_NUM} (Build ID: ${EXPORT_BUILD_ID})
-          --------------------------------------------------------------------------------
-          Simplification Commit:     $(Build.SourceVersion)
-          Simplification Build:      $(Build.BuildNumber) (Build ID: $(Build.BuildId))
-          osm-tools Engine:          ${OSM_TOOLS_COMMIT} (${OSM_TOOLS_BUILD_TIME})
-          osmium-tool Image:         v1.19.0
-          ================================================================================
-          EOF
+          cat export-info.json
 
-          # Generate global and per-country admin_level matrix statistics (MD, CSV, JSON)
-          python3 scripts/generate_release_stats.py simplified
-
-          ls -la simplified/
-          tar cfz simplified.tar.gz simplified/
-
-
+          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
+          if [ "$SIMPLIFIED_COUNT" -gt 0 ]; then
+            python3 scripts/generate_release_stats.py simplified || true
+            tar cfz simplified.tar.gz simplified/
+          fi
 
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store global simplified artifact'
+      condition: and(succeeded(), eq('${{ parameters.simplifyPolygons }}', 'true'))
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
         artifact: 'admin-polygons-simplified'
@@ -1200,6 +1542,8 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store admin-level statistics artifact'
+      condition: and(succeeded(), eq('${{ parameters.simplifyPolygons }}', 'true'))
+      continueOnError: true
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
         artifact: 'admin-levels-summary'
@@ -1212,4 +1556,3 @@ stages:
         targetType: 'inline'
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
-

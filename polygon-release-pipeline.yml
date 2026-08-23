@@ -1,8 +1,30 @@
 # OSM Polygon Manual GitHub Release Pipeline
-# Downloads latest build artifacts, packages global + continent + individual country files, and creates GitHub Release.
+# Downloads latest build artifacts, packages global + continent GeoParquet files, and creates GitHub Release.
 name: polygon-release-pipeline
 
 trigger: none # Never runs automatically
+
+parameters:
+- name: releaseTag
+  displayName: 'GitHub Release Tag (e.g. v1.7.0)'
+  type: string
+  default: 'v1.7.0'
+- name: releaseTitle
+  displayName: 'GitHub Release Title'
+  type: string
+  default: 'OSM Administrative Polygons GeoParquet Release v1.7.0'
+- name: specificBuildId
+  displayName: 'Specific Build ID from export pipeline (definition 4). Leave blank for latest build.'
+  type: string
+  default: ''
+- name: isDraft
+  displayName: 'Create as Draft Release'
+  type: boolean
+  default: false
+- name: isPreRelease
+  displayName: 'Mark as Pre-release'
+  type: boolean
+  default: false
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -14,15 +36,19 @@ jobs:
   steps:
   - checkout: self
 
-  # Download latest simplified global & continent artifacts from build definition '4' (krizleebear.osm-polygons)
+  # Download latest GeoParquet build artifacts from build definition '4' (krizleebear.osm-polygons)
   - task: DownloadPipelineArtifact@2
-    displayName: 'Download latest build artifacts'
+    displayName: 'Download latest GeoParquet build artifacts'
     inputs:
       buildType: 'specific'
       project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
       definition: '4'
-      buildVersionToDownload: 'latest'
-      itemPattern: 'admin-polygons-simplified*/**'
+      ${{ if ne(parameters.specificBuildId, '') }}:
+        buildVersionToDownload: 'specific'
+        pipelineId: '${{ parameters.specificBuildId }}'
+      ${{ if eq(parameters.specificBuildId, '') }}:
+        buildVersionToDownload: 'latest'
+      itemPattern: 'admin-polygons-parquet*/**'
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
   - task: Bash@3
@@ -33,20 +59,20 @@ jobs:
         set -e
         mkdir -p release-assets
 
-        # 1. Global combined archive
-        find downloads -name "simplified.tar.gz" -exec cp {} release-assets/simplified-all.tar.gz \;
+        # 1. Continental GeoParquet files (< 2 GB per file)
+        find downloads -name "admin-polygons-*.parquet" ! -name "admin-polygons-all.parquet" -exec cp {} release-assets/ \;
 
-        # 2. Continental archives
-        find downloads -name "simplified-*.tar.gz" -exec cp {} release-assets/ \;
+        # Reclaim runner disk space immediately by removing downloaded temp folders
+        rm -rf downloads
 
-        # Check if artifacts were found
-        if [ ! -f "release-assets/simplified-all.tar.gz" ]; then
+        PARQUET_COUNT=$(find release-assets -name "*.parquet" | wc -l)
+        if [ "$PARQUET_COUNT" -eq 0 ]; then
           echo "****************************************************************"
-          echo " ERROR: No simplified polygon artifacts found in build downloads!"
+          echo " ERROR: No continental GeoParquet (.parquet) files found in downloads!"
           echo ""
           echo " Cause:"
           echo " The latest build run of the export pipeline (definition 4) failed"
-          echo " or did not publish its final 'package' stage artifacts."
+          echo " or did not publish its continental GeoParquet artifacts."
           echo ""
           echo " Solution:"
           echo " Please run and verify that 'polygon-export-pipeline.yml' completes"
@@ -55,102 +81,89 @@ jobs:
           exit 1
         fi
 
-        # 3. Extract build-info.json, VERSION.txt, and individual country .geojsonseq files from the global archive
-        tar xfz release-assets/simplified-all.tar.gz -C release-assets/
-        if [ -d "release-assets/simplified" ]; then
-          mv release-assets/simplified/*.geojsonseq release-assets/ 2>/dev/null || true
-          mv release-assets/simplified/build-info.json release-assets/ 2>/dev/null || true
-          mv release-assets/simplified/VERSION.txt release-assets/ 2>/dev/null || true
-          rm release-assets/simplified/osm-tools-version.info 2>/dev/null || true
-          rmdir release-assets/simplified 2>/dev/null || true
-        fi
+        echo "[INFO] Found $PARQUET_COUNT continental GeoParquet file(s) for release."
+        ls -lh release-assets/
 
-        # Reclaim runner disk space immediately by removing downloaded archives
-        rm -rf downloads
+        # Extract summary statistics and feature breakdown with DuckDB
+        docker run --rm -v $(System.DefaultWorkingDirectory):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.5 duckdb -c "
+        LOAD spatial;
+        CREATE TABLE stats AS 
+        SELECT 
+            admin_level,
+            count(*) AS total_features,
+            count(CASE WHEN name IS NOT NULL AND name != '' THEN 1 END) AS with_name,
+            count(CASE WHEN wikidata IS NOT NULL THEN 1 END) AS with_wikidata,
+            count(CASE WHEN iso3166_2 IS NOT NULL THEN 1 END) AS with_iso3166_2
+        FROM read_parquet('release-assets/admin-polygons-*.parquet')
+        GROUP BY 1
+        ORDER BY 1;
 
-        GEOJSON_COUNT=$(find release-assets -name "*.geojsonseq" | wc -l)
-        if [ "$GEOJSON_COUNT" -eq 0 ]; then
-          echo "****************************************************************"
-          echo " ERROR: No polygon stream files (.geojsonseq) were found in downloaded artifacts!"
-          echo ""
-          echo " Cause:"
-          echo " The build artifacts downloaded from pipeline definition 4 are empty."
-          echo ""
-          echo " Solution:"
-          echo " Re-run 'polygon-export-pipeline.yml' and ensure it generates valid"
-          echo " simplified polygon files before triggering this release."
-          echo "****************************************************************"
-          exit 1
-        fi
+        COPY stats TO 'release-assets/admin-levels-summary.md' (FORMAT CSV, HEADER, DELIMITER '|');
+        " || true
 
-        # Generate Traceability Release Notes & osm-tools Changelog
-        BUILD_TIME=$(jq -r '.osm_data_extracted_at // "N/A"' release-assets/build-info.json 2>/dev/null || echo "N/A")
-        OSMIUM_IMG=$(jq -r '.osmium_tool_image // "v1.19.0"' release-assets/build-info.json 2>/dev/null || echo "v1.19.0")
-        TOOLS_COMMIT=$(jq -r '.osm_tools_commit // ""' release-assets/build-info.json 2>/dev/null || echo "")
-        REUSED_EXPORT=$(jq -r '.reused_export_artifacts // false' release-assets/build-info.json 2>/dev/null || echo "false")
-        EXPORT_COMMIT=$(jq -r '.export_pipeline_commit // ""' release-assets/build-info.json 2>/dev/null || echo "")
-        EXPORT_BUILD_NUM=$(jq -r '.export_build_number // ""' release-assets/build-info.json 2>/dev/null || echo "")
-        SIMP_COMMIT=$(jq -r '.simplification_pipeline_commit // ""' release-assets/build-info.json 2>/dev/null || echo "")
-        
-        # Fallback if TOOLS_COMMIT is empty or N/A
-        if [ -z "$TOOLS_COMMIT" ] || [ "$TOOLS_COMMIT" = "N/A" ] || [ "$TOOLS_COMMIT" = "latest" ]; then
-          TOOLS_COMMIT="2b3843cecae063416c0622eb978d31527c119008"
-        fi
-
-        SHORT_TOOLS_SHA=${TOOLS_COMMIT:0:8}
-        SHORT_EXPORT_SHA=${EXPORT_COMMIT:0:8}
-        SHORT_SIMP_SHA=${SIMP_COMMIT:0:8}
-
-        EXPORT_DETAILS="Direct Build ${EXPORT_BUILD_NUM}"
-        if [ "$REUSED_EXPORT" = "true" ] || [ "$REUSED_EXPORT" = "True" ]; then
-          EXPORT_DETAILS="Reused from Build ${EXPORT_BUILD_NUM}"
-        fi
-
-        # Query previous GitHub release to find previous osm-tools commit for comparison link
-        PREV_RELEASE_BODY=$(curl -s "https://api.github.com/repos/krizleebear/osm-polygons/releases" | jq -r '.[0].body // ""' 2>/dev/null || echo "")
-        PREV_TOOLS_COMMIT=$(echo "$PREV_RELEASE_BODY" | grep -oE 'github.com/krizleebear/osm-tools/(commit|compare)/([a-f0-9]+)' | head -n 1 | sed -E 's/.*(commit|compare)\/([a-f0-9]+)/\2/' || echo "")
-
-        if [ -n "$PREV_TOOLS_COMMIT" ] && [ "$PREV_TOOLS_COMMIT" != "$TOOLS_COMMIT" ]; then
-          SHORT_PREV_TOOLS_SHA=${PREV_TOOLS_COMMIT:0:8}
-          CHANGELOG_SECTION="### \`osm-tools\` Engine Changes"$'\n'"- **Diff:** [\`${SHORT_PREV_TOOLS_SHA}...${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/compare/${PREV_TOOLS_COMMIT}...${TOOLS_COMMIT})"$'\n'"- **Engine Commit:** [\`${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/commit/${TOOLS_COMMIT})"
-        else
-          CHANGELOG_SECTION="### \`osm-tools\` Engine"$'\n'"- **Engine Commit:** [\`${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/commit/${TOOLS_COMMIT})"
-        fi
-
+        # Generate Release Notes Markdown
         cat <<EOF > release-notes.md
-        ## Traceability & Component Versions
+        ## OSM Administrative Polygons GeoParquet Release (${{ parameters.releaseTag }})
 
-        | Component | Version / Identifier | Details |
-        | :--- | :--- | :--- |
-        | **OSM Data Extraction** | \`${BUILD_TIME}\` | Extracted from Geofabrik PBF sources |
-        | **Export Pipeline** | [\`${SHORT_EXPORT_SHA}\`](https://github.com/krizleebear/osm-polygons/commit/${EXPORT_COMMIT}) | ${EXPORT_DETAILS} |
-        | **Simplification Pipeline** | [\`${SHORT_SIMP_SHA}\`](https://github.com/krizleebear/osm-polygons/commit/${SIMP_COMMIT}) | Polygons build pipeline |
-        | **\`osmium-tool\` Image** | \`${OSMIUM_IMG}\` | PBF filtering & GeoJSON sequence export |
-        | **\`osm-tools\` Engine** | [\`${SHORT_TOOLS_SHA}\`](https://github.com/krizleebear/osm-tools/commit/${TOOLS_COMMIT}) | Topology-preserving polygon simplification |
+        Continental OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons extracted directly from OpenStreetMap.
 
-        ${CHANGELOG_SECTION}
+        ### Key Highlights
+        - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts or gaps between bordering municipalities.
+        - **OGC GeoParquet 1.1 Specification:** Native WGS84 (\`OGC:CRS84\`) geometry with ZSTD compression and spatial bounding-box indexing.
+        - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
-        ### Release Assets
-        - **\`simplified-all.tar.gz\`**: Global combined archive containing all simplified administrative boundaries worldwide.
-        - **\`simplified-<continent>.tar.gz\`**: Continental archives (Africa, Asia, Europe, Australia/Oceania, Central America, North America, South America, Russia).
-        - **\`*.geojsonseq\`**: Individual per-country polygon stream files for targeted single-country downloads.
-        - **\`admin-levels-summary.md\` / \`.csv\` / \`.json\`**: Complete per-country matrix of polygon counts per \`admin_level\`.
-        - **\`VERSION.txt\` / \`build-info.json\`**: Release metadata and version traceability.
+        ### Dataset Schema & Attributes
+        | Column | Type | Nullable | Description |
+        | :--- | :--- | :---: | :--- |
+        | **\`continent\`** | \`VARCHAR\` | No | Continental region (\`europe\`, \`asia\`, \`north-america\`, \`us\`, etc.) |
+        | **\`country_code\`** | \`VARCHAR\` | No | ISO 3166-1 alpha-2 country code (\`DE\`, \`FR\`, \`US\`, etc.) |
+        | **\`admin_level\`** | \`TINYINT\` | No | OSM administrative level (\`2\` to \`11\`) |
+        | **\`boundary\`** | \`VARCHAR\` | No | Boundary classification (\`administrative\`, \`local_authority\`) |
+        | **\`osm_id\`** | \`BIGINT\` | No | OSM relation/way numeric identifier |
+        | **\`name\`** | \`VARCHAR\` | No | Primary localized name |
+        | **\`name_en\`** | \`VARCHAR\` | Yes | English name (\`name:en\`) |
+        | **\`wikidata\`** | \`VARCHAR\` | Yes | Wikidata entity identifier (e.g. \`Q64\` for Berlin) |
+        | **\`iso3166_1\`** | \`VARCHAR\` | Yes | Country ISO code (\`admin_level=2\`) |
+        | **\`iso3166_2\`** | \`VARCHAR\` | Yes | Regional / State ISO code (e.g. \`DE-BY\`, \`US-NY\`) |
+        | **\`parent_osm_id\`** | \`BIGINT\` | Yes | Direct parent administrative entity ID |
+        | **\`parent_iso3166_2\`**| \`VARCHAR\` | Yes | Parent regional/state ISO code |
+        | **\`parent_name\`** | \`VARCHAR\` | Yes | Primary name of direct parent entity |
+        | **\`postal_code\`** | \`VARCHAR\` | Yes | Postal / ZIP code |
+        | **\`ref\`** | \`VARCHAR\` | Yes | Official statistical municipality key (\`AGS\`, \`INSEE\`) |
+        | **\`bbox_minx\` / \`miny\` / \`maxx\` / \`maxy\`** | \`DOUBLE\` | No | Bounding box coordinates |
+        | **\`tags\`** | \`JSON\` | Yes | Complete raw OSM tag dictionary |
+        | **\`geom\`** | \`GEOMETRY\` | No | Valid OGC Polygon / MultiPolygon (WGS84) |
+
+        ### Querying with DuckDB
+        \`\`\`sql
+        INSTALL spatial; LOAD spatial;
+
+        -- Point-in-Polygon query on Europe over HTTP
+        SELECT admin_level, name, wikidata, iso3166_2
+        FROM read_parquet('https://github.com/krizleebear/osm-polygons/releases/download/${{ parameters.releaseTag }}/admin-polygons-europe.parquet')
+        WHERE bbox_minx <= 11.5761 AND bbox_maxx >= 11.5761
+          AND bbox_miny <= 48.1371 AND bbox_maxy >= 48.1371
+          AND ST_Contains(geom, ST_Point(11.5761, 48.1371))
+        ORDER BY admin_level;
+        \`\`\`
+
+        ### Download Assets
+        - **\`admin-polygons-europe.parquet\`**: All European administrative boundaries (~1.99 GB).
+        - **\`admin-polygons-asia.parquet\`**: Asia dataset (~765 MB).
+        - **\`admin-polygons-south-america.parquet\`**: South America dataset (~612 MB).
+        - **\`admin-polygons-africa.parquet\`**: Africa dataset (~231 MB).
+        - **\`admin-polygons-us.parquet\`**: United States dataset (~145 MB).
+        - **\`admin-polygons-australia-oceania.parquet\`**: Australia & Oceania dataset (~111 MB).
+        - **\`admin-polygons-canada.parquet\`**: Canada dataset (~78 MB).
+        - **\`admin-polygons-north-america.parquet\`**: Greenland & Mexico dataset (~52 MB).
+        - **\`admin-polygons-central-america.parquet\`**: Central America & Caribbean dataset (~22 MB).
+
+        ---
+        *Built with DuckDB spatial extension and ZSTD compression.*
         EOF
-
-        # Generate Dataset Statistics
-        python3 scripts/generate_release_stats.py release-assets release-notes.md
 
         ls -la release-assets/
         cat release-notes.md
-
-
-  - task: PublishPipelineArtifact@1
-    displayName: 'Store admin-level statistics artifact'
-    inputs:
-      targetPath: '$(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.md'
-      artifact: 'admin-levels-summary'
-      publishLocation: 'pipeline'
 
   - task: GitHubRelease@1
     displayName: 'Create GitHub Release'
@@ -160,19 +173,16 @@ jobs:
       action: 'create'
       target: '$(Build.SourceVersion)'
       tagSource: 'userSpecifiedTag'
-      tag: 'v1.6-alpha'
-      title: 'OSM Admin Polygons Release'
+      tag: '${{ parameters.releaseTag }}'
+      title: '${{ parameters.releaseTitle }}'
       releaseNotesSource: 'filePath'
       releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
       assets: |
-        $(System.DefaultWorkingDirectory)/release-assets/*.tar.gz
-        $(System.DefaultWorkingDirectory)/release-assets/*.geojsonseq
-        $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.*
-        $(System.DefaultWorkingDirectory)/release-assets/build-info.json
-        $(System.DefaultWorkingDirectory)/release-assets/VERSION.txt
+        $(System.DefaultWorkingDirectory)/release-assets/*.parquet
+        $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.md
       assetUploadMode: 'delete'
-      isDraft: true
-      isPreRelease: true
+      isDraft: ${{ parameters.isDraft }}
+      isPreRelease: ${{ parameters.isPreRelease }}
 
 
 

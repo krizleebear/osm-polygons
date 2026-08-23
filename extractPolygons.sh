@@ -17,4 +17,4 @@ osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} \
     r/place=suburb,quarter,borough,neighbourhood
 osmium export ${ADMIN_PBF} --output=temp.geojsonseq --overwrite --config=osmium-export-config.json
 
-python3 scripts/filter_polygons.py temp.geojsonseq > ${POLYGON_JSON}
+python3 scripts/filter_polygons.py --admin-pbf ${ADMIN_PBF} temp.geojsonseq > ${POLYGON_JSON}
