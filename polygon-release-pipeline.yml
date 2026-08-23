@@ -48,7 +48,9 @@ jobs:
         pipelineId: '${{ parameters.specificBuildId }}'
       ${{ if eq(parameters.specificBuildId, '') }}:
         buildVersionToDownload: 'latest'
-      itemPattern: 'admin-polygons-parquet*/**'
+      itemPattern: |
+        admin-polygons-parquet*/**
+        osm-places-parquet*/**
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
   - task: Bash@3
@@ -59,8 +61,11 @@ jobs:
         set -e
         mkdir -p release-assets
 
-        # 1. Continental GeoParquet files (< 2 GB per file)
+        # 1. Continental Administrative GeoParquet files (< 2 GB per file)
         find downloads -name "admin-polygons-*.parquet" ! -name "admin-polygons-all.parquet" -exec cp {} release-assets/ \;
+
+        # 2. Continental OSM Place-Nodes GeoParquet files
+        find downloads -name "osm-places-*.parquet" ! -name "osm-places-all.parquet" -exec cp {} release-assets/ \;
 
         # Reclaim runner disk space immediately by removing downloaded temp folders
         rm -rf downloads
@@ -105,11 +110,12 @@ jobs:
         cat <<EOF > release-notes.md
         ## OSM Administrative Polygons GeoParquet Release (${{ parameters.releaseTag }})
 
-        Continental OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons extracted directly from OpenStreetMap.
+        Continental OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons and companion place nodes extracted directly from OpenStreetMap.
 
         ### Key Highlights
         - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts or gaps between bordering municipalities.
         - **OGC GeoParquet 1.1 Specification:** Native WGS84 (\`OGC:CRS84\`) geometry with ZSTD compression and spatial bounding-box indexing.
+        - **OSM Place-Nodes Companion Dataset (\`osm-places-*.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
         - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
         ### Dataset Schema & Attributes
@@ -118,7 +124,8 @@ jobs:
         | **\`continent\`** | \`VARCHAR\` | No | Continental region (\`europe\`, \`asia\`, \`north-america\`, \`us\`, etc.) |
         | **\`country_code\`** | \`VARCHAR\` | No | ISO 3166-1 alpha-2 country code (\`DE\`, \`FR\`, \`US\`, etc.) |
         | **\`admin_level\`** | \`TINYINT\` | No | OSM administrative level (\`2\` to \`11\`) |
-        | **\`boundary\`** | \`VARCHAR\` | No | Boundary classification (\`administrative\`, \`local_authority\`) |
+        | **\`area_type\`** | \`VARCHAR\` | No | Semantic area type (\`municipality\`, \`suburb\`, \`quarter\`, \`hamlet\`, etc.) |
+        | **\`boundary\`** | \`VARCHAR\` | No | Boundary classification (\`administrative\`, \`traditional\`, \`statistical\`, \`cadastral\`, \`local_authority\`) |
         | **\`osm_id\`** | \`BIGINT\` | No | OSM relation/way numeric identifier |
         | **\`name\`** | \`VARCHAR\` | No | Primary localized name |
         | **\`name_en\`** | \`VARCHAR\` | Yes | English name (\`name:en\`) |

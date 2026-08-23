@@ -40,10 +40,6 @@ parameters:
   displayName: 'Specific Build ID to reuse export artifacts from (default "auto" uses latest export build)'
   type: string
   default: 'auto'
-- name: requireWikidata
-  displayName: 'Require wikidata tag on exported polygons (If false, only require admin_level and name)'
-  type: boolean
-  default: false
 
 
 stages:
@@ -794,6 +790,8 @@ stages:
           fi
           ADMIN_PBF=$(OSM_REGION).admins.pbf
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
+          PLACES_PBF=$(OSM_REGION).places.pbf
+          PLACES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl
 
           # Step 1: Filter administrative and place boundaries (broad osmium filter, expressions OR-combined;
           # precise sub-municipal refinement happens in filter_polygons.py per SPEC_OSM_POLYGONS_SUBDIVISIONS.md & feat/named-areas):
@@ -805,29 +803,22 @@ stages:
             r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality \
             w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
 
+          # Step 2: Filter OSM place nodes companion dataset (points) per PLACE_NODE_EXPORTER_SPEC.md:
+          osmium tags-filter --output ${PLACES_PBF} --overwrite ${INPUT_PBF} \
+            n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality
+
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
 
-          # Step 2: Stream export directly to stdout and filter/enhance with filter_polygons.py
-          # Purpose of filter_polygons.py:
-          # 1. Enforce admin_level=2 for key national mainland relations (FR 11980/2202162, NL 47796/2323309, GB 62149, NO 2978650, PT 295438).
-          # 2. Exclude non-administrative & political boundaries (boundary IN ('political', 'statistical', 'census', 'historic'), political=*, election=*).
-          # 3. Exclude non-relation border sliver ways (@type=way) tagged admin_level=2 lacking official ISO3166-1 tags.
-          # 4. Prevent tag loss: fallback missing/null 'name' tags to name:en, official_name, ISO3166-1, or ref.
-          # 5. Flag territorial sea boundaries (border_type=territorial, maritime=yes) to prioritize landmasses.
-          # 6. Map fallback admin_level_mapped="4" for countries lacking native admin_level=4 relations (EE, HR, ME, SI, XK, etc.).
-          # 8. Enrich administrative boundary relations with official admin_centre and label member coordinates
-          #    (center_lat, center_lon, admin_centre:lat, admin_centre:lon, label:lat, label:lon) per SPEC_ADMINISTRATIVE_CENTERS.md.
-          if [ "${{ parameters.requireWikidata }}" = "true" ]; then
-            osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-              | python3 scripts/filter_polygons.py --require-wikidata --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
-          else
-            osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-              | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
-          fi
-
-          # Reclaim disk space: Remove intermediate admin PBF immediately
+          # Step 3: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
+          osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
+            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
           rm -f ${ADMIN_PBF}
+
+          # Step 4: Stream export place nodes directly to stdout and structure with filter_places.py
+          osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite \
+            | python3 scripts/filter_places.py --continent $(CONTINENT) --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
+          rm -f ${PLACES_PBF}
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -835,6 +826,14 @@ stages:
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store place nodes artifacts'
+      inputs:
+        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl'
+        artifact: 'places-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
 
     - task: Bash@3
@@ -892,128 +891,128 @@ stages:
           CONTINENT: 'africa'
           REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon canary-islands cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-algeria/**
-            admin-polygons-*-angola/**
-            admin-polygons-*-benin/**
-            admin-polygons-*-botswana/**
-            admin-polygons-*-burkina-faso/**
-            admin-polygons-*-burundi/**
-            admin-polygons-*-cameroon/**
-            admin-polygons-*-canary-islands/**
-            admin-polygons-*-cape-verde/**
-            admin-polygons-*-central-african-republic/**
-            admin-polygons-*-chad/**
-            admin-polygons-*-comores/**
-            admin-polygons-*-congo-brazzaville/**
-            admin-polygons-*-congo-democratic-republic/**
-            admin-polygons-*-djibouti/**
-            admin-polygons-*-egypt/**
-            admin-polygons-*-equatorial-guinea/**
-            admin-polygons-*-eritrea/**
-            admin-polygons-*-ethiopia/**
-            admin-polygons-*-gabon/**
-            admin-polygons-*-ghana/**
-            admin-polygons-*-guinea/**
-            admin-polygons-*-guinea-bissau/**
-            admin-polygons-*-ivory-coast/**
-            admin-polygons-*-kenya/**
-            admin-polygons-*-lesotho/**
-            admin-polygons-*-liberia/**
-            admin-polygons-*-libya/**
-            admin-polygons-*-madagascar/**
-            admin-polygons-*-malawi/**
-            admin-polygons-*-mali/**
-            admin-polygons-*-mauritania/**
-            admin-polygons-*-mauritius/**
-            admin-polygons-*-morocco/**
-            admin-polygons-*-mozambique/**
-            admin-polygons-*-namibia/**
-            admin-polygons-*-niger/**
-            admin-polygons-*-nigeria/**
-            admin-polygons-*-rwanda/**
-            admin-polygons-*-saint-helena-ascension-and-tristan-da-cunha/**
-            admin-polygons-*-sao-tome-and-principe/**
-            admin-polygons-*-senegal-and-gambia/**
-            admin-polygons-*-seychelles/**
-            admin-polygons-*-sierra-leone/**
-            admin-polygons-*-somalia/**
-            admin-polygons-*-south-africa/**
-            admin-polygons-*-south-sudan/**
-            admin-polygons-*-sudan/**
-            admin-polygons-*-swaziland/**
-            admin-polygons-*-tanzania/**
-            admin-polygons-*-togo/**
-            admin-polygons-*-tunisia/**
-            admin-polygons-*-uganda/**
-            admin-polygons-*-zambia/**
-            admin-polygons-*-zimbabwe/**
+            *-algeria/**
+            *-angola/**
+            *-benin/**
+            *-botswana/**
+            *-burkina-faso/**
+            *-burundi/**
+            *-cameroon/**
+            *-canary-islands/**
+            *-cape-verde/**
+            *-central-african-republic/**
+            *-chad/**
+            *-comores/**
+            *-congo-brazzaville/**
+            *-congo-democratic-republic/**
+            *-djibouti/**
+            *-egypt/**
+            *-equatorial-guinea/**
+            *-eritrea/**
+            *-ethiopia/**
+            *-gabon/**
+            *-ghana/**
+            *-guinea/**
+            *-guinea-bissau/**
+            *-ivory-coast/**
+            *-kenya/**
+            *-lesotho/**
+            *-liberia/**
+            *-libya/**
+            *-madagascar/**
+            *-malawi/**
+            *-mali/**
+            *-mauritania/**
+            *-mauritius/**
+            *-morocco/**
+            *-mozambique/**
+            *-namibia/**
+            *-niger/**
+            *-nigeria/**
+            *-rwanda/**
+            *-saint-helena-ascension-and-tristan-da-cunha/**
+            *-sao-tome-and-principe/**
+            *-senegal-and-gambia/**
+            *-seychelles/**
+            *-sierra-leone/**
+            *-somalia/**
+            *-south-africa/**
+            *-south-sudan/**
+            *-sudan/**
+            *-swaziland/**
+            *-tanzania/**
+            *-togo/**
+            *-tunisia/**
+            *-uganda/**
+            *-zambia/**
+            *-zimbabwe/**
         asia:
           CONTINENT: 'asia'
           REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkmenistan uzbekistan vietnam yemen'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-afghanistan/**
-            admin-polygons-*-armenia/**
-            admin-polygons-*-azerbaijan/**
-            admin-polygons-*-bangladesh/**
-            admin-polygons-*-bhutan/**
-            admin-polygons-*-cambodia/**
-            admin-polygons-*-china/**
-            admin-polygons-*-gcc-states/**
-            admin-polygons-*-india/**
-            admin-polygons-*-indonesia/**
-            admin-polygons-*-iran/**
-            admin-polygons-*-iraq/**
-            admin-polygons-*-israel-and-palestine/**
-            admin-polygons-*-japan/**
-            admin-polygons-*-jordan/**
-            admin-polygons-*-kazakhstan/**
-            admin-polygons-*-kyrgyzstan/**
-            admin-polygons-*-laos/**
-            admin-polygons-*-lebanon/**
-            admin-polygons-*-malaysia-singapore-brunei/**
-            admin-polygons-*-maldives/**
-            admin-polygons-*-mongolia/**
-            admin-polygons-*-myanmar/**
-            admin-polygons-*-nepal/**
-            admin-polygons-*-north-korea/**
-            admin-polygons-*-pakistan/**
-            admin-polygons-*-philippines/**
-            admin-polygons-*-south-korea/**
-            admin-polygons-*-sri-lanka/**
-            admin-polygons-*-syria/**
-            admin-polygons-*-taiwan/**
-            admin-polygons-*-tajikistan/**
-            admin-polygons-*-thailand/**
-            admin-polygons-*-turkmenistan/**
-            admin-polygons-*-uzbekistan/**
-            admin-polygons-*-vietnam/**
-            admin-polygons-*-yemen/**
+            *-afghanistan/**
+            *-armenia/**
+            *-azerbaijan/**
+            *-bangladesh/**
+            *-bhutan/**
+            *-cambodia/**
+            *-china/**
+            *-gcc-states/**
+            *-india/**
+            *-indonesia/**
+            *-iran/**
+            *-iraq/**
+            *-israel-and-palestine/**
+            *-japan/**
+            *-jordan/**
+            *-kazakhstan/**
+            *-kyrgyzstan/**
+            *-laos/**
+            *-lebanon/**
+            *-malaysia-singapore-brunei/**
+            *-maldives/**
+            *-mongolia/**
+            *-myanmar/**
+            *-nepal/**
+            *-north-korea/**
+            *-pakistan/**
+            *-philippines/**
+            *-south-korea/**
+            *-sri-lanka/**
+            *-syria/**
+            *-taiwan/**
+            *-tajikistan/**
+            *-thailand/**
+            *-turkmenistan/**
+            *-uzbekistan/**
+            *-vietnam/**
+            *-yemen/**
         australia_oceania:
           CONTINENT: 'australia-oceania'
           REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-australia/**
-            admin-polygons-*-fiji/**
-            admin-polygons-*-new-caledonia/**
-            admin-polygons-*-new-zealand/**
-            admin-polygons-*-papua-new-guinea/**
+            *-australia/**
+            *-fiji/**
+            *-new-caledonia/**
+            *-new-zealand/**
+            *-papua-new-guinea/**
         central_america:
           CONTINENT: 'central-america'
           REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-bahamas/**
-            admin-polygons-*-belize/**
-            admin-polygons-*-cuba/**
-            admin-polygons-*-guatemala/**
-            admin-polygons-*-haiti-and-domrep/**
-            admin-polygons-*-jamaica/**
-            admin-polygons-*-nicaragua/**
+            *-bahamas/**
+            *-belize/**
+            *-cuba/**
+            *-guatemala/**
+            *-haiti-and-domrep/**
+            *-jamaica/**
+            *-nicaragua/**
         north_america:
           CONTINENT: 'north-america'
           REGIONS: 'greenland mexico'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-greenland/**
-            admin-polygons-*-mexico/**
+            *-greenland/**
+            *-mexico/**
         canada:
           CONTINENT: 'canada'
           REGIONS: 'canada'
@@ -1026,71 +1025,71 @@ stages:
           CONTINENT: 'south-america'
           REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-argentina/**
-            admin-polygons-*-bolivia/**
-            admin-polygons-*-brazil/**
-            admin-polygons-*-chile/**
-            admin-polygons-*-colombia/**
-            admin-polygons-*-ecuador/**
-            admin-polygons-*-guyana/**
-            admin-polygons-*-paraguay/**
-            admin-polygons-*-peru/**
-            admin-polygons-*-suriname/**
-            admin-polygons-*-uruguay/**
-            admin-polygons-*-venezuela/**
+            *-argentina/**
+            *-bolivia/**
+            *-brazil/**
+            *-chile/**
+            *-colombia/**
+            *-ecuador/**
+            *-guyana/**
+            *-paraguay/**
+            *-peru/**
+            *-suriname/**
+            *-uruguay/**
+            *-venezuela/**
         europe:
           CONTINENT: 'europe'
           REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania russia serbia slovakia slovenia spain sweden switzerland turkey ukraine'
           ARTIFACT_PATTERNS: |
-            admin-polygons-*-albania/**
-            admin-polygons-*-andorra/**
-            admin-polygons-*-austria/**
-            admin-polygons-*-azores/**
-            admin-polygons-*-belarus/**
-            admin-polygons-*-belgium/**
-            admin-polygons-*-bosnia-herzegovina/**
-            admin-polygons-*-bulgaria/**
-            admin-polygons-*-croatia/**
-            admin-polygons-*-cyprus/**
-            admin-polygons-*-czech-republic/**
-            admin-polygons-*-denmark/**
-            admin-polygons-*-estonia/**
-            admin-polygons-*-faroe-islands/**
-            admin-polygons-*-finland/**
-            admin-polygons-*-france/**
-            admin-polygons-*-georgia/**
-            admin-polygons-*-germany/**
-            admin-polygons-*-great-britain/**
-            admin-polygons-*-greece/**
-            admin-polygons-*-hungary/**
-            admin-polygons-*-iceland/**
-            admin-polygons-*-ireland-and-northern-ireland/**
-            admin-polygons-*-isle-of-man/**
-            admin-polygons-*-italy/**
-            admin-polygons-*-kosovo/**
-            admin-polygons-*-latvia/**
-            admin-polygons-*-liechtenstein/**
-            admin-polygons-*-lithuania/**
-            admin-polygons-*-luxembourg/**
-            admin-polygons-*-macedonia/**
-            admin-polygons-*-malta/**
-            admin-polygons-*-moldova/**
-            admin-polygons-*-monaco/**
-            admin-polygons-*-montenegro/**
-            admin-polygons-*-netherlands/**
-            admin-polygons-*-norway/**
-            admin-polygons-*-poland/**
-            admin-polygons-*-portugal/**
-            admin-polygons-*-romania/**
-            admin-polygons-*-russia/**
-            admin-polygons-*-serbia/**
-            admin-polygons-*-slovakia/**
-            admin-polygons-*-slovenia/**
-            admin-polygons-*-spain/**
-            admin-polygons-*-sweden/**
-            admin-polygons-*-switzerland/**
-            admin-polygons-*-turkey/**
-            admin-polygons-*-ukraine/**
+            *-albania/**
+            *-andorra/**
+            *-austria/**
+            *-azores/**
+            *-belarus/**
+            *-belgium/**
+            *-bosnia-herzegovina/**
+            *-bulgaria/**
+            *-croatia/**
+            *-cyprus/**
+            *-czech-republic/**
+            *-denmark/**
+            *-estonia/**
+            *-faroe-islands/**
+            *-finland/**
+            *-france/**
+            *-georgia/**
+            *-germany/**
+            *-great-britain/**
+            *-greece/**
+            *-hungary/**
+            *-iceland/**
+            *-ireland-and-northern-ireland/**
+            *-isle-of-man/**
+            *-italy/**
+            *-kosovo/**
+            *-latvia/**
+            *-liechtenstein/**
+            *-lithuania/**
+            *-luxembourg/**
+            *-macedonia/**
+            *-malta/**
+            *-moldova/**
+            *-monaco/**
+            *-montenegro/**
+            *-netherlands/**
+            *-norway/**
+            *-poland/**
+            *-portugal/**
+            *-romania/**
+            *-russia/**
+            *-serbia/**
+            *-slovakia/**
+            *-slovenia/**
+            *-spain/**
+            *-sweden/**
+            *-switzerland/**
+            *-turkey/**
+            *-ukraine/**
 
     steps:
     - checkout: self
@@ -1166,7 +1165,8 @@ stages:
           echo "=== Retained region directories for continent '$(CONTINENT)' ==="
           find . -maxdepth 2 -type d -name "admin-polygons-*" || true
 
-          chmod +x scripts/convert_to_parquet.sh
+          chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh
+          mkdir -p temp_parquet temp_places_parquet parquet
 
           for region in $(REGIONS); do
             while IFS= read -r file; do
@@ -1175,10 +1175,21 @@ stages:
               filename=$(basename "$file")
               country_code=$(echo "$filename" | cut -d'_' -f1)
               parquet_out="temp_parquet/${filename%.geojsonseq}.parquet"
-              echo "Processing $file -> $parquet_out ..."
+              echo "Processing polygons $file -> $parquet_out ..."
               ./scripts/convert_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$parquet_out"
               rm -rf "$(dirname "$file")"
             done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \))
+
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              [ -s "$file" ] || continue
+              filename=$(basename "$file")
+              country_code=$(echo "$filename" | cut -d'_' -f1)
+              places_out="temp_places_parquet/${filename%.jsonl}.parquet"
+              echo "Processing places $file -> $places_out ..."
+              ./scripts/convert_places_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$places_out"
+              rm -rf "$(dirname "$file")"
+            done < <(find . -type f \( -name "*_${region}.places.jsonl" -o -name "${region}.places.jsonl" \))
           done
 
           TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
@@ -1199,8 +1210,23 @@ stages:
             COMPRESSION ZSTD,
             ROW_GROUP_SIZE 5000
           );"
-
           rm -rf temp_parquet
+
+          PLACES_TEMP_COUNT=$(find temp_places_parquet -name "*.parquet" 2>/dev/null | wc -l)
+          if [ "$PLACES_TEMP_COUNT" -gt 0 ]; then
+            echo "Merging $PLACES_TEMP_COUNT country places Parquet files into single unified continent Parquet: parquet/osm-places-$(CONTINENT).parquet"
+            duckdb -c "LOAD spatial;
+            COPY (
+              SELECT * FROM read_parquet('temp_places_parquet/*.parquet')
+              ORDER BY continent, country_code, place_type, lat, lon
+            ) TO 'parquet/osm-places-$(CONTINENT).parquet' (
+              FORMAT PARQUET,
+              COMPRESSION ZSTD,
+              ROW_GROUP_SIZE 5000
+            );"
+            rm -rf temp_places_parquet
+          fi
+
           ls -lh parquet/
 
     - task: PublishPipelineArtifact@1
@@ -1208,6 +1234,13 @@ stages:
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/parquet/admin-polygons-$(CONTINENT).parquet'
         artifact: 'admin-polygons-parquet-$(CONTINENT)'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Store OSM places GeoParquet continent artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet/osm-places-$(CONTINENT).parquet'
+        artifact: 'osm-places-parquet-$(CONTINENT)'
         publishLocation: 'pipeline'
 
     - task: Bash@3
