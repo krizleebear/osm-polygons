@@ -33,6 +33,7 @@ COPY (
             'alt_names_json': 'VARCHAR',
             'tags': 'VARCHAR'
         },
+        maximum_object_size=134217728,
         ignore_errors=true
     )
     WHERE name IS NOT NULL AND name != ''

@@ -42,6 +42,7 @@ COPY (
         FROM read_json('__INPUT_GEOJSONSEQ__', 
             format='newline_delimited', 
             columns={'properties': 'JSON', 'geometry': 'JSON'}, 
+            maximum_object_size=268435456,
             ignore_errors=true)
         WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
           AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral', 'political')
