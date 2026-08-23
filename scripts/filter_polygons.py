@@ -376,6 +376,12 @@ class StreamProcessor:
         else:
             self.relation_centres = {}
 
+        self.count_total = 0
+        self.count_with_center = 0
+        self.count_with_admin_centre = 0
+        self.count_with_label = 0
+        self.count_synthesized = 0
+
     def process_line(self, line_str):
         if not line_str or not line_str.strip():
             return None
@@ -393,7 +399,15 @@ class StreamProcessor:
         if not processed:
             return None
 
+        self.count_total += 1
         props = processed.get("properties", {})
+        if "center_lat" in props:
+            self.count_with_center += 1
+        if "admin_centre:lat" in props:
+            self.count_with_admin_centre += 1
+        if "label:lat" in props:
+            self.count_with_label += 1
+
         osm_id = props.get("id") or props.get("@id") or props.get("osm_id")
         try:
             osm_id_num = int(osm_id) if osm_id else None
@@ -460,8 +474,24 @@ class StreamProcessor:
                 },
                 "properties": dict(pdef["properties"])
             }
+            self.count_total += 1
+            self.count_synthesized += 1
             synthesized.append(synth_feature)
         return synthesized
+
+    def print_summary(self, stream_name=None):
+        pct = (self.count_with_center / self.count_total * 100.0) if self.count_total > 0 else 0.0
+        label = f": {stream_name}" if stream_name else ""
+        sys.stderr.write("============================================================\n")
+        sys.stderr.write(f" filter_polygons Execution Summary{label}\n")
+        sys.stderr.write(f" Total Features Emitted:    {self.count_total:,}\n")
+        sys.stderr.write(f" With Center Coordinates:   {self.count_with_center:,} ({pct:.1f}%)\n")
+        sys.stderr.write(f"   - From admin_centre:     {self.count_with_admin_centre:,}\n")
+        sys.stderr.write(f"   - From label:            {self.count_with_label:,}\n")
+        if self.count_synthesized > 0:
+            sys.stderr.write(f" Synthesized Parents:       {self.count_synthesized:,}\n")
+        sys.stderr.write("============================================================\n")
+        sys.stderr.flush()
 
 def filter_features(feature_iterable, require_wikidata=False, country_code=None, relation_centres=None, admin_pbf=None):
     """
@@ -495,6 +525,8 @@ def main():
         admin_pbf=args.admin_pbf
     )
 
+    stream_name = os.path.basename(args.input_file) if args.input_file else (args.country_code or "stdin")
+
     if args.input_file:
         input_stream = open(args.input_file, "r", encoding="utf-8")
     else:
@@ -510,6 +542,8 @@ def main():
 
     if args.input_file:
         input_stream.close()
+
+    processor.print_summary(stream_name=stream_name)
 
 if __name__ == "__main__":
     main()

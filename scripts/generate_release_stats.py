@@ -45,6 +45,7 @@ def analyze_geojson_lines(line_iterable, filename):
         'filename': os.path.basename(filename),
         'total': 0,
         'wikidata': 0,
+        'centers': 0,
         'levels': defaultdict(int)
     }
 
@@ -58,6 +59,8 @@ def analyze_geojson_lines(line_iterable, filename):
         stats['total'] += 1
         if '"wikidata"' in line_str:
             stats['wikidata'] += 1
+        if '"center_lat"' in line_str or '"admin_centre:lat"' in line_str or '"label:lat"' in line_str:
+            stats['centers'] += 1
 
         try:
             data = json.loads(line_str)
@@ -82,6 +85,7 @@ def analyze_assets_directory(target_dir):
         'regions': 0,
         'total': 0,
         'wikidata': 0,
+        'centers': 0,
         'levels': defaultdict(int)
     })
 
@@ -122,6 +126,7 @@ def analyze_assets_directory(target_dir):
                             cont['regions'] += 1
                             cont['total'] += c_stat['total']
                             cont['wikidata'] += c_stat['wikidata']
+                            cont['centers'] += c_stat.get('centers', 0)
                             for lvl, cnt in c_stat['levels'].items():
                                 cont['levels'][lvl] += cnt
             except Exception as e:
@@ -139,6 +144,7 @@ def generate_markdown_report(country_stats, continental_stats):
 
     global_total = sum(c['total'] for c in sorted_countries)
     global_wikidata = sum(c['wikidata'] for c in sorted_countries)
+    global_centers = sum(c.get('centers', 0) for c in sorted_countries)
     global_regions = len(sorted_countries)
     global_levels = defaultdict(int)
     for c in sorted_countries:
@@ -146,12 +152,14 @@ def generate_markdown_report(country_stats, continental_stats):
             global_levels[lvl] += cnt
 
     global_wiki_pct = (global_wikidata / global_total * 100) if global_total > 0 else 0.0
+    global_center_pct = (global_centers / global_total * 100) if global_total > 0 else 0.0
 
     md = []
     md.append("\n## Dataset & Administrative Level Statistics\n")
     md.append(f"- **Total Administrative Polygons:** `{global_total:,}`")
     md.append(f"- **Countries & Regions Covered:** `{global_regions}`")
-    md.append(f"- **Wikidata Linking Rate:** `{global_wikidata:,} / {global_total:,} ({global_wiki_pct:.1f}%)`\n")
+    md.append(f"- **Wikidata Linking Rate:** `{global_wikidata:,} / {global_total:,} ({global_wiki_pct:.1f}%)`")
+    md.append(f"- **Centerpoint Resolution Rate:** `{global_centers:,} / {global_total:,} ({global_center_pct:.1f}%)`\n")
 
     # Global summary
     md.append("### Global Summary by Administrative Level\n")
@@ -171,11 +179,12 @@ def generate_markdown_report(country_stats, continental_stats):
 
     # Per-Country Matrix Table
     md.append("### Country Administrative Level Breakdown\n")
-    md.append("| ISO | Country / Region | Total | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | Wikidata % |")
-    md.append("| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    md.append("| ISO | Country / Region | Total | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | Wikidata % | Center % |")
+    md.append("| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
 
     for c in sorted_countries:
         w_pct = (c['wikidata'] / c['total'] * 100) if c['total'] > 0 else 0.0
+        c_pct = (c.get('centers', 0) / c['total'] * 100) if c['total'] > 0 else 0.0
         row = [
             f"`{c['iso']}`",
             f"**{c['region']}**",
@@ -185,6 +194,7 @@ def generate_markdown_report(country_stats, continental_stats):
             cnt = c['levels'].get(lvl, 0)
             row.append(f"`{cnt:,}`" if cnt > 0 else "-")
         row.append(f"`{w_pct:.1f}%`")
+        row.append(f"`{c_pct:.1f}%`")
         md.append("| " + " | ".join(row) + " |")
 
     # Total row
@@ -192,6 +202,7 @@ def generate_markdown_report(country_stats, continental_stats):
     for lvl in LEVEL_COLUMNS:
         total_row.append(f"**`{global_levels.get(lvl, 0):,}`**")
     total_row.append(f"**`{global_wiki_pct:.1f}%`**")
+    total_row.append(f"**`{global_center_pct:.1f}%`**")
     md.append("| " + " | ".join(total_row) + " |\n")
 
     return "\n".join(md), sorted_countries, global_levels, global_total
@@ -205,12 +216,13 @@ def export_csv_and_json(sorted_countries, global_levels, global_total, output_di
     try:
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            header = ['iso', 'region', 'total_polygons', 'wikidata_count', 'wikidata_pct'] + [f'level_{l}' for l in LEVEL_COLUMNS] + ['other']
+            header = ['iso', 'region', 'total_polygons', 'wikidata_count', 'wikidata_pct', 'centers_count', 'centers_pct'] + [f'level_{l}' for l in LEVEL_COLUMNS] + ['other']
             writer.writerow(header)
 
             for c in sorted_countries:
                 w_pct = round((c['wikidata'] / c['total'] * 100), 2) if c['total'] > 0 else 0.0
-                row = [c['iso'], c['region'], c['total'], c['wikidata'], f"{w_pct:.2f}"]
+                c_pct = round((c.get('centers', 0) / c['total'] * 100), 2) if c['total'] > 0 else 0.0
+                row = [c['iso'], c['region'], c['total'], c['wikidata'], f"{w_pct:.2f}", c.get('centers', 0), f"{c_pct:.2f}"]
                 for lvl in LEVEL_COLUMNS:
                     row.append(c['levels'].get(lvl, 0))
                 row.append(c['levels'].get('other', 0))
@@ -235,6 +247,8 @@ def export_csv_and_json(sorted_countries, global_levels, global_total, output_di
                 'total': c['total'],
                 'wikidata': c['wikidata'],
                 'wikidata_pct': round((c['wikidata'] / c['total'] * 100), 2) if c['total'] > 0 else 0.0,
+                'centers': c.get('centers', 0),
+                'centers_pct': round((c.get('centers', 0) / c['total'] * 100), 2) if c['total'] > 0 else 0.0,
                 'levels': dict(c['levels'])
             })
         with open(json_path, 'w', encoding='utf-8') as f:

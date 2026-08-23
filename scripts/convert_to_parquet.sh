@@ -56,4 +56,16 @@ if [ ! -s "$OUTPUT_PARQUET" ]; then
     exit 1
 fi
 
-echo "Successfully generated GeoParquet artifact: $OUTPUT_PARQUET ($(du -h "$OUTPUT_PARQUET" | cut -f1))"
+echo "============================================================"
+echo " GeoParquet Artifact Summary: $OUTPUT_PARQUET"
+duckdb -c "
+SELECT 
+    COUNT(*) AS total_rows,
+    COUNT(center_lat) AS with_center,
+    COUNT(admin_centre_lat) AS with_admin_centre,
+    COUNT(label_lat) AS with_label,
+    ROUND(COUNT(center_lat) * 100.0 / COUNT(*), 1) || '%' AS center_coverage
+FROM read_parquet('${OUTPUT_PARQUET}');
+"
+echo " Size: $(du -h "$OUTPUT_PARQUET" | cut -f1) (Compressed ZSTD)"
+echo "============================================================"
