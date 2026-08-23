@@ -37,7 +37,8 @@ The dataset adheres to the [OGC GeoParquet 1.1 Specification](https://geoparquet
 | `continent` | `VARCHAR` | No | Continental grouping (`europe`, `asia`, `north-america`, etc.). Low cardinality (dictionary encoded). |
 | `country_code` | `VARCHAR` | No | ISO 3166-1 alpha-2 code (`DE`, `FR`, `US`, etc.). Low cardinality (dictionary encoded). |
 | `admin_level` | `TINYINT` | No | OSM administrative level (`2` to `11`). Primary filtering column. |
-| `boundary` | `VARCHAR` | No | Primary boundary tag (`administrative`, `local_authority`, `borough`). |
+| `area_type` | `VARCHAR` | No | Semantic area classification (`country`, `state`, `county`, `municipality`, `suburb`, `quarter`, `neighbourhood`, `hamlet`, `cadastral`, `traditional`, `statistical`). |
+| `boundary` | `VARCHAR` | No | Primary boundary tag (`administrative`, `traditional`, `statistical`, `cadastral`, `local_authority`, `borough`). |
 | `osm_id` | `BIGINT` | No | OSM relation or way identifier (numeric component). |
 | `osm_type` | `VARCHAR` | No | OSM entity type (`relation` or `way`). |
 | `name` | `VARCHAR` | No | Primary localized name (`name` tag with fallback to `name:en` / `official_name`). |
@@ -177,6 +178,7 @@ COPY (
         '__CONTINENT__' AS continent,
         '__COUNTRY_CODE__' AS country_code,
         TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) AS admin_level,
+        COALESCE(json_extract_string(properties, '$.area_type'), 'administrative') AS area_type,
         COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') AS boundary,
         TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.@id'), json_extract_string(properties, '$.id'), '0'), '[^0-9]', '', 'g') AS BIGINT) AS osm_id,
         COALESCE(json_extract_string(properties, '$.@type'), 'relation') AS osm_type,
@@ -211,9 +213,9 @@ COPY (
             columns={'properties': 'JSON', 'geometry': 'JSON'}, 
             ignore_errors=true)
         WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
-          AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral')
+          AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral', 'political')
           AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
-          AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') = 'no')
+          AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
           AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')
     )
     WHERE geom IS NOT NULL 

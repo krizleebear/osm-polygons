@@ -9,6 +9,7 @@ COPY (
         '__CONTINENT__' AS continent,
         '__COUNTRY_CODE__' AS country_code,
         TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) AS admin_level,
+        COALESCE(json_extract_string(properties, '$.area_type'), 'administrative') AS area_type,
         COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') AS boundary,
         TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.@id'), json_extract_string(properties, '$.id'), '0'), '[^0-9]', '', 'g') AS BIGINT) AS osm_id,
         COALESCE(json_extract_string(properties, '$.@type'), 'relation') AS osm_type,
@@ -43,9 +44,9 @@ COPY (
             columns={'properties': 'JSON', 'geometry': 'JSON'}, 
             ignore_errors=true)
         WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
-          AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral')
+          AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral', 'political')
           AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
-          AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') = 'no')
+          AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
           AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')
     )
     WHERE geom IS NOT NULL 

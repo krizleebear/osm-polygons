@@ -795,15 +795,15 @@ stages:
           ADMIN_PBF=$(OSM_REGION).admins.pbf
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
 
-          # Step 1: Filter administrative boundaries (broad osmium filter, expressions OR-combined;
-          # precise sub-municipal refinement happens in filter_polygons.py per SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
+          # Step 1: Filter administrative and place boundaries (broad osmium filter, expressions OR-combined;
+          # precise sub-municipal refinement happens in filter_polygons.py per SPEC_OSM_POLYGONS_SUBDIVISIONS.md & feat/named-areas):
           # - Rule 1: boundary=administrative (admin_level 2..11)
-          # - Rule 2: boundary=local_authority/borough
-          # - Rule 3: relations with place=suburb/quarter/borough/neighbourhood (type=boundary/multipolygon checked in Python)
+          # - Rule 2: boundary=traditional,statistical,cadastral,local_authority,borough
+          # - Rule 3: relations & closed ways with place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
           osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} \
-            boundary=administrative \
-            boundary=local_authority,borough \
-            r/place=suburb,quarter,borough,neighbourhood
+            boundary=administrative,traditional,statistical,cadastral,local_authority,borough \
+            r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality \
+            w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
