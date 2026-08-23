@@ -59,20 +59,20 @@ jobs:
         set -e
         mkdir -p release-assets
 
-        # 1. Global combined GeoParquet
-        find downloads -name "admin-polygons-all.parquet" -exec cp {} release-assets/ \;
+        # 1. Continental GeoParquet files (< 2 GB per file)
+        find downloads -name "admin-polygons-*.parquet" ! -name "admin-polygons-all.parquet" -exec cp {} release-assets/ \;
 
-        # 2. Continental GeoParquet files
-        find downloads -name "admin-polygons-*.parquet" -exec cp {} release-assets/ \;
+        # Reclaim runner disk space immediately by removing downloaded temp folders
+        rm -rf downloads
 
-        # Check if artifacts were found
-        if [ ! -f "release-assets/admin-polygons-all.parquet" ]; then
+        PARQUET_COUNT=$(find release-assets -name "*.parquet" | wc -l)
+        if [ "$PARQUET_COUNT" -eq 0 ]; then
           echo "****************************************************************"
-          echo " ERROR: No admin-polygons-all.parquet artifact found in downloads!"
+          echo " ERROR: No continental GeoParquet (.parquet) files found in downloads!"
           echo ""
           echo " Cause:"
           echo " The latest build run of the export pipeline (definition 4) failed"
-          echo " or did not publish its final 'package' stage GeoParquet artifacts."
+          echo " or did not publish its continental GeoParquet artifacts."
           echo ""
           echo " Solution:"
           echo " Please run and verify that 'polygon-export-pipeline.yml' completes"
@@ -81,18 +81,7 @@ jobs:
           exit 1
         fi
 
-        # Reclaim runner disk space immediately by removing downloaded temp folders
-        rm -rf downloads
-
-        PARQUET_COUNT=$(find release-assets -name "*.parquet" | wc -l)
-        if [ "$PARQUET_COUNT" -eq 0 ]; then
-          echo "****************************************************************"
-          echo " ERROR: No GeoParquet (.parquet) files were found in release assets!"
-          echo "****************************************************************"
-          exit 1
-        fi
-
-        echo "[INFO] Found $PARQUET_COUNT GeoParquet file(s) for release."
+        echo "[INFO] Found $PARQUET_COUNT continental GeoParquet file(s) for release."
         ls -lh release-assets/
 
         # Extract summary statistics and feature breakdown with DuckDB
@@ -105,7 +94,7 @@ jobs:
             count(CASE WHEN name IS NOT NULL AND name != '' THEN 1 END) AS with_name,
             count(CASE WHEN wikidata IS NOT NULL THEN 1 END) AS with_wikidata,
             count(CASE WHEN iso3166_2 IS NOT NULL THEN 1 END) AS with_iso3166_2
-        FROM read_parquet('release-assets/admin-polygons-all.parquet')
+        FROM read_parquet('release-assets/admin-polygons-*.parquet')
         GROUP BY 1
         ORDER BY 1;
 
@@ -116,7 +105,7 @@ jobs:
         cat <<EOF > release-notes.md
         ## OSM Administrative Polygons GeoParquet Release (${{ parameters.releaseTag }})
 
-        Global OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons extracted directly from OpenStreetMap.
+        Continental OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons extracted directly from OpenStreetMap.
 
         ### Key Highlights
         - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts or gaps between bordering municipalities.
@@ -149,9 +138,9 @@ jobs:
         \`\`\`sql
         INSTALL spatial; LOAD spatial;
 
-        -- Point-in-Polygon hierarchy query over HTTP
+        -- Point-in-Polygon query on Europe over HTTP
         SELECT admin_level, name, wikidata, iso3166_2
-        FROM read_parquet('https://github.com/krizleebear/osm-polygons/releases/download/${{ parameters.releaseTag }}/admin-polygons-all.parquet')
+        FROM read_parquet('https://github.com/krizleebear/osm-polygons/releases/download/${{ parameters.releaseTag }}/admin-polygons-europe.parquet')
         WHERE bbox_minx <= 11.5761 AND bbox_maxx >= 11.5761
           AND bbox_miny <= 48.1371 AND bbox_maxy >= 48.1371
           AND ST_Contains(geom, ST_Point(11.5761, 48.1371))
@@ -159,7 +148,6 @@ jobs:
         \`\`\`
 
         ### Download Assets
-        - **\`admin-polygons-all.parquet\`**: Global combined dataset containing all administrative boundaries worldwide (~4.0 GB).
         - **\`admin-polygons-europe.parquet\`**: All European administrative boundaries (~1.99 GB).
         - **\`admin-polygons-asia.parquet\`**: Asia dataset (~765 MB).
         - **\`admin-polygons-south-america.parquet\`**: South America dataset (~612 MB).
