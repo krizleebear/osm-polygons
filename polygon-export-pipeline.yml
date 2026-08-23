@@ -1230,6 +1230,12 @@ stages:
             rm -rf temp_places_parquet
           fi
 
+          if [ -f "parquet/osm-places-$(CONTINENT).parquet" ]; then
+            echo "##vso[task.setvariable variable=HAS_PLACES_PARQUET]true"
+          else
+            echo "##vso[task.setvariable variable=HAS_PLACES_PARQUET]false"
+          fi
+
           ls -lh parquet/
 
     - task: PublishPipelineArtifact@1
@@ -1241,6 +1247,8 @@ stages:
 
     - task: PublishPipelineArtifact@1
       displayName: 'Store OSM places GeoParquet continent artifact'
+      condition: and(succeeded(), eq(variables['HAS_PLACES_PARQUET'], 'true'))
+      continueOnError: true
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/parquet/osm-places-$(CONTINENT).parquet'
         artifact: 'osm-places-parquet-$(CONTINENT)'
