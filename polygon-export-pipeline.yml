@@ -816,14 +816,14 @@ stages:
           # 4. Prevent tag loss: fallback missing/null 'name' tags to name:en, official_name, ISO3166-1, or ref.
           # 5. Flag territorial sea boundaries (border_type=territorial, maritime=yes) to prioritize landmasses.
           # 6. Map fallback admin_level_mapped="4" for countries lacking native admin_level=4 relations (EE, HR, ME, SI, XK, etc.).
-          # 7. Synthesize admin_level for sub-municipal boundaries: boundary=local_authority/borough
-          #    -> "10", place=suburb/quarter/neighbourhood/borough on type=boundary/multipolygon relations -> 9/10/11/9.
+          # 8. Enrich administrative boundary relations with official admin_centre and label member coordinates
+          #    (center_lat, center_lon, admin_centre:lat, admin_centre:lon, label:lat, label:lon) per SPEC_ADMINISTRATIVE_CENTERS.md.
           if [ "${{ parameters.requireWikidata }}" = "true" ]; then
             osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-              | python3 scripts/filter_polygons.py --require-wikidata --country-code $(COUNTRY_CODE) > ${POLYGON_JSON}
+              | python3 scripts/filter_polygons.py --require-wikidata --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
           else
             osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-              | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) > ${POLYGON_JSON}
+              | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
           fi
 
           # Reclaim disk space: Remove intermediate admin PBF immediately

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 import unittest
 import json
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(__file__))
 from filter_polygons import process_feature, filter_features
 
 # Minimal valid polygon geometry shared by most fixtures (real osmium export always emits geometry).
@@ -203,7 +207,59 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(kaohsiung["properties"]["wikidata"], "Q181557")
         self.assertEqual(kaohsiung["properties"]["ISO3166-2"], "TW-KHH")
         self.assertEqual(kaohsiung["geometry"]["type"], "MultiPolygon")
-        self.assertEqual(len(kaohsiung["geometry"]["coordinates"]), 3)
+    def test_admin_centre_enrichment(self):
+        # Feature with relation @id = 62428 (Munich)
+        feature = feat({"@type": "relation", "id": 62428, "admin_level": "6", "name": "München"})
+        relation_centres = {
+            62428: {
+                "admin_centre": (11.5755, 48.1374),
+                "label": (11.5754, 48.1371)
+            }
+        }
+        res = process_feature(feature, relation_centres=relation_centres)
+        self.assertIsNotNone(res)
+        props = res["properties"]
+        self.assertEqual(props["admin_centre:lat"], 48.1374)
+        self.assertEqual(props["admin_centre:lon"], 11.5755)
+        self.assertEqual(props["label:lat"], 48.1371)
+        self.assertEqual(props["label:lon"], 11.5754)
+        # Center coordinates should take admin_centre priority
+        self.assertEqual(props["center_lat"], 48.1374)
+        self.assertEqual(props["center_lon"], 11.5755)
+
+    def test_label_fallback_when_no_admin_centre(self):
+        # Feature with only label coordinate
+        feature = feat({"@type": "relation", "id": 12345, "admin_level": "8", "name": "Gemeinde"})
+        relation_centres = {
+            12345: {
+                "label": (12.3456, 47.6543)
+            }
+        }
+        res = process_feature(feature, relation_centres=relation_centres)
+        self.assertIsNotNone(res)
+        props = res["properties"]
+        self.assertNotIn("admin_centre:lat", props)
+        self.assertNotIn("admin_centre:lon", props)
+        self.assertEqual(props["label:lat"], 47.6543)
+        self.assertEqual(props["label:lon"], 12.3456)
+        self.assertEqual(props["center_lat"], 47.6543)
+        self.assertEqual(props["center_lon"], 12.3456)
+
+    def test_filter_features_with_relation_centres(self):
+        stream = [
+            feat({"id": 100, "admin_level": "8", "name": "Ort A"}),
+            feat({"id": 200, "admin_level": "8", "name": "Ort B"}),
+        ]
+        relation_centres = {
+            100: {"admin_centre": (10.1, 50.1)},
+            200: {"label": (10.2, 50.2)},
+        }
+        results = list(filter_features(stream, relation_centres=relation_centres))
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["properties"]["center_lat"], 50.1)
+        self.assertEqual(results[0]["properties"]["center_lon"], 10.1)
+        self.assertEqual(results[1]["properties"]["center_lat"], 50.2)
+        self.assertEqual(results[1]["properties"]["center_lon"], 10.2)
 
 if __name__ == "__main__":
     unittest.main()

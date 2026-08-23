@@ -50,6 +50,12 @@ The dataset adheres to the [OGC GeoParquet 1.1 Specification](https://geoparquet
 | `parent_name` | `VARCHAR` | Yes | Primary name of direct parent entity (e.g. `"Bayern"` for Munich). |
 | `postal_code` | `VARCHAR` | Yes | Postal code or semicolon-separated list of postal codes (e.g. `"93051"` or `"80331;80333"`). |
 | `ref` | `VARCHAR` | Yes | Official statistical/administrative identifier (e.g. German AGS `"09162000"`, French INSEE `"75056"`, NUTS code). |
+| `center_lat` | `DOUBLE` | Yes | Resolved representative center latitude (priority: `admin_centre` > `label`). |
+| `center_lon` | `DOUBLE` | Yes | Resolved representative center longitude (priority: `admin_centre` > `label`). |
+| `admin_centre_lat` | `DOUBLE` | Yes | Administrative center / city hall node latitude (`role=admin_centre`). |
+| `admin_centre_lon` | `DOUBLE` | Yes | Administrative center / city hall node longitude (`role=admin_centre`). |
+| `label_lat` | `DOUBLE` | Yes | Cartographic label node latitude (`role=label`). |
+| `label_lon` | `DOUBLE` | Yes | Cartographic label node longitude (`role=label`). |
 | `tags` | `MAP(VARCHAR, VARCHAR)` | No | Complete key-value dictionary of all raw OSM tags for the entity (including all `name:*` multilingual translations, `alt_name`, `official_name`, `population`, etc.). |
 | `bbox_minx` | `DOUBLE` | No | Minimum longitude bounding box envelope. |
 | `bbox_miny` | `DOUBLE` | No | Minimum latitude bounding box envelope. |
@@ -183,6 +189,12 @@ COPY (
         json_extract_string(properties, '$.parent_name') AS parent_name,
         COALESCE(json_extract_string(properties, '$.postal_code'), json_extract_string(properties, '$.postcode'), json_extract_string(properties, '$.addr:postcode')) AS postal_code,
         COALESCE(json_extract_string(properties, '$.de:amtlicher_gemeindeschluessel'), json_extract_string(properties, '$.ref:INSEE'), json_extract_string(properties, '$.ref'), json_extract_string(properties, '$.de:regionalschluessel')) AS ref,
+        TRY_CAST(json_extract_string(properties, '$.center_lat') AS DOUBLE) AS center_lat,
+        TRY_CAST(json_extract_string(properties, '$.center_lon') AS DOUBLE) AS center_lon,
+        TRY_CAST(json_extract_string(properties, '$.admin_centre:lat') AS DOUBLE) AS admin_centre_lat,
+        TRY_CAST(json_extract_string(properties, '$.admin_centre:lon') AS DOUBLE) AS admin_centre_lon,
+        TRY_CAST(json_extract_string(properties, '$.label:lat') AS DOUBLE) AS label_lat,
+        TRY_CAST(json_extract_string(properties, '$.label:lon') AS DOUBLE) AS label_lon,
         ST_XMin(geom) AS bbox_minx,
         ST_YMin(geom) AS bbox_miny,
         ST_XMax(geom) AS bbox_maxx,
