@@ -315,6 +315,12 @@ class TestFilterPolygons(unittest.TestCase):
         f3 = feat({"admin_level": "10", "place": "hamlet", "name": "Weiler A"})
         self.assertEqual(process_feature(f3)["properties"]["area_type"], "hamlet")
 
+        f3b = feat({"admin_level": "10", "place": "island", "name": "Holm Island"})
+        self.assertEqual(process_feature(f3b)["properties"]["area_type"], "island")
+
+        f3c = feat({"admin_level": "10", "place": "islet", "name": "Wart Holm"})
+        self.assertEqual(process_feature(f3c)["properties"]["area_type"], "islet")
+
         # 2. Sub-district tag
         f4 = feat({"admin_level": "10", "subdistrict": "statistischer_bezirk", "name": "Bezirk 02"})
         self.assertEqual(process_feature(f4)["properties"]["area_type"], "statistischer_bezirk")

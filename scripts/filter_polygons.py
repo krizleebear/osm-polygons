@@ -266,7 +266,8 @@ def derive_area_type(props, admin_level_str):
     # 1. Check explicit place tag
     place = str(props.get("place", "")).strip().lower()
     if place in ("quarter", "suburb", "neighbourhood", "neighborhood", "hamlet", "village",
-                 "isolated_dwelling", "locality", "city_block", "borough", "townlet", "city", "town"):
+                 "isolated_dwelling", "locality", "city_block", "borough", "townlet", "city", "town",
+                 "island", "islet", "archipelago"):
         if place == "neighborhood":
             return "neighbourhood"
         return place

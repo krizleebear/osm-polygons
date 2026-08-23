@@ -37,7 +37,7 @@ The dataset adheres to the [OGC GeoParquet 1.1 Specification](https://geoparquet
 | `continent` | `VARCHAR` | No | Continental grouping (`europe`, `asia`, `north-america`, etc.). Low cardinality (dictionary encoded). |
 | `country_code` | `VARCHAR` | No | ISO 3166-1 alpha-2 code (`DE`, `FR`, `US`, etc.). Low cardinality (dictionary encoded). |
 | `admin_level` | `TINYINT` | No | OSM administrative level (`2` to `11`). Primary filtering column. |
-| `area_type` | `VARCHAR` | No | Semantic area classification (`country`, `state`, `county`, `municipality`, `suburb`, `quarter`, `neighbourhood`, `hamlet`, `cadastral`, `traditional`, `statistical`). |
+| `area_type` | `VARCHAR` | No | Semantic area classification (`country`, `state`, `county`, `municipality`, `suburb`, `quarter`, `neighbourhood`, `hamlet`, `island`, `islet`, `cadastral`, `traditional`, `statistical`). |
 | `boundary` | `VARCHAR` | No | Primary boundary tag (`administrative`, `traditional`, `statistical`, `cadastral`, `local_authority`, `borough`). |
 | `osm_id` | `BIGINT` | No | OSM relation or way identifier (numeric component). |
 | `osm_type` | `VARCHAR` | No | OSM entity type (`relation` or `way`). |
