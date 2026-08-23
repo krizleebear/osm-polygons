@@ -105,6 +105,35 @@ SYNTHETIC_PARENT_DEFINITIONS = {
             "甲仙區", "杉林區", "內門區", "茂林區", "桃源區", "那瑪夏區"
         },
         "child_admin_level": "7",
+    },
+    # United States: Alaska (relation 1116270, admin_level 4)
+    1116270: {
+        "properties": {
+            "@id": 1116270,
+            "@type": "relation",
+            "id": 1116270,
+            "admin_level": "4",
+            "boundary": "administrative",
+            "name": "Alaska",
+            "name:en": "Alaska",
+            "wikidata": "Q797",
+            "ISO3166-2": "US-AK",
+            "ISO3166-1": "US",
+        },
+        "child_relation_ids": {
+            2605253, 2605259, 2605265, 2605269, 2605273, 2605277, 2605281, 2605325,
+            2605248, 2605284, 2605288, 2605292, 2605296, 2605297, 2605308, 2605249,
+            2605309, 2605310, 7939736, 2605235, 2605317
+        },
+        "child_names": {
+            "Aleutians East Borough", "Anchorage", "Bristol Bay Borough", "Denali Borough",
+            "Fairbanks North Star Borough", "Haines Borough", "Juneau", "Kenai Peninsula Borough",
+            "Ketchikan Gateway Borough", "Kodiak Island Borough", "Lake and Peninsula Borough",
+            "Matanuska-Susitna Borough", "North Slope Borough", "Northwest Arctic Borough",
+            "Petersburg Borough", "Prince of Wales-Hyder", "Sitka", "Skagway",
+            "Unorganized Borough", "Wrangell", "Yakutat"
+        },
+        "child_admin_level": "6",
     }
 }
 

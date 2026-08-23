@@ -207,6 +207,22 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(kaohsiung["properties"]["wikidata"], "Q181557")
         self.assertEqual(kaohsiung["properties"]["ISO3166-2"], "TW-KHH")
         self.assertEqual(kaohsiung["geometry"]["type"], "MultiPolygon")
+
+    def test_synthetic_parent_alaska(self):
+        stream = [
+            feat({"@type": "relation", "id": 2605259, "admin_level": "6", "name": "Anchorage"}),
+            feat({"@type": "relation", "id": 2605273, "admin_level": "6", "name": "Fairbanks North Star Borough"}),
+            feat({"@type": "relation", "id": 2605281, "admin_level": "6", "name": "Juneau"}),
+        ]
+        results = list(filter_features(stream))
+        self.assertEqual(len(results), 4)
+
+        alaska = [f for f in results if f["properties"].get("id") == 1116270][0]
+        self.assertEqual(alaska["properties"]["name"], "Alaska")
+        self.assertEqual(alaska["properties"]["admin_level"], "4")
+        self.assertEqual(alaska["properties"]["wikidata"], "Q797")
+        self.assertEqual(alaska["properties"]["ISO3166-2"], "US-AK")
+        self.assertEqual(alaska["geometry"]["type"], "MultiPolygon")
     def test_admin_centre_enrichment(self):
         # Feature with relation @id = 62428 (Munich)
         feature = feat({"@type": "relation", "id": 62428, "admin_level": "6", "name": "München"})

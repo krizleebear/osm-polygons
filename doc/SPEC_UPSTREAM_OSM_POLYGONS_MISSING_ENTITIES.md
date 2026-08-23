@@ -65,6 +65,30 @@ During systematic coverage validation with `XmlContentValidator`, we identified 
 
 ---
 
+### Case 3: United States — Missing State Alaska (`admin_level=4`)
+
+- **Entity:** State of Alaska (50th US State)
+- **OSM Relation ID:** [`relation/1116270`](https://www.openstreetmap.org/relation/1116270)
+- **Tags:**
+  ```text
+  boundary = administrative
+  admin_level = 4
+  type = boundary
+  name = Alaska
+  name:en = Alaska
+  ISO3166-2 = US-AK
+  ISO3166-1 = US
+  wikidata = Q797
+  ```
+- **Observed Defect in `US_us.admin-polygons.parquet` / `US_us.admin-polygons.geojsonseq`:**
+  - 49 other US States + District of Columbia are present at `admin_level=4`.
+  - Relation `1116270` (*Alaska*) is **completely missing** because outer ways in the Aleutian Islands cross the 180° antimeridian, causing `osmium export` unclosed ring errors.
+  - All 21 constituent boroughs and census areas (*Anchorage, Fairbanks, Juneau, Sitka, North Slope, etc.*) are present at `admin_level=6`.
+- **Impact on Downstream Geocoder:**
+  - Alaska is not partitioned as a native US state entity (`US_Alaska_geocoder.xml`).
+
+---
+
 ## 3. Architecture & Root Cause Analysis
 
 ### Pipeline Responsibilities
