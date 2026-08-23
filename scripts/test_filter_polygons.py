@@ -46,7 +46,7 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(res_nl["properties"]["admin_level"], "2")
         self.assertEqual(res_nl["properties"]["ISO3166-1"], "NL")
 
-    def test_exclude_political_and_electoral_boundaries(self):
+    def test_exclude_political_census_and_historic_boundaries(self):
         # German Bundestagswahlkreis / electoral constituency with boundary=political
         bundestag = feat({"@type": "relation", "id": 3146607, "boundary": "political", "admin_level": "9", "name": "Deggendorf"})
         self.assertIsNone(process_feature(bundestag))
@@ -59,11 +59,6 @@ class TestFilterPolygons(unittest.TestCase):
         parliament_feat = feat({"@type": "relation", "boundary": "administrative", "election:parliament": "yes", "admin_level": "9", "name": "Constituency"})
         self.assertIsNone(process_feature(parliament_feat))
 
-    def test_exclude_statistical_census_historic_boundaries(self):
-        # Statistical boundary
-        stat_feat = feat({"@type": "relation", "boundary": "statistical", "admin_level": "10", "name": "Statistischer Bezirk"})
-        self.assertIsNone(process_feature(stat_feat))
-
         # Census boundary
         census_feat = feat({"@type": "relation", "boundary": "census", "admin_level": "10", "name": "Census Block"})
         self.assertIsNone(process_feature(census_feat))
@@ -71,6 +66,38 @@ class TestFilterPolygons(unittest.TestCase):
         # Historic boundary
         historic_feat = feat({"@type": "relation", "boundary": "historic", "admin_level": "4", "name": "Historical Duchy"})
         self.assertIsNone(process_feature(historic_feat))
+
+        # Feature with end_date
+        obsolete_feat = feat({"@type": "relation", "boundary": "administrative", "admin_level": "8", "name": "Alte Gemeinde", "end_date": "1972-01-01"})
+        self.assertIsNone(process_feature(obsolete_feat))
+
+    def test_include_traditional_statistical_and_cadastral_boundaries(self):
+        # Traditional boundary (e.g. Le Marais, Belgisches Viertel)
+        traditional_feat = feat({"@type": "relation", "boundary": "traditional", "name": "Glockenbachviertel"})
+        res_trad = process_feature(traditional_feat)
+        self.assertIsNotNone(res_trad)
+        self.assertEqual(res_trad["properties"]["admin_level"], "10")
+        self.assertEqual(res_trad["properties"]["area_type"], "traditional")
+
+        # Statistical boundary (e.g. Statistischer Bezirk in German kreisfreie Städte)
+        stat_feat = feat({"@type": "relation", "boundary": "statistical", "name": "Statistischer Bezirk 01"})
+        res_stat = process_feature(stat_feat)
+        self.assertIsNotNone(res_stat)
+        self.assertEqual(res_stat["properties"]["admin_level"], "10")
+        self.assertEqual(res_stat["properties"]["area_type"], "statistical")
+
+        # Cadastral boundary (e.g. Katastralgemeinde in Austria)
+        cad_feat = feat({"@type": "relation", "boundary": "cadastral", "name": "Katastralgemeinde Graz Stadt"})
+        res_cad = process_feature(cad_feat)
+        self.assertIsNotNone(res_cad)
+        self.assertEqual(res_cad["properties"]["admin_level"], "10")
+        self.assertEqual(res_cad["properties"]["area_type"], "cadastral")
+
+        # NUTS statistical macro-regions (e.g. Highlands and Islands, NUTS-2/3) should be excluded
+        nuts_feat = feat({"@type": "relation", "boundary": "statistical", "ref:nuts:2": "UKM6", "name": "Highlands and Islands"})
+        self.assertIsNone(process_feature(nuts_feat))
+        itl_feat = feat({"@type": "relation", "boundary": "statistical", "ref:itl:2": "TLM6", "name": "Highlands and Islands"})
+        self.assertIsNone(process_feature(itl_feat))
 
     def test_filter_l2_border_ways(self):
         # Baarle / Vennbahn joint border way tagged admin_level=2 without ISO3166-1
@@ -277,5 +304,62 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(results[1]["properties"]["center_lat"], 50.2)
         self.assertEqual(results[1]["properties"]["center_lon"], 10.2)
 
+    def test_area_type_derivation_precedence(self):
+        # 1. Explicit place tag overrides admin_level
+        f1 = feat({"admin_level": "10", "place": "quarter", "name": "Glockenbachviertel"})
+        self.assertEqual(process_feature(f1)["properties"]["area_type"], "quarter")
+
+        f2 = feat({"admin_level": "9", "place": "suburb", "name": "Schwabing"})
+        self.assertEqual(process_feature(f2)["properties"]["area_type"], "suburb")
+
+        f3 = feat({"admin_level": "10", "place": "hamlet", "name": "Weiler A"})
+        self.assertEqual(process_feature(f3)["properties"]["area_type"], "hamlet")
+
+        f3b = feat({"admin_level": "10", "place": "island", "name": "Holm Island"})
+        self.assertEqual(process_feature(f3b)["properties"]["area_type"], "island")
+
+        f3c = feat({"admin_level": "10", "place": "islet", "name": "Wart Holm"})
+        self.assertEqual(process_feature(f3c)["properties"]["area_type"], "islet")
+
+        # 2. Sub-district tag
+        f4 = feat({"admin_level": "10", "subdistrict": "statistischer_bezirk", "name": "Bezirk 02"})
+        self.assertEqual(process_feature(f4)["properties"]["area_type"], "statistischer_bezirk")
+
+        # 3. Boundary tag
+        f5 = feat({"boundary": "traditional", "name": "Belgisches Viertel"})
+        self.assertEqual(process_feature(f5)["properties"]["area_type"], "traditional")
+
+        f6 = feat({"boundary": "cadastral", "name": "Katastralgemeinde X"})
+        self.assertEqual(process_feature(f6)["properties"]["area_type"], "cadastral")
+
+        # 4. admin_type:FR
+        f7 = feat({"admin_level": "10", "admin_type:FR": "quartier", "name": "Le Marais"})
+        self.assertEqual(process_feature(f7)["properties"]["area_type"], "quartier")
+
+        # 5. Level fallbacks
+        self.assertEqual(process_feature(feat({"@type": "relation", "admin_level": "2", "name": "Country"}))["properties"]["area_type"], "country")
+        self.assertEqual(process_feature(feat({"admin_level": "4", "name": "State"}))["properties"]["area_type"], "state")
+        self.assertEqual(process_feature(feat({"admin_level": "6", "name": "County"}))["properties"]["area_type"], "county")
+        self.assertEqual(process_feature(feat({"admin_level": "8", "name": "City"}))["properties"]["area_type"], "municipality")
+        self.assertEqual(process_feature(feat({"admin_level": "9", "name": "District"}))["properties"]["area_type"], "suburb")
+        self.assertEqual(process_feature(feat({"admin_level": "10", "name": "Quarter"}))["properties"]["area_type"], "quarter")
+        self.assertEqual(process_feature(feat({"admin_level": "11", "name": "Block"}))["properties"]["area_type"], "neighbourhood")
+
+    def test_place_area_polygons_synthesis(self):
+        # Closed way polygon with place=hamlet
+        hamlet_way = feat({"@type": "way", "place": "hamlet", "name": "Weiler Kirchberg"})
+        res = process_feature(hamlet_way)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["properties"]["admin_level"], "10")
+        self.assertEqual(res["properties"]["area_type"], "hamlet")
+
+        # Multipolygon relation with place=quarter
+        quarter_rel = feat({"@type": "relation", "type": "multipolygon", "place": "quarter", "name": "Kreativviertel"})
+        res_q = process_feature(quarter_rel)
+        self.assertIsNotNone(res_q)
+        self.assertEqual(res_q["properties"]["admin_level"], "10")
+        self.assertEqual(res_q["properties"]["area_type"], "quarter")
+
 if __name__ == "__main__":
     unittest.main()
+

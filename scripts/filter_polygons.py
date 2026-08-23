@@ -37,25 +37,34 @@ MAINLAND_RELATION_IDS = {
 }
 
 # Non-administrative boundary tag values that must be excluded:
-EXCLUDED_BOUNDARY_VALUES = {"political", "statistical", "census", "historic"}
+EXCLUDED_BOUNDARY_VALUES = {"political", "census", "historic"}
 
 # Countries known to lack native admin_level=4 relations, mapping fallback levels (e.g., level 6 -> 4)
 LEVEL_4_FALLBACK_COUNTRIES = {
     "EE", "HR", "ME", "SI", "XK", "CY", "IS", "LV", "MK"
 }
 
-# Sub-municipal boundary tag values (Rule 2 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
-# boundary IN (local_authority, borough) without admin_level -> default admin_level.
-SUBMUNICIPAL_BOUNDARY_VALUES = ("local_authority", "borough")
+# Sub-municipal boundary tag values (Rule 2 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md & feat/named-areas):
+# boundary IN (local_authority, borough, traditional, statistical, cadastral) without admin_level -> default admin_level.
+SUBMUNICIPAL_BOUNDARY_VALUES = ("local_authority", "borough", "traditional", "statistical", "cadastral")
 DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL = "10"
 
-# Place-based boundary relations (Rule 3 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md):
-# type=boundary OR type=multipolygon combined with place -> default admin_level.
+# Place-based boundary relations & areas (Rule 3 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md & feat/named-areas):
+# place tag combined with boundary/multipolygon or polygon ways -> default admin_level.
 PLACE_TO_ADMIN_LEVEL = {
     "suburb": "9",
     "quarter": "10",
     "neighbourhood": "11",
+    "neighborhood": "11",
     "borough": "9",
+    "city_block": "11",
+    "hamlet": "10",
+    "isolated_dwelling": "11",
+    "village": "8",
+    "town": "8",
+    "city": "8",
+    "locality": "10",
+    "townlet": "9",
 }
 PLACE_RELATION_TYPES = ("boundary", "multipolygon")
 
@@ -249,6 +258,61 @@ def extract_relation_centres(admin_pbf_path):
 
     return resolved
 
+def derive_area_type(props, admin_level_str):
+    """
+    Derives a semantic area_type (e.g. 'quarter', 'suburb', 'hamlet', 'cadastral', 'traditional')
+    from OSM tags or admin_level fallback per feat/named-areas specification.
+    """
+    # 1. Check explicit place tag
+    place = str(props.get("place", "")).strip().lower()
+    if place in ("quarter", "suburb", "neighbourhood", "neighborhood", "hamlet", "village",
+                 "isolated_dwelling", "locality", "city_block", "borough", "townlet", "city", "town",
+                 "island", "islet", "archipelago"):
+        if place == "neighborhood":
+            return "neighbourhood"
+        return place
+
+    # 2. Check subdistrict tag
+    subdistrict = str(props.get("subdistrict", "")).strip().lower()
+    if subdistrict:
+        return subdistrict
+
+    # 3. Check specific non-administrative boundary tags
+    boundary = str(props.get("boundary", "")).strip().lower()
+    if boundary in ("traditional", "statistical", "cadastral", "borough", "local_authority"):
+        return boundary
+
+    # 4. Check country-specific semantic tags
+    admin_type_fr = str(props.get("admin_type:FR", "")).strip().lower()
+    if admin_type_fr in ("quartier", "arrondissement", "commune"):
+        return admin_type_fr
+
+    border_type = str(props.get("border_type", "")).strip().lower()
+    if border_type in ("suburb", "quarter", "neighbourhood", "borough", "municipality", "county", "state", "province"):
+        return border_type
+
+    # 5. Fallback based on admin_level
+    try:
+        lvl = int(admin_level_str)
+        if lvl == 2:
+            return "country"
+        elif lvl in (3, 4):
+            return "state"
+        elif lvl in (5, 6):
+            return "county"
+        elif lvl in (7, 8):
+            return "municipality"
+        elif lvl == 9:
+            return "suburb"
+        elif lvl == 10:
+            return "quarter"
+        elif lvl >= 11:
+            return "neighbourhood"
+    except (ValueError, TypeError):
+        pass
+
+    return "administrative"
+
 def process_feature(data, require_wikidata=False, country_code=None, relation_centres=None):
     if data.get("type") != "Feature":
         return None
@@ -264,7 +328,7 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
     if geometry_type not in ("Polygon", "MultiPolygon"):
         return None
 
-    # Exclude non-administrative boundaries (political, statistical, census, historic, electoral districts)
+    # Exclude non-administrative boundaries (political, census, electoral districts)
     boundary_val = str(props.get("boundary", "")).strip().lower()
     if boundary_val in EXCLUDED_BOUNDARY_VALUES:
         return None
@@ -276,8 +340,24 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
     if props.get("election:parliament") or props.get("election") or props.get("electoral_district"):
         return None
 
+    historic_val = str(props.get("historic", "")).strip().lower()
+    if historic_val and historic_val not in ("no", "false", "0"):
+        return None
+
+    if props.get("end_date") and str(props.get("end_date")).strip() != "":
+        return None
+
+    admin_type_fr = str(props.get("admin_type:FR", "")).strip().lower()
+    if admin_type_fr == "ancienne commune":
+        return None
+
+    # Exclude NUTS/ITL statistical macro-regions (only local urban statistical districts are retained)
+    if boundary_val == "statistical":
+        if any("nuts" in k.lower() or "itl" in k.lower() for k in props.keys()):
+            return None
+
     border_type = str(props.get("border_type", "")).strip().lower()
-    if border_type in EXCLUDED_BOUNDARY_VALUES:
+    if border_type in EXCLUDED_BOUNDARY_VALUES or border_type == "historic":
         return None
 
     # Check admin_level presence
@@ -304,12 +384,12 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
         if not iso_val or iso_val.lower() in ("none", "null"):
             return None
 
-    # Task 5: Synthesize admin_level for sub-municipal boundaries (Rule 3 takes precedence over Rule 2)
+    # Task 5: Synthesize admin_level for sub-municipal boundaries & place-based areas
+    # (Rule 3 takes precedence over Rule 2)
     rel_type = str(props.get("type", "")).strip().lower()
     place_val = str(props.get("place", "")).strip().lower()
-    if (element_type == "relation" and rel_type in PLACE_RELATION_TYPES
-            and place_val in PLACE_TO_ADMIN_LEVEL
-            and (not raw_level or raw_level == "None")):
+    is_non_area_relation = (element_type == "relation" and rel_type and rel_type not in PLACE_RELATION_TYPES)
+    if not is_non_area_relation and place_val in PLACE_TO_ADMIN_LEVEL and (not raw_level or raw_level == "None"):
         props["admin_level"] = PLACE_TO_ADMIN_LEVEL[place_val]
         raw_level = PLACE_TO_ADMIN_LEVEL[place_val]
 
@@ -320,6 +400,9 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
 
     if not raw_level or raw_level == "None":
         return None
+
+    # Semantic area_type derivation
+    props["area_type"] = derive_area_type(props, raw_level)
 
     # Task 2: Prevent tag-loss by falling back missing/null name tags
     name = props.get("name")
@@ -495,13 +578,16 @@ class StreamProcessor:
             if not coords:
                 continue
 
+            synth_props = dict(pdef["properties"])
+            synth_props["area_type"] = derive_area_type(synth_props, synth_props.get("admin_level", "4"))
+
             synth_feature = {
                 "type": "Feature",
                 "geometry": {
                     "type": "MultiPolygon",
                     "coordinates": coords
                 },
-                "properties": dict(pdef["properties"])
+                "properties": synth_props
             }
             self.count_total += 1
             self.count_synthesized += 1
