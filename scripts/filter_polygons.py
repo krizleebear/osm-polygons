@@ -278,15 +278,7 @@ def derive_area_type(props, admin_level_str):
 
     # 3. Check specific non-administrative boundary tags
     boundary = str(props.get("boundary", "")).strip().lower()
-    if boundary == "statistical":
-        if props.get("ref:nuts:1") or props.get("nuts:level") == "1" or props.get("ref:itl:1"):
-            return "nuts1"
-        elif props.get("ref:nuts:2") or props.get("nuts:level") == "2" or props.get("ref:itl:2"):
-            return "nuts2"
-        elif props.get("ref:nuts:3") or props.get("nuts:level") == "3" or props.get("ref:itl:3"):
-            return "nuts3"
-        return "statistical"
-    if boundary in ("traditional", "cadastral", "borough", "local_authority"):
+    if boundary in ("traditional", "statistical", "cadastral", "borough", "local_authority"):
         return boundary
 
     # 4. Check country-specific semantic tags
@@ -358,6 +350,11 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
     if admin_type_fr == "ancienne commune":
         return None
 
+    # Exclude NUTS/ITL statistical macro-regions (only local urban statistical districts are retained)
+    if boundary_val == "statistical":
+        if any("nuts" in k.lower() or "itl" in k.lower() for k in props.keys()):
+            return None
+
     border_type = str(props.get("border_type", "")).strip().lower()
     if border_type in EXCLUDED_BOUNDARY_VALUES or border_type == "historic":
         return None
@@ -397,22 +394,8 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
 
     if (boundary_val in SUBMUNICIPAL_BOUNDARY_VALUES
             and (not raw_level or raw_level == "None")):
-        if boundary_val == "statistical":
-            if props.get("ref:nuts:1") or props.get("nuts:level") == "1" or props.get("ref:itl:1"):
-                props["admin_level"] = "3"
-                raw_level = "3"
-            elif props.get("ref:nuts:2") or props.get("nuts:level") == "2" or props.get("ref:itl:2"):
-                props["admin_level"] = "4"
-                raw_level = "4"
-            elif props.get("ref:nuts:3") or props.get("nuts:level") == "3" or props.get("ref:itl:3"):
-                props["admin_level"] = "6"
-                raw_level = "6"
-            else:
-                props["admin_level"] = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
-                raw_level = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
-        else:
-            props["admin_level"] = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
-            raw_level = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
+        props["admin_level"] = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
+        raw_level = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
 
     if not raw_level or raw_level == "None":
         return None

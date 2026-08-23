@@ -93,12 +93,11 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(res_cad["properties"]["admin_level"], "10")
         self.assertEqual(res_cad["properties"]["area_type"], "cadastral")
 
-        # NUTS 2 statistical region (e.g. Highlands and Islands)
+        # NUTS statistical macro-regions (e.g. Highlands and Islands, NUTS-2/3) should be excluded
         nuts_feat = feat({"@type": "relation", "boundary": "statistical", "ref:nuts:2": "UKM6", "name": "Highlands and Islands"})
-        res_nuts = process_feature(nuts_feat)
-        self.assertIsNotNone(res_nuts)
-        self.assertEqual(res_nuts["properties"]["admin_level"], "4")
-        self.assertEqual(res_nuts["properties"]["area_type"], "nuts2")
+        self.assertIsNone(process_feature(nuts_feat))
+        itl_feat = feat({"@type": "relation", "boundary": "statistical", "ref:itl:2": "TLM6", "name": "Highlands and Islands"})
+        self.assertIsNone(process_feature(itl_feat))
 
     def test_filter_l2_border_ways(self):
         # Baarle / Vennbahn joint border way tagged admin_level=2 without ISO3166-1
