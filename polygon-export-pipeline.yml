@@ -1454,16 +1454,6 @@ stages:
         itemPattern: 'admin-polygons-simplified-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)/archives'
 
-    - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download all GeoParquet continent artifacts'
-      continueOnError: true
-      inputs:
-        buildType: 'current'
-        buildVersionToDownload: 'latest'
-        itemPattern: 'admin-polygons-parquet-*/**'
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet_archives'
-
     - task: Bash@3
       enabled: true
       displayName: 'Bundle global artifact & generate admin_level statistics'
@@ -1477,35 +1467,6 @@ stages:
             find archives -name "simplified-*.tar.gz" | while read -r archive; do
               tar xfz "$archive" -C . || true
             done
-          fi
-
-          mkdir -p parquet_continents parquet_global
-          if [ -d "parquet_archives" ]; then
-            find parquet_archives -type f -name "*.parquet" -exec cp {} parquet_continents/ \;
-            PARQUET_FILE_COUNT=$(find parquet_continents -type f -name "*.parquet" | wc -l)
-            echo "Found $PARQUET_FILE_COUNT continental GeoParquet files:"
-            ls -lh parquet_continents/
-            if [ "$PARQUET_FILE_COUNT" -gt 0 ]; then
-              echo "Merging $PARQUET_FILE_COUNT continental GeoParquet files into global admin-polygons-all.parquet..."
-              docker run --rm -v $(System.DefaultWorkingDirectory):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.5 duckdb -c "LOAD spatial;
-              COPY (
-                SELECT * FROM read_parquet('parquet_continents/*.parquet')
-              ) TO 'parquet_global/admin-polygons-all.parquet' (
-                FORMAT PARQUET,
-                COMPRESSION ZSTD,
-                ROW_GROUP_SIZE 5000
-              );"
-
-              if [ ! -s "parquet_global/admin-polygons-all.parquet" ]; then
-                echo "****************************************************************"
-                echo " ERROR: parquet_global/admin-polygons-all.parquet is empty (0 bytes)!"
-                echo "****************************************************************"
-                exit 1
-              fi
-
-              echo "Global GeoParquet generated successfully:"
-              ls -lh parquet_global/admin-polygons-all.parquet
-            fi
           fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
@@ -1569,9 +1530,6 @@ stages:
             tar cfz simplified.tar.gz simplified/
           fi
 
-          PARQUET_TOTAL=$(find parquet_continents -name "*.parquet" 2>/dev/null | wc -l)
-          echo "Total continental GeoParquet files merged: $PARQUET_TOTAL"
-
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store global simplified artifact'
@@ -1579,15 +1537,6 @@ stages:
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
         artifact: 'admin-polygons-simplified'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store global GeoParquet dataset'
-      condition: and(succeeded(), eq('${{ parameters.exportParquet }}', 'true'))
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet_global/admin-polygons-all.parquet'
-        artifact: 'admin-polygons-parquet-all'
         publishLocation: 'pipeline'
 
     - task: PublishPipelineArtifact@1

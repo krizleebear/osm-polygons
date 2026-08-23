@@ -127,11 +127,12 @@ To prevent data pollution and redundant geometry processing in downstream consum
 | **Global (`all`)** | 169 | ~75.0 GB | **~4.0 – 5.5 GB** | ~3.5 GB |
 
 ### 3.3 Artifact Distribution Strategy
-Release assets will provide two distribution models:
-1. **Per-Country / Per-Continent Files:**
+Release assets provide two distribution models:
+1. **Per-Country / Per-Continent Files (GitHub Releases < 2 GB per file):**
    - `admin-polygons-DE.parquet` (~200 MB)
    - `admin-polygons-europe.parquet` (~2.0 GB)
-   - `admin-polygons-all.parquet` (~4.8 GB)
+   - `admin-polygons-north-america.parquet` (~1.1 GB)
+   *(Note: A unified global `.parquet` is excluded from GitHub Releases due to the 2 GB asset upload limit; consumers query continental files directly or merge via DuckDB).*
 2. **Hive-Partitioned Directory Structure (for S3 / CDN object stores):**
    ```text
    admin_polygons/
