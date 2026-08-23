@@ -1470,6 +1470,7 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
+          set -e
           set -x
           mkdir -p simplified
           if [ -d "archives" ]; then
@@ -1478,7 +1479,7 @@ stages:
             done
           fi
 
-          mkdir -p parquet_continents parquet_global tmp_duckdb
+          mkdir -p parquet_continents parquet_global
           if [ -d "parquet_archives" ]; then
             find parquet_archives -type f -name "*.parquet" -exec cp {} parquet_continents/ \;
             PARQUET_FILE_COUNT=$(find parquet_continents -type f -name "*.parquet" | wc -l)
@@ -1486,18 +1487,23 @@ stages:
             ls -lh parquet_continents/
             if [ "$PARQUET_FILE_COUNT" -gt 0 ]; then
               echo "Merging $PARQUET_FILE_COUNT continental GeoParquet files into global admin-polygons-all.parquet..."
-              docker run --rm -v $(pwd):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.5 duckdb -c "LOAD spatial;
-              SET preserve_insertion_order = false;
-              PRAGMA temp_directory = '/workspace/tmp_duckdb';
+              docker run --rm -v $(System.DefaultWorkingDirectory):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.5 duckdb -c "LOAD spatial;
               COPY (
                 SELECT * FROM read_parquet('parquet_continents/*.parquet')
-                ORDER BY continent, country_code, admin_level, bbox_miny, bbox_minx
               ) TO 'parquet_global/admin-polygons-all.parquet' (
                 FORMAT PARQUET,
                 COMPRESSION ZSTD,
                 ROW_GROUP_SIZE 5000
               );"
-              echo "Global GeoParquet generated:"
+
+              if [ ! -s "parquet_global/admin-polygons-all.parquet" ]; then
+                echo "****************************************************************"
+                echo " ERROR: parquet_global/admin-polygons-all.parquet is empty (0 bytes)!"
+                echo "****************************************************************"
+                exit 1
+              fi
+
+              echo "Global GeoParquet generated successfully:"
               ls -lh parquet_global/admin-polygons-all.parquet
             fi
           fi
