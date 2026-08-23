@@ -14,9 +14,9 @@ parameters:
   type: string
   default: 'OSM Administrative Polygons GeoParquet Release v1.7.0'
 - name: specificBuildId
-  displayName: 'Specific Build ID from export pipeline (definition 4). Leave blank for latest build.'
+  displayName: 'Build ID from export pipeline (use "latest" or "auto" for newest build)'
   type: string
-  default: ''
+  default: 'latest'
 - name: isDraft
   displayName: 'Create as Draft Release'
   type: boolean
@@ -43,10 +43,10 @@ jobs:
       buildType: 'specific'
       project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
       definition: '4'
-      ${{ if ne(parameters.specificBuildId, '') }}:
+      ${{ if and(ne(parameters.specificBuildId, 'latest'), ne(parameters.specificBuildId, 'auto'), ne(parameters.specificBuildId, '')) }}:
         buildVersionToDownload: 'specific'
         pipelineId: '${{ parameters.specificBuildId }}'
-      ${{ if eq(parameters.specificBuildId, '') }}:
+      ${{ if or(eq(parameters.specificBuildId, 'latest'), eq(parameters.specificBuildId, 'auto'), eq(parameters.specificBuildId, '')) }}:
         buildVersionToDownload: 'latest'
       itemPattern: |
         admin-polygons-parquet*/**
@@ -155,7 +155,8 @@ jobs:
         \`\`\`
 
         ### Download Assets
-        - **\`admin-polygons-europe.parquet\`**: All European administrative boundaries (~1.99 GB).
+        - **\`admin-polygons-europe.parquet\`**: European administrative boundaries excluding Russia (~1.85 GB).
+        - **\`admin-polygons-russia.parquet\`**: Russia dataset (~244 MB).
         - **\`admin-polygons-asia.parquet\`**: Asia dataset (~765 MB).
         - **\`admin-polygons-south-america.parquet\`**: South America dataset (~612 MB).
         - **\`admin-polygons-africa.parquet\`**: Africa dataset (~231 MB).
