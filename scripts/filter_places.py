@@ -123,8 +123,8 @@ def process_place_feature(data, continent="", country_code=""):
 
 def main():
     parser = argparse.ArgumentParser(description="Filter and structure OSM place nodes stream for GeoParquet export.")
-    parser.add_argument("--continent", type=str, default="", help="Continental group (e.g. europe)")
-    parser.add_argument("--country-code", type=str, default="", help="ISO Country code (e.g. DE)")
+    parser.add_argument("--continent", type=str, nargs="?", default="", help="Continental group (e.g. europe)")
+    parser.add_argument("--country-code", type=str, nargs="?", default="", help="ISO Country code (e.g. DE)")
     parser.add_argument("input_file", nargs="?", help="Input geojsonseq file (or stdin if omitted)")
     args = parser.parse_args()
 

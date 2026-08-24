@@ -817,7 +817,7 @@ stages:
 
           # Step 4: Stream export place nodes directly to stdout and structure with filter_places.py
           osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite \
-            | python3 scripts/filter_places.py --continent $(CONTINENT) --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
+            | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
 
     - task: PublishPipelineArtifact@1
@@ -1151,7 +1151,7 @@ stages:
           find . -maxdepth 2 -type d -name "admin-polygons-*" || true
 
           # Prune export directories belonging to other continents to conserve runner disk space
-          for dir in admin-polygons-*; do
+          for dir in admin-polygons-* places-*; do
             [ -d "$dir" ] || continue
             keep=false
             for region in $(REGIONS); do
@@ -1166,7 +1166,7 @@ stages:
           done
 
           echo "=== Retained region directories for continent '$(CONTINENT)' ==="
-          find . -maxdepth 2 -type d -name "admin-polygons-*" || true
+          find . -maxdepth 2 -type d \( -name "admin-polygons-*" -o -name "places-*" \) || true
 
           chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh
           mkdir -p temp_parquet temp_places_parquet parquet
