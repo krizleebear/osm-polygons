@@ -40,20 +40,12 @@ echo " Input:        $INPUT_STREAM ($(wc -l < "$INPUT_STREAM") features, $(du -h
 echo " Output:       $OUTPUT_PARQUET"
 echo "============================================================"
 
-TMP_JSONL="$(mktemp /tmp/places_jsonl_XXXXXX.jsonl)"
 TMP_SQL="$(mktemp /tmp/export_places_XXXXXX.sql)"
-trap 'rm -f "$TMP_JSONL" "$TMP_SQL"' EXIT
-
-python3 "${SCRIPT_DIR}/filter_places.py" --continent "${CONTINENT}" --country-code "${COUNTRY_CODE}" "$INPUT_STREAM" > "$TMP_JSONL"
-
-if [ ! -s "$TMP_JSONL" ]; then
-    echo "WARNING: No valid place nodes found in '$INPUT_STREAM'. Skipping Parquet creation." >&2
-    exit 0
-fi
+trap 'rm -f "$TMP_SQL"' EXIT
 
 sed -e "s|__CONTINENT__|${CONTINENT}|g" \
     -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
-    -e "s|__INPUT_JSONL__|${TMP_JSONL}|g" \
+    -e "s|__INPUT_JSONL__|${INPUT_STREAM}|g" \
     -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
     "$SQL_TEMPLATE" > "$TMP_SQL"
 

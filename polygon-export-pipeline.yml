@@ -816,7 +816,7 @@ stages:
           rm -f ${ADMIN_PBF}
 
           # Step 4: Stream export place nodes directly to stdout and structure with filter_places.py
-          osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite \
+          osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
 
