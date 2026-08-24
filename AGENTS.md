@@ -76,5 +76,13 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - Whenever modifications or optimizations are made to `osm-tools` and committed/pushed to `master`, downstream pipeline definitions (especially `resources.containers.osm-tools` in `polygon-export-pipeline.yml` and fallback commit definitions in `polygon-release-pipeline.yml`) MUST immediately and proactively be updated to reference the new commit SHA (`mirror.gcr.io/krizleebear/osm-tools:master-<SHA>`). Never leave downstream pipelines pointing to stale container versions.
 18. **GeoJSONSeq Verification & Profiling with DuckDB:**
     - Use DuckDB's native vectorised `read_ndjson()` for fast ad-hoc inspection and quality verification on `.geojsonseq` stream files (e.g. `SELECT json_extract_string(properties, '$.admin_level') AS lvl, count(*) FROM read_ndjson('<file>.geojsonseq') GROUP BY 1`).
+19. **GitHub Release 2 GiB Asset Size Limit & GeoParquet Partitioning:**
+    - GitHub Releases enforce a strict hard limit of 2 GiB (2,147,483,648 bytes) per uploaded asset. Continental GeoParquet datasets (such as Europe with detailed sub-divisions) must be partitioned by heavy regions (e.g. isolating `russia` into `admin-polygons-russia.parquet`) to keep individual files safely under 2.0 GiB.
+20. **Azure DevOps String Parameter Defaults (`latest` / `auto`):**
+    - In Azure DevOps manual run dialogs, string parameters treat empty string values as invalid/required in the UI modal. String parameters (like `specificBuildId` or `exportBuildId`) must default to `'latest'` or `'auto'`, and conditions must support `'latest'`, `'auto'`, and custom build IDs.
+21. **Osmium Export ID Configuration Invariant:**
+    - `osmium export` omits `@id` attributes by default unless `--config=osmium-export-config.json` is explicitly passed. All place node and polygon export steps must provide the config to preserve `osm_id`.
+22. **Direct DuckDB JSONL Stream Conversion:**
+    - When converting structured `.places.jsonl` files to GeoParquet, stream directly using DuckDB `read_json()` / `read_json_auto()` without intermediate redundant Python filtering passes.
 
 
