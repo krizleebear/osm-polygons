@@ -84,5 +84,9 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - `osmium export` omits `@id` attributes by default unless `--config=osmium-export-config.json` is explicitly passed. All place node and polygon export steps must provide the config to preserve `osm_id`.
 22. **Direct DuckDB JSONL Stream Conversion:**
     - When converting structured `.places.jsonl` files to GeoParquet, stream directly using DuckDB `read_json()` / `read_json_auto()` without intermediate redundant Python filtering passes.
+23. **Evidence-Based Issue Analysis & Remote DuckDB Diagnostics:**
+    - Never assume an issue is fixed or make claims based solely on commit history, code reviews, or theoretical assumptions. Always gather concrete empirical evidence by directly querying the live release artifacts or test outputs.
+    - Use DuckDB with `httpfs` to query remote GitHub Release assets directly (`duckdb -c "INSTALL httpfs; LOAD httpfs; SELECT ... FROM 'https://github.com/.../releases/download/.../....parquet'"`).
+    - When reporting or investigating anomalies across upstream/downstream boundaries, provide reproducible SQL queries against the exact release dataset to eliminate ambiguity and immediately isolate root causes.
 
 
