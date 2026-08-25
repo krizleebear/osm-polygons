@@ -252,6 +252,27 @@ SYNTHETIC_PARENT_DEFINITIONS = {
         "child_names": {"Boa Ventura", "Ponta Delgada", "São Vicente"},
         "child_admin_level": "8",
     },
+    # Madeira Autonomous Region (relation 1629145, admin_level 4)
+    # Synthesize from constituent Concelhos (admin_level 7).
+    # force_collect: Concelho geometries must be collected even when they
+    # themselves already appear as seen_parents (they are also L7 parents).
+    1629145: {
+        "country_code": "PT",
+        "force_collect": True,
+        "properties": {
+            "@id": 1629145, "@type": "relation", "id": 1629145,
+            "admin_level": "4", "boundary": "administrative",
+            "name": "Madeira", "official_name": "Região Autónoma da Madeira",
+            "wikidata": "Q26253", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "região_autónoma",
+        },
+        "child_admin_level": "7",
+        "child_names": {
+            "Calheta", "Câmara de Lobos", "Funchal", "Machico",
+            "Ponta do Sol", "Porto Moniz", "Porto Santo",
+            "Ribeira Brava", "Santa Cruz", "Santana", "São Vicente",
+        },
+    },
 
     # ── Taiwan: Kaohsiung City (relation 2127079, admin_level 4) ──────────
     2127079: {
@@ -703,7 +724,7 @@ class StreamProcessor:
         feature_country = (self.country_code or props.get("ISO3166-1") or "").upper().strip()
 
         for pid, pdef in SYNTHETIC_PARENT_DEFINITIONS.items():
-            if pid in self.seen_parents:
+            if pid in self.seen_parents and not pdef.get("force_collect"):
                 continue
 
             target_country = (pdef.get("country_code") or "").upper().strip()

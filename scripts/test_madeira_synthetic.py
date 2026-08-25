@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Local smoke-test: feed filter_polygons.py with synthetic Madeira freguesia
-GeoJSONSeq features and verify that all 11 Concelho parents are emitted.
+Local smoke-test: feed filter_polygons.py with synthetic Madeira GeoJSONSeq
+features and verify that all 11 Concelho parents AND the Madeira L4 region
+are emitted.
 
 No osmium or PBF download required — pure stream-process test.
 """
@@ -76,9 +77,17 @@ EXPECTED_CONCELHOS = {
     8421418: "São Vicente",
 }
 
+# Concelho features (admin_level 7) for Madeira L4 synthesis test
+CONCELHOS_L7 = [
+    (8421413, "Funchal"), (8421420, "Calheta"), (8421414, "Câmara de Lobos"),
+    (8421411, "Machico"), (8421416, "Ponta do Sol"), (8421419, "Porto Moniz"),
+    (8435154, "Porto Santo"), (8421415, "Ribeira Brava"), (8421412, "Santa Cruz"),
+    (8421417, "Santana"), (8421418, "São Vicente"),
+]
 
-def make_freguesia_feature(rel_id, name):
-    """Create a minimal GeoJSON Feature for a freguesia."""
+
+def make_feature(rel_id, name, admin_level):
+    """Create a minimal GeoJSON Feature."""
     return {
         "type": "Feature",
         "geometry": DUMMY_POLYGON,
@@ -86,7 +95,7 @@ def make_freguesia_feature(rel_id, name):
             "@id": f"relation/{rel_id}",
             "@type": "relation",
             "id": rel_id,
-            "admin_level": "8",
+            "admin_level": admin_level,
             "boundary": "administrative",
             "name": name,
             "ISO3166-1": "PT",
@@ -95,38 +104,62 @@ def make_freguesia_feature(rel_id, name):
     }
 
 
-def main():
+def test_concelhos_from_freguesias():
+    """Test 1: Feed freguesias (L8) → expect 11 Concelho parents (L7)."""
     processor = StreamProcessor(country_code="PT")
-
-    # Feed all freguesias through the processor
     for rel_id, name in FREGUESIAS:
-        feature = make_freguesia_feature(rel_id, name)
-        line = json.dumps(feature)
-        processor.process_line(line)
+        feature = make_feature(rel_id, name, "8")
+        processor.process_line(json.dumps(feature))
 
-    # Collect synthesized parents
     synthesized = processor.get_synthetic_parents()
     found = {s["properties"]["id"]: s["properties"]["name"] for s in synthesized}
 
-    print(f"\n=== Madeira Concelho Synthetic Parent Test ===")
-    print(f"Freguesias fed:        {len(FREGUESIAS)}")
-    print(f"Synthesized parents:   {len(synthesized)}")
-    print()
+    print(f"\n=== Test 1: Concelhos from Freguesias ===")
+    print(f"Freguesias fed:      {len(FREGUESIAS)}")
+    print(f"Synthesized:         {len(synthesized)}")
 
     ok = True
-    for concelho_id, expected_name in sorted(EXPECTED_CONCELHOS.items()):
-        if concelho_id in found:
-            print(f"  OK  {concelho_id} ({expected_name})")
-        else:
-            print(f"  MISSING  {concelho_id} ({expected_name})")
+    for cid, cname in sorted(EXPECTED_CONCELHOS.items()):
+        status = "OK" if cid in found else "MISSING"
+        print(f"  {status:7s} {cid} ({cname})")
+        if cid not in found:
             ok = False
+    return ok
+
+
+def test_madeira_from_concelhos():
+    """Test 2: Feed Concelhos (L7) → expect Madeira L4 parent via force_collect."""
+    processor = StreamProcessor(country_code="PT")
+    for rel_id, name in CONCELHOS_L7:
+        feature = make_feature(rel_id, name, "7")
+        processor.process_line(json.dumps(feature))
+
+    synthesized = processor.get_synthetic_parents()
+    found = {s["properties"]["id"]: s["properties"]["name"] for s in synthesized}
+
+    print(f"\n=== Test 2: Madeira L4 from Concelhos ===")
+    print(f"Concelhos fed:      {len(CONCELHOS_L7)}")
+    print(f"Synthesized:        {len(synthesized)}")
+
+    madeira_id = 1629145
+    if madeira_id in found:
+        print(f"  OK     {madeira_id} (Madeira)")
+        return True
+    else:
+        print(f"  MISSING {madeira_id} (Madeira)")
+        return False
+
+
+def main():
+    ok1 = test_concelhos_from_freguesias()
+    ok2 = test_madeira_from_concelhos()
 
     print()
-    if ok:
-        print("PASS — all 11 Madeira Concelhos synthesized.")
+    if ok1 and ok2:
+        print("PASS — all tests passed.")
         return 0
     else:
-        print("FAIL — some Concelhos are missing.")
+        print("FAIL — some tests failed.")
         return 1
 
 
