@@ -229,7 +229,9 @@ def validate(pbf_path, country_code=None):
         if rid not in broken_ids:
             continue
         if country_code:
-            if belongs_to_country(info["tags"], country_code) or int(info["admin_level"]) >= 7:
+            lvl = info["admin_level"]
+            is_high_level = lvl.isdigit() and int(lvl) >= 7
+            if belongs_to_country(info["tags"], country_code) or is_high_level:
                 display.append((rid, info))
         else:
             display.append((rid, info))
