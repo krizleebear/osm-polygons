@@ -360,6 +360,26 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(res_q["properties"]["admin_level"], "10")
         self.assertEqual(res_q["properties"]["area_type"], "quarter")
 
+    def test_synthetic_parent_entities(self):
+        # 1. Funchal (relation 8421413, admin_level=7) synthesized from child parishes
+        parish1 = feat({"@type": "relation", "id": 8427682, "admin_level": "8", "name": "São Martinho"})
+        parish2 = feat({"@type": "relation", "id": 8427683, "admin_level": "8", "name": "Santa Maria Maior"})
+        
+        results = list(filter_features([parish1, parish2]))
+        self.assertEqual(len(results), 3)
+        funchal = results[-1]
+        self.assertEqual(funchal["properties"]["@id"], 8421413)
+        self.assertEqual(funchal["properties"]["admin_level"], "7")
+        self.assertEqual(funchal["properties"]["name"], "Funchal")
+        self.assertEqual(funchal["properties"]["wikidata"], "Q25444")
+        self.assertEqual(funchal["properties"]["area_type"], "municipality")
+        self.assertEqual(funchal["geometry"]["type"], "MultiPolygon")
+
+        # 2. If parent was already in stream, do not synthesize duplicate
+        parent_funchal = feat({"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal"})
+        results_with_parent = list(filter_features([parent_funchal, parish1]))
+        self.assertEqual(len(results_with_parent), 2)
+
 if __name__ == "__main__":
     unittest.main()
 

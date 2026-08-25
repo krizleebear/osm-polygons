@@ -27,6 +27,7 @@ hs_err_pid*
 /*.geojsonseq
 /*.pbf
 /*.parquet
+/*.places.jsonl
 
 # IDE & Project Metadata
 .classpath
