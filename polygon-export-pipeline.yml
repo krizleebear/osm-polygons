@@ -803,19 +803,33 @@ stages:
             r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality \
             w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
 
-          # Step 2: Filter OSM place nodes companion dataset (points) per PLACE_NODE_EXPORTER_SPEC.md:
+          # Step 2b: Filter OSM place nodes companion dataset (points) per PLACE_NODE_EXPORTER_SPEC.md:
           osmium tags-filter --output ${PLACES_PBF} --overwrite ${INPUT_PBF} \
             n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality
+
+          # Step 3: Validate PBF for broken admin boundary references and generate synthetic parent definitions
+          python3 scripts/validate_pbf.py ${INPUT_PBF} --country $(COUNTRY_CODE) || true
+          SYNTHETIC_DEFS=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-synthetic-defs.json/')
+          VALIDATION_JSON=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-validation.json/')
+          if [ -f "${SYNTHETIC_DEFS}" ]; then
+            cp ${SYNTHETIC_DEFS} ./synthetic-defs.json
+            SYNTHETIC_DEFS=./synthetic-defs.json
+          else
+            SYNTHETIC_DEFS=""
+          fi
+          if [ -f "${VALIDATION_JSON}" ]; then
+            cp ${VALIDATION_JSON} ./validation.json
+          fi
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
 
-          # Step 3: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
+          # Step 4: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
           osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
+            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} ${SYNTHETIC_DEFS:+--synthetic-defs ${SYNTHETIC_DEFS}} > ${POLYGON_JSON}
           rm -f ${ADMIN_PBF}
 
-          # Step 4: Stream export place nodes directly to stdout and structure with filter_places.py
+          # Step 5: Stream export place nodes directly to stdout and structure with filter_places.py
           osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
@@ -826,6 +840,14 @@ stages:
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store validation artifacts'
+      inputs:
+        targetPath: 'validation.json'
+        artifact: 'validation-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
 
     - task: PublishPipelineArtifact@1

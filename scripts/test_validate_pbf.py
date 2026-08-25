@@ -17,6 +17,7 @@ from validate_pbf import (
     belongs_to_country,
     run_check_refs,
     AdminBoundaryScanner,
+    generate_synthetic_defs,
     validate,
 )
 
@@ -175,6 +176,61 @@ class TestValidate(unittest.TestCase):
         madeira = next(b for b in data["broken"] if b["id"] == 1629145)
         self.assertEqual(len(madeira["children"]), 11)
         self.assertTrue(all(c["complete"] for c in madeira["children"]))
+
+
+@unittest.skipUnless(HAS_PBF, "madeira-latest.osm.pbf not found")
+class TestSyntheticDefs(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.defs_path = MADEIRA_PBF.replace(".osm.pbf", "-synthetic-defs.json")
+
+    def test_synthetic_defs_written(self):
+        self.assertTrue(os.path.exists(self.defs_path))
+
+    def test_synthetic_defs_structure(self):
+        with open(self.defs_path) as f:
+            defs = json.load(f)
+        self.assertIn("1629145", defs)
+        self.assertIn("295480", defs)
+
+    def test_madeira_children(self):
+        with open(self.defs_path) as f:
+            defs = json.load(f)
+        madeira = defs["1629145"]
+        self.assertEqual(len(madeira["child_relation_ids"]), 11)
+        self.assertEqual(len(madeira["child_names"]), 11)
+        self.assertEqual(madeira["child_admin_level"], "7")
+
+    def test_madeira_force_collect_false(self):
+        with open(self.defs_path) as f:
+            defs = json.load(f)
+        madeira = defs["1629145"]
+        self.assertFalse(madeira.get("force_collect", False))
+
+    def test_portugal_force_collect_true(self):
+        with open(self.defs_path) as f:
+            defs = json.load(f)
+        pt = defs["295480"]
+        self.assertTrue(pt["force_collect"])
+        self.assertIn(1629145, pt["child_relation_ids"])
+
+    def test_properties_include_osm_tags(self):
+        with open(self.defs_path) as f:
+            defs = json.load(f)
+        madeira = defs["1629145"]
+        props = madeira["properties"]
+        self.assertEqual(props["@id"], 1629145)
+        self.assertEqual(props["admin_level"], "4")
+        self.assertEqual(props["name"], "Madeira")
+
+    def test_lists_converted_to_sets(self):
+        import importlib
+        import filter_polygons
+        importlib.reload(filter_polygons)
+        filter_polygons.load_synthetic_defs(self.defs_path)
+        d = filter_polygons.SYNTHETIC_PARENT_DEFINITIONS[1629145]
+        self.assertIsInstance(d["child_relation_ids"], set)
+        self.assertIsInstance(d["child_names"], set)
 
 
 if __name__ == "__main__":

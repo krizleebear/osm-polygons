@@ -137,6 +137,61 @@ def run_check_refs(pbf_path):
     return dict(broken)
 
 
+def generate_synthetic_defs(enriched, scanner, broken_ids):
+    """Generate SYNTHETIC_PARENT_DEFINITIONS from enriched broken relations."""
+    defs = {}
+    for entry in enriched:
+        rid = entry["id"]
+        info = scanner.admin_relations[rid]
+        tags = info["tags"]
+
+        # Country code: ISO3166-1 or prefix of ISO3166-2
+        country_code = ""
+        if info["iso1"]:
+            country_code = info["iso1"]
+        elif info["iso2"]:
+            country_code = info["iso2"].split("-")[0]
+
+        # Properties: all OSM tags plus computed fields
+        properties = dict(tags)
+        properties["@id"] = rid
+        properties["@type"] = "relation"
+        properties["id"] = rid
+
+        # Child completeness and force_collect
+        complete_children = [c for c in entry["children"] if c["complete"]]
+        child_ids_set = {c["id"] for c in entry["children"]}
+        force_collect = any(cid in broken_ids for cid in child_ids_set)
+
+        # If force_collect, include ALL children (not just complete ones)
+        if force_collect:
+            all_children = entry["children"]
+        else:
+            all_children = complete_children
+
+        child_relation_ids = sorted(c["id"] for c in all_children)
+        child_names = sorted(c["name"] for c in all_children if c["name"])
+
+        # Child admin level: level of the first complete child (or first child if force_collect)
+        child_admin_level = ""
+        if complete_children:
+            child_admin_level = complete_children[0]["admin_level"]
+        elif all_children:
+            child_admin_level = all_children[0]["admin_level"]
+
+        defs[rid] = {
+            "country_code": country_code,
+            "properties": properties,
+            "child_relation_ids": child_relation_ids,
+            "child_names": child_names,
+            "child_admin_level": child_admin_level,
+        }
+        if force_collect:
+            defs[rid]["force_collect"] = True
+
+    return defs
+
+
 def validate(pbf_path, country_code=None):
     print(f"Scanning {pbf_path} ...")
     if country_code:
@@ -158,18 +213,9 @@ def validate(pbf_path, country_code=None):
     scanner.apply_file(pbf_path, locations=True)
     print(f"  Found {len(scanner.admin_relations)} admin boundary relations.")
 
-    # Build child completeness: for each child, check if all its outer ways exist
-    child_complete = {}
-    for cid, cinfo in scanner.admin_relations.items():
-        child_outer = set()
-        for m_id in cinfo.get("member_relations", []):
-            pass
-        outer_ways = set()
-        for m in scanner.admin_relations.get(cid, {}).get("tags", {}):
-            pass
-        # Re-check: child is complete if none of its outer ways are missing
-        # We already know broken relation IDs from check-refs
-        child_complete[cid] = cid not in broken
+    # Build child completeness
+    broken_ids = set(broken.keys())
+    child_complete = {cid: cid not in broken_ids for cid in scanner.admin_relations}
 
     # Step 3: Filter and enrich broken relations with children
     print("Step 3/3: Analyzing child relations ...")
@@ -266,6 +312,13 @@ def validate(pbf_path, country_code=None):
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
     print(f"JSON summary written to: {summary_path}")
+
+    # Synthetic parent definitions for filter_polygons.py
+    synthetic_defs = generate_synthetic_defs(enriched, scanner, broken_ids)
+    defs_path = pbf_path.replace(".osm.pbf", "-synthetic-defs.json")
+    with open(defs_path, "w") as f:
+        json.dump(synthetic_defs, f, indent=2, ensure_ascii=False)
+    print(f"Synthetic defs written to: {defs_path}")
 
     return 0 if not enriched else 1
 
