@@ -6,8 +6,8 @@ resources:
   containers:
   - container: osmium-tool
     # Use mirror.gcr.io to prevent Docker Hub pull rate limits during multi-job matrix execution
-    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.19.0
-    #image: krizleebear/docker-osmium-tool:v1.19.0
+    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.19.1
+    #image: krizleebear/docker-osmium-tool:v1.19.1
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
