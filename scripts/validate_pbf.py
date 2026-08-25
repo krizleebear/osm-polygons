@@ -67,12 +67,13 @@ def belongs_to_country(tags, country_code):
 
 
 class AdminBoundaryScanner(osmium.SimpleHandler):
-    """Scan PBF for admin boundary relations — metadata only."""
+    """Scan PBF for admin boundary relations — metadata, membership, completeness."""
 
-    def __init__(self, target_ids=None):
+    def __init__(self):
         super().__init__()
-        self.target_ids = target_ids  # if set, only collect these
         self.admin_relations = {}     # id -> {name, level, iso1, iso2, ...}
+        self.parent_children = defaultdict(set)  # parent_id -> {child_id, ...}
+        self.child_parents = defaultdict(set)    # child_id -> {parent_id, ...}
         self.all_way_ids = set()
         self.node_count = 0
         self.way_count = 0
@@ -90,14 +91,15 @@ class AdminBoundaryScanner(osmium.SimpleHandler):
         tags = dict(r.tags)
         if tags.get("boundary") != "administrative":
             return
-        if self.target_ids and r.id not in self.target_ids:
-            return
 
         outer = set()
+        member_relations = set()
         for m in r.members:
             mtype = m.type.lower() if m.type else ""
             if mtype in ("w", "way") and m.role == "outer":
                 outer.add(m.ref)
+            elif mtype in ("r", "relation"):
+                member_relations.add(m.ref)
 
         self.admin_relations[r.id] = {
             "name": tags.get("name", ""),
@@ -105,8 +107,13 @@ class AdminBoundaryScanner(osmium.SimpleHandler):
             "iso1": tags.get("ISO3166-1", ""),
             "iso2": tags.get("ISO3166-2", ""),
             "outer_total": len(outer),
+            "member_relations": sorted(member_relations),
             "tags": tags,
         }
+
+        for child_id in member_relations:
+            self.parent_children[r.id].add(child_id)
+            self.child_parents[child_id].add(r.id)
 
 
 def run_check_refs(pbf_path):
@@ -145,20 +152,36 @@ def validate(pbf_path, country_code=None):
         print("\nALL references OK — no broken relations.")
         return 0
 
-    # Step 2: Scan PBF for admin boundary metadata (only broken relations)
+    # Step 2: Scan ALL admin boundary metadata (need membership for child detection)
     print("Step 2/3: Scanning admin boundary metadata ...", flush=True)
-    broken_ids = set(broken.keys())
-    scanner = AdminBoundaryScanner(target_ids=broken_ids)
+    scanner = AdminBoundaryScanner()
     scanner.apply_file(pbf_path, locations=True)
-    print(f"  Found {len(scanner.admin_relations)} broken admin boundary relations.")
+    print(f"  Found {len(scanner.admin_relations)} admin boundary relations.")
 
-    # Step 3: Filter and display
-    print("Step 3/3: Filtering results ...")
+    # Build child completeness: for each child, check if all its outer ways exist
+    child_complete = {}
+    for cid, cinfo in scanner.admin_relations.items():
+        child_outer = set()
+        for m_id in cinfo.get("member_relations", []):
+            pass
+        outer_ways = set()
+        for m in scanner.admin_relations.get(cid, {}).get("tags", {}):
+            pass
+        # Re-check: child is complete if none of its outer ways are missing
+        # We already know broken relation IDs from check-refs
+        child_complete[cid] = cid not in broken
+
+    # Step 3: Filter and enrich broken relations with children
+    print("Step 3/3: Analyzing child relations ...")
     print()
+
+    broken_ids = set(broken.keys())
 
     # Filter: country-owned L2-L6 + all L7+
     display = []
     for rid, info in scanner.admin_relations.items():
+        if rid not in broken_ids:
+            continue
         if country_code:
             if belongs_to_country(info["tags"], country_code) or int(info["admin_level"]) >= 7:
                 display.append((rid, info))
@@ -166,6 +189,31 @@ def validate(pbf_path, country_code=None):
             display.append((rid, info))
 
     display.sort(key=lambda e: (int(e[1]["admin_level"]) if e[1]["admin_level"].isdigit() else 999, e[0]))
+
+    # Enrich with children
+    enriched = []
+    for rid, info in display:
+        child_ids = scanner.parent_children.get(rid, set())
+        children = []
+        for cid in sorted(child_ids):
+            if cid in scanner.admin_relations:
+                cinfo = scanner.admin_relations[cid]
+                children.append({
+                    "id": cid,
+                    "name": cinfo["name"],
+                    "admin_level": cinfo["admin_level"],
+                    "complete": child_complete.get(cid, False),
+                })
+
+        enriched.append({
+            "id": rid,
+            "name": info["name"],
+            "admin_level": info["admin_level"],
+            "iso1": info["iso1"],
+            "iso2": info["iso2"],
+            "missing_ways": broken[rid]["missing_ways"],
+            "children": children,
+        })
 
     # Stats
     print(f"PBF statistics:")
@@ -179,21 +227,23 @@ def validate(pbf_path, country_code=None):
         label = f" ({country_code} + all L7+)"
     else:
         label = ""
-    print(f"BROKEN admin boundary relations{label}: {len(display)}")
+    print(f"BROKEN admin boundary relations{label}: {len(enriched)}")
     print("=" * 80)
     print()
 
-    if display:
-        print(f"{'ID':<12} {'Level':<6} {'Name':<30} {'ISO2':<8} {'Missing':>8}")
-        print("-" * 70)
-        for rid, info in display:
-            missing = broken[rid]["missing_ways"]
-            iso2 = info["iso2"][:6] if info["iso2"] else ""
-            print(f"{rid:<12} {info['admin_level']:<6} {info['name']:<30} {iso2:<8} {missing:>8}")
+    if enriched:
+        print(f"{'ID':<12} {'Level':<6} {'Name':<30} {'ISO2':<8} {'Missing':>8} {'Children':>9}")
+        print("-" * 80)
+        for entry in enriched:
+            iso2 = entry["iso2"][:6] if entry["iso2"] else ""
+            n_complete = sum(1 for c in entry["children"] if c["complete"])
+            n_total = len(entry["children"])
+            children_str = f"{n_complete}/{n_total}" if n_total else "-"
+            print(f"{entry['id']:<12} {entry['admin_level']:<6} {entry['name']:<30} {iso2:<8} {entry['missing_ways']:>8} {children_str:>9}")
     else:
         if broken:
             print(f"All admin boundary relations for {country_code} OK.")
-            other = len(broken) - len(display)
+            other = len(broken) - len(enriched)
             print(f"({other} broken relations belong to other countries)")
         else:
             print("ALL admin boundary relations OK.")
@@ -208,17 +258,8 @@ def validate(pbf_path, country_code=None):
         "total_ways": scanner.way_count,
         "total_relations": scanner.relation_count,
         "broken_total": len(broken),
-        "broken_admin_boundary": len(display),
-        "broken": [
-            {
-                "id": rid,
-                "name": info["name"],
-                "admin_level": info["admin_level"],
-                "iso2": info["iso2"],
-                "missing_ways": broken[rid]["missing_ways"],
-            }
-            for rid, info in display
-        ],
+        "broken_admin_boundary": len(enriched),
+        "broken": enriched,
     }
 
     summary_path = pbf_path.replace(".osm.pbf", "-validation.json")
@@ -226,7 +267,7 @@ def validate(pbf_path, country_code=None):
         json.dump(summary, f, indent=2, ensure_ascii=False)
     print(f"JSON summary written to: {summary_path}")
 
-    return 0 if not display else 1
+    return 0 if not enriched else 1
 
 
 if __name__ == "__main__":
