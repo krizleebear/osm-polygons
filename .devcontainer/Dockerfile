@@ -1,5 +1,5 @@
-# Unified Dev Container for osm-geocoder
-# Environment: Ubuntu 24.04, JDK 26, Maven, Git, Opencode, Antigravity CLI (agy)
+# Unified Dev Container for osm-polygons
+# Environment: Ubuntu 24.04, Eclipse Temurin JDK 21 (Adoptium), Maven, Git, Osmium Tool v1.19.0, Python Pyosmium, DuckDB, Opencode, Antigravity CLI (agy)
 # Timezone: Europe/Berlin
 # User: ubuntu (UID 1000)
 FROM ubuntu:24.04
@@ -11,38 +11,35 @@ ENV LC_ALL=C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Berlin
 
-# 1. Base system tools, timezone & Maven
+# 1. Java Installation (Eclipse Temurin JDK 21 LTS, Adoptium)
+COPY --from=eclipse-temurin:21-jdk /opt/java/openjdk /opt/java/openjdk
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="$JAVA_HOME/bin:$PATH"
+
+# 2. Base system tools, timezone, Python osmium & Osmium Tool runtime libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       git \
+      libboost-program-options1.83.0 \
+      libbz2-1.0 \
+      libexpat1 \
+      liblz4-1 \
       maven \
-      osmium-tool \
       python3 \
+      python3-pyosmium \
       python3-yaml \
       tar \
       unzip \
+      zlib1g \
       tzdata && \
     ln -fs /usr/share/zoneinfo/Europe/Berlin /etc/localtime && \
     dpkg-reconfigure --frontend noninteractive tzdata && \
     rm -rf /var/lib/apt/lists/*
 
-# 2. JDK 26 Installation
-RUN set -eux; \
-    ARCH="$(uname -m)"; \
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
-        JDK_URL="https://download.oracle.com/java/26/latest/jdk-26_linux-aarch64_bin.tar.gz"; \
-    else \
-        JDK_URL="https://download.oracle.com/java/26/latest/jdk-26_linux-x64_bin.tar.gz"; \
-    fi; \
-    curl -sSL "$JDK_URL" -o /tmp/jdk26.tar.gz && \
-    mkdir -p /opt/jdk26 && \
-    tar -xzf /tmp/jdk26.tar.gz -C /opt/jdk26 --strip-components=1 && \
-    rm /tmp/jdk26.tar.gz
-
-ENV JAVA_HOME=/opt/jdk26
-ENV PATH="$JAVA_HOME/bin:$PATH"
+# Copy latest Osmium CLI Tool from official pipeline container (v1.19.0)
+COPY --from=krizleebear/docker-osmium-tool:v1.19.0 /usr/bin/osmium /usr/local/bin/osmium
 
 # 2b. Install DuckDB CLI + Spatial Extension (Multi-Arch)
 RUN set -eux; \

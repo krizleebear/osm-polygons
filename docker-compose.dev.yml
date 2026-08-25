@@ -1,0 +1,29 @@
+services:
+  dev:
+    image: osm-polygons:dev
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    environment:
+      TERM: xterm-256color
+      TZ: Europe/Berlin
+      JAVA_TOOL_OPTIONS: "-Xmx8g -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Duser.timezone=Europe/Berlin"
+      GH_TOKEN: ${GH_TOKEN:-${GITHUB_TOKEN:-}}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-${GH_TOKEN:-}}
+    volumes:
+      - .:/app
+      - ~/.gitconfig:/home/ubuntu/.gitconfig:ro
+      - ~/.gemini:/home/ubuntu/.gemini
+      - ~/.config/gh:/home/ubuntu/.config/gh
+      - osm-polygons-m2:/home/ubuntu/.m2
+      - opencode-config:/home/ubuntu/.config/opencode
+      - opencode-data:/home/ubuntu/.local/share/opencode
+    working_dir: /app
+    entrypoint: ["/bin/bash"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  osm-polygons-m2:
+  opencode-config:
+  opencode-data:
