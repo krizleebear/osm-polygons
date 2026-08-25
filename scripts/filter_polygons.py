@@ -70,31 +70,190 @@ PLACE_RELATION_TYPES = ("boundary", "multipolygon")
 
 # Synthetic parent entity definitions per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md
 SYNTHETIC_PARENT_DEFINITIONS = {
-    # Portugal: Funchal (relation 8421413, admin_level 7)
+    # ── Portugal / Madeira: All 11 Concelhos (admin_level 7) ──────────────
+    # osmium export drops these relations when Geofabrik bounding polygon
+    # clips coastal outer ways, leaving unclosed rings that AreaAssembler
+    # cannot resolve.  Child freguesias (admin_level 8) are intact because
+    # they sit on the continuous landmass.
+    # Funchal (relation 8421413)
     8421413: {
         "country_code": "PT",
         "properties": {
-            "@id": 8421413,
-            "@type": "relation",
-            "id": 8421413,
-            "admin_level": "7",
-            "boundary": "administrative",
-            "name": "Funchal",
-            "official_name": "Município do Funchal",
-            "wikidata": "Q25444",
-            "ISO3166-1": "PT",
-            "ISO3166-2": "PT-30",
+            "@id": 8421413, "@type": "relation", "id": 8421413,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Funchal", "official_name": "Município do Funchal",
+            "wikidata": "Q25444", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
             "border_type": "município",
         },
-        "child_relation_ids": {8427682, 8427683, 8427684, 8426650, 8426651, 8426652, 8426653, 8426654, 8426655, 8426656},
+        "child_relation_ids": {8427682, 8427683, 8427684, 8426650, 8426651, 8426652, 8426653, 8426654, 8426655, 8426656, 8426661},
         "child_names": {
             "São Martinho", "Santa Maria Maior", "São Pedro", "São Roque",
             "Santo António", "Santa Luzia", "Monte", "Imaculado Coração de Maria",
-            "São Gonçalo", "Sé"
+            "São Gonçalo", "Sé", "Quinta Grande",
         },
         "child_admin_level": "8",
     },
-    # Taiwan: Kaohsiung City (relation 2127079, admin_level 4)
+    # Calheta (relation 8421420)
+    8421420: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421420, "@type": "relation", "id": 8421420,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Calheta", "official_name": "Município da Calheta",
+            "wikidata": "Q757078", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8422551, 8422552, 8422553, 8422554, 8422555, 8422556, 8422557, 8422558},
+        "child_names": {
+            "Arco da Calheta", "Calheta", "Estreito da Calheta",
+            "Fajã da Ovelha", "Jardim do Mar", "Paul do Mar",
+            "Ponta do Pargo", "Prazeres",
+        },
+        "child_admin_level": "8",
+    },
+    # Câmara de Lobos (relation 8421414)
+    8421414: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421414, "@type": "relation", "id": 8421414,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Câmara de Lobos", "official_name": "Município de Câmara de Lobos",
+            "wikidata": "Q623736", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8426657, 8426658, 8426659, 8426660, 8426661},
+        "child_names": {
+            "Câmara de Lobos", "Curral das Freiras", "Estreito de Câmara de Lobos",
+            "Jardim da Serra", "Quinta Grande",
+        },
+        "child_admin_level": "8",
+    },
+    # Machico (relation 8421411)
+    8421411: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421411, "@type": "relation", "id": 8421411,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Machico", "official_name": "Município de Machico",
+            "wikidata": "Q693243", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8435149, 8435150, 8435151, 8435152, 8435153},
+        "child_names": {
+            "Água de Pena", "Caniçal", "Machico",
+            "Porto da Cruz", "Santo António da Serra",
+        },
+        "child_admin_level": "8",
+    },
+    # Ponta do Sol (relation 8421416)
+    8421416: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421416, "@type": "relation", "id": 8421416,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Ponta do Sol", "official_name": "Município da Ponta do Sol",
+            "wikidata": "Q943911", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8426666, 8426667, 8426668},
+        "child_names": {"Canhas", "Madalena do Mar", "Ponta do Sol"},
+        "child_admin_level": "8",
+    },
+    # Porto Moniz (relation 8421419)
+    8421419: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421419, "@type": "relation", "id": 8421419,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Porto Moniz", "official_name": "Município do Porto Moniz",
+            "wikidata": "Q221412", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8422559, 8422560, 8422561, 8422562},
+        "child_names": {
+            "Achadas da Cruz", "Porto Moniz", "Ribeira da Janela",
+            "Seixal",
+        },
+        "child_admin_level": "8",
+    },
+    # Porto Santo (relation 8435154)
+    8435154: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8435154, "@type": "relation", "id": 8435154,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Porto Santo", "official_name": "Município do Porto Santo",
+            "wikidata": "Q27320", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8435139},
+        "child_names": {"Porto Santo"},
+        "child_admin_level": "8",
+    },
+    # Ribeira Brava (relation 8421415)
+    8421415: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421415, "@type": "relation", "id": 8421415,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Ribeira Brava", "official_name": "Município da Ribeira Brava",
+            "wikidata": "Q250139", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8426662, 8426663, 8426664, 8426665},
+        "child_names": {"Campanário", "Ribeira Brava", "Serra de Água", "Tábua"},
+        "child_admin_level": "8",
+    },
+    # Santa Cruz (relation 8421412)
+    8421412: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421412, "@type": "relation", "id": 8421412,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Santa Cruz", "official_name": "Município de Santa Cruz",
+            "wikidata": "Q658823", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8427677, 8427678, 8427679, 8427680, 8427681},
+        "child_names": {
+            "Camacha", "Caniço", "Gaula",
+            "Santa Cruz", "Santo António da Serra",
+        },
+        "child_admin_level": "8",
+    },
+    # Santana (relation 8421417)
+    8421417: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421417, "@type": "relation", "id": 8421417,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "Santana", "official_name": "Município de Santana",
+            "wikidata": "Q752123", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8435140, 8435141, 8435142, 8435143, 8435144, 8435145},
+        "child_names": {
+            "Arco de São Jorge", "Faial", "Ilha",
+            "Santana", "São Jorge", "São Roque do Faial",
+        },
+        "child_admin_level": "8",
+    },
+    # São Vicente (relation 8421418)
+    8421418: {
+        "country_code": "PT",
+        "properties": {
+            "@id": 8421418, "@type": "relation", "id": 8421418,
+            "admin_level": "7", "boundary": "administrative",
+            "name": "São Vicente", "official_name": "Município de São Vicente",
+            "wikidata": "Q304464", "ISO3166-1": "PT", "ISO3166-2": "PT-30",
+            "border_type": "município",
+        },
+        "child_relation_ids": {8435146, 8435147, 8435148},
+        "child_names": {"Boa Ventura", "Ponta Delgada", "São Vicente"},
+        "child_admin_level": "8",
+    },
+
+    # ── Taiwan: Kaohsiung City (relation 2127079, admin_level 4) ──────────
     2127079: {
         "country_code": "TW",
         "properties": {
