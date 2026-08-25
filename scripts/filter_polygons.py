@@ -72,6 +72,7 @@ PLACE_RELATION_TYPES = ("boundary", "multipolygon")
 SYNTHETIC_PARENT_DEFINITIONS = {
     # Portugal: Funchal (relation 8421413, admin_level 7)
     8421413: {
+        "country_code": "PT",
         "properties": {
             "@id": 8421413,
             "@type": "relation",
@@ -82,6 +83,7 @@ SYNTHETIC_PARENT_DEFINITIONS = {
             "official_name": "Município do Funchal",
             "wikidata": "Q25444",
             "ISO3166-1": "PT",
+            "ISO3166-2": "PT-30",
             "border_type": "município",
         },
         "child_relation_ids": {8427682, 8427683, 8427684, 8426650, 8426651, 8426652, 8426653, 8426654, 8426655, 8426656},
@@ -94,6 +96,7 @@ SYNTHETIC_PARENT_DEFINITIONS = {
     },
     # Taiwan: Kaohsiung City (relation 2127079, admin_level 4)
     2127079: {
+        "country_code": "TW",
         "properties": {
             "@id": 2127079,
             "@type": "relation",
@@ -117,6 +120,7 @@ SYNTHETIC_PARENT_DEFINITIONS = {
     },
     # United States: Alaska (relation 1116270, admin_level 4)
     1116270: {
+        "country_code": "US",
         "properties": {
             "@id": 1116270,
             "@type": "relation",
@@ -143,7 +147,7 @@ SYNTHETIC_PARENT_DEFINITIONS = {
             "Unorganized Borough", "Wrangell", "Yakutat"
         },
         "child_admin_level": "6",
-    }
+    },
 }
 
 def extract_relation_centres(admin_pbf_path):
@@ -526,18 +530,27 @@ class StreamProcessor:
         except (ValueError, TypeError):
             osm_id_num = None
 
+        geom = processed.get("geometry")
         if osm_id_num in SYNTHETIC_PARENT_DEFINITIONS:
-            self.seen_parents.add(osm_id_num)
+            # Only consider the parent as "seen" (so synthetic generation is skipped)
+            # IF the processed parent actually has a valid, non-empty polygon geometry!
+            if geom and (geom.get("type") in ("Polygon", "MultiPolygon")) and geom.get("coordinates"):
+                self.seen_parents.add(osm_id_num)
 
         # Track child polygons for potential parent synthesis
-        geom = processed.get("geometry")
         name = props.get("name", "")
         name_en = props.get("name:en", "")
         admin_lvl = str(props.get("admin_level", "")).strip()
+        feature_country = (self.country_code or props.get("ISO3166-1") or "").upper().strip()
 
         for pid, pdef in SYNTHETIC_PARENT_DEFINITIONS.items():
             if pid in self.seen_parents:
                 continue
+
+            target_country = (pdef.get("country_code") or "").upper().strip()
+            if target_country and feature_country and feature_country != target_country:
+                continue
+
             child_ids = pdef.get("child_relation_ids", set())
             child_names = pdef.get("child_names", set())
             target_child_lvl = str(pdef.get("child_admin_level", "")).strip()
@@ -559,6 +572,12 @@ class StreamProcessor:
         for pid, pdef in SYNTHETIC_PARENT_DEFINITIONS.items():
             if pid in self.seen_parents:
                 continue
+
+            target_country = (pdef.get("country_code") or "").upper().strip()
+            if target_country and self.country_code:
+                if self.country_code.upper().strip() != target_country:
+                    continue
+
             geoms = self.parent_collected_polygons.get(pid, [])
             if not geoms:
                 continue

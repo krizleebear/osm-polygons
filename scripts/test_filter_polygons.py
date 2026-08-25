@@ -361,24 +361,38 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(res_q["properties"]["area_type"], "quarter")
 
     def test_synthetic_parent_entities(self):
-        # 1. Funchal (relation 8421413, admin_level=7) synthesized from child parishes
-        parish1 = feat({"@type": "relation", "id": 8427682, "admin_level": "8", "name": "São Martinho"})
-        parish2 = feat({"@type": "relation", "id": 8427683, "admin_level": "8", "name": "Santa Maria Maior"})
+        # 1. Funchal (relation 8421413, admin_level=7) synthesized from child parishes for Portugal
+        parish1 = feat({"@type": "relation", "id": 8427682, "admin_level": "8", "name": "São Martinho", "ISO3166-1": "PT"})
+        parish2 = feat({"@type": "relation", "id": 8427683, "admin_level": "8", "name": "Santa Maria Maior", "ISO3166-1": "PT"})
         
-        results = list(filter_features([parish1, parish2]))
+        results = list(filter_features([parish1, parish2], country_code="PT"))
         self.assertEqual(len(results), 3)
         funchal = results[-1]
         self.assertEqual(funchal["properties"]["@id"], 8421413)
         self.assertEqual(funchal["properties"]["admin_level"], "7")
         self.assertEqual(funchal["properties"]["name"], "Funchal")
         self.assertEqual(funchal["properties"]["wikidata"], "Q25444")
+        self.assertEqual(funchal["properties"]["ISO3166-1"], "PT")
+        self.assertEqual(funchal["properties"]["ISO3166-2"], "PT-30")
         self.assertEqual(funchal["properties"]["area_type"], "municipality")
         self.assertEqual(funchal["geometry"]["type"], "MultiPolygon")
 
-        # 2. If parent was already in stream, do not synthesize duplicate
-        parent_funchal = feat({"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal"})
-        results_with_parent = list(filter_features([parent_funchal, parish1]))
+        # 2. Country Scoping: Parishes with matching names in Spain (ES) must NOT synthesize Funchal
+        spanish_parish = feat({"@type": "relation", "admin_level": "8", "name": "Santa Maria Maior", "ISO3166-1": "ES"})
+        results_es = list(filter_features([spanish_parish], country_code="ES"))
+        self.assertEqual(len(results_es), 1)
+        self.assertEqual(results_es[0]["properties"]["name"], "Santa Maria Maior")
+
+        # 3. If parent was already in stream with valid polygon, do not synthesize duplicate
+        parent_funchal = feat({"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal", "ISO3166-1": "PT"})
+        results_with_parent = list(filter_features([parent_funchal, parish1], country_code="PT"))
         self.assertEqual(len(results_with_parent), 2)
+
+        # 4. If parent in stream had non-polygon or empty geometry (unclosed ring drop), synthesize from children
+        broken_parent = {"type": "Feature", "geometry": None, "properties": {"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal"}}
+        results_broken = list(filter_features([broken_parent, parish1, parish2], country_code="PT"))
+        self.assertEqual(len(results_broken), 3)
+        self.assertEqual(results_broken[-1]["properties"]["name"], "Funchal")
 
 if __name__ == "__main__":
     unittest.main()
