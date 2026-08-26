@@ -30,6 +30,9 @@ hs_err_pid*
 /*.places.jsonl
 *-validation.json
 *-synthetic-defs.json
+validation-summary.json
+validation-summary.md
+map_viewer.html
 
 # IDE & Project Metadata
 .classpath
