@@ -51,6 +51,8 @@ jobs:
       itemPattern: |
         admin-polygons-parquet*/**
         osm-places-parquet*/**
+        validation-summary/**
+        admin-polygons-validation/**
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
   - task: Bash@3
@@ -66,6 +68,14 @@ jobs:
 
         # 2. Continental OSM Place-Nodes GeoParquet files
         find downloads -name "osm-places-*.parquet" ! -name "osm-places-all.parquet" -exec cp {} release-assets/ \;
+
+        # 3. Validation Summary & Archive
+        if [ -d "downloads/validation-summary" ]; then
+          find downloads/validation-summary -name "validation-summary.md" -exec cp {} release-assets/ \;
+        fi
+        if [ -d "downloads/admin-polygons-validation" ]; then
+          find downloads/admin-polygons-validation -name "validation.tar.gz" -exec cp {} release-assets/ \;
+        fi
 
         # Reclaim runner disk space immediately by removing downloaded temp folders
         rm -rf downloads
@@ -188,6 +198,8 @@ jobs:
       assets: |
         $(System.DefaultWorkingDirectory)/release-assets/*.parquet
         $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.md
+        $(System.DefaultWorkingDirectory)/release-assets/validation-summary.md
+        $(System.DefaultWorkingDirectory)/release-assets/validation.tar.gz
       assetUploadMode: 'delete'
       isDraft: ${{ parameters.isDraft }}
       isPreRelease: ${{ parameters.isPreRelease }}
