@@ -105,6 +105,35 @@ class AdminBoundaryScanner(osmium.SimpleHandler):
             self.parent_children[r.id].add(child_id)
             self.child_parents[child_id].add(r.id)
 
+    def infer_missing_children(self):
+        """For L2+ relations with no relation-members, find children by ISO prefix.
+
+        Some country boundaries (e.g. US) use direct Ways instead of nesting
+        child relations. This method infers parent-child relationships by
+        matching ISO3166-2 prefix of potential children against ISO3166-1 of
+        the parent.
+        """
+        for rid, info in self.admin_relations.items():
+            if self.parent_children[rid]:
+                continue
+            level = info["admin_level"]
+            if not level.isdigit() or int(level) > 2:
+                continue
+            iso1 = info["iso1"]
+            if not iso1:
+                continue
+
+            prefix = iso1 + "-"
+            for cid, cinfo in self.admin_relations.items():
+                if cid == rid:
+                    continue
+                clevel = cinfo["admin_level"]
+                if not clevel.isdigit() or int(clevel) <= int(level):
+                    continue
+                if cinfo["iso2"].startswith(prefix):
+                    self.parent_children[rid].add(cid)
+                    self.child_parents[cid].add(rid)
+
 
 def run_check_refs(pbf_path):
     """Run osmium check-refs -r -i and parse output."""
@@ -201,6 +230,7 @@ def validate(pbf_path, country_code=None):
     print("Step 2/3: Scanning admin boundary metadata ...", flush=True)
     scanner = AdminBoundaryScanner()
     scanner.apply_file(pbf_path)
+    scanner.infer_missing_children()
     print(f"  Found {len(scanner.admin_relations)} admin boundary relations.")
 
     # Build child completeness

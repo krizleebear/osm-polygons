@@ -135,6 +135,79 @@ class TestAdminBoundaryScanner(unittest.TestCase):
         self.assertGreater(self.scanner.relation_count, 2000)
 
 
+class TestInferMissingChildren(unittest.TestCase):
+    def _make_scanner(self, relations):
+        """Build a scanner with mock admin_relations."""
+        from collections import defaultdict
+        scanner = AdminBoundaryScanner()
+        for rid, info in relations.items():
+            scanner.admin_relations[rid] = {
+                "name": info.get("name", ""),
+                "admin_level": info.get("admin_level", ""),
+                "iso1": info.get("iso1", ""),
+                "iso2": info.get("iso2", ""),
+                "outer_total": 0,
+                "member_relations": info.get("member_relations", []),
+                "tags": {},
+            }
+            for child_id in info.get("member_relations", []):
+                scanner.parent_children[rid].add(child_id)
+                scanner.child_parents[child_id].add(rid)
+        return scanner
+
+    def test_us_l2_finds_l4_children(self):
+        scanner = self._make_scanner({
+            148838: {"name": "United States", "admin_level": "2", "iso1": "US", "iso2": ""},
+            60759: {"name": "Vermont", "admin_level": "4", "iso1": "", "iso2": "US-VT"},
+            114690: {"name": "Texas", "admin_level": "4", "iso1": "", "iso2": "US-TX"},
+        })
+        scanner.infer_missing_children()
+        children = scanner.parent_children[148838]
+        self.assertIn(60759, children)
+        self.assertIn(114690, children)
+
+    def test_existing_members_not_overwritten(self):
+        scanner = self._make_scanner({
+            148838: {"name": "United States", "admin_level": "2", "iso1": "US", "iso2": "",
+                     "member_relations": [99999]},
+            60759: {"name": "Vermont", "admin_level": "4", "iso1": "", "iso2": "US-VT"},
+        })
+        scanner.infer_missing_children()
+        self.assertIn(99999, scanner.parent_children[148838])
+
+    def test_no_iso1_no_inference(self):
+        scanner = self._make_scanner({
+            100: {"name": "Unknown", "admin_level": "2", "iso1": "", "iso2": ""},
+            200: {"name": "Region", "admin_level": "4", "iso1": "", "iso2": "XX-R1"},
+        })
+        scanner.infer_missing_children()
+        self.assertEqual(len(scanner.parent_children[100]), 0)
+
+    def test_l3_ignored(self):
+        scanner = self._make_scanner({
+            100: {"name": "Region", "admin_level": "3", "iso1": "DE", "iso2": ""},
+            200: {"name": "State", "admin_level": "4", "iso1": "", "iso2": "DE-BY"},
+        })
+        scanner.infer_missing_children()
+        self.assertEqual(len(scanner.parent_children[100]), 0)
+
+    def test_unrelated_children_excluded(self):
+        scanner = self._make_scanner({
+            148838: {"name": "United States", "admin_level": "2", "iso1": "US", "iso2": ""},
+            68841: {"name": "Ontario", "admin_level": "4", "iso1": "", "iso2": "CA-ON"},
+        })
+        scanner.infer_missing_children()
+        self.assertEqual(len(scanner.parent_children[148838]), 0)
+
+    def test_child_parent_backlink(self):
+        scanner = self._make_scanner({
+            148838: {"name": "United States", "admin_level": "2", "iso1": "US", "iso2": ""},
+            60759: {"name": "Vermont", "admin_level": "4", "iso1": "", "iso2": "US-VT"},
+        })
+        scanner.infer_missing_children()
+        self.assertIn(148838, scanner.child_parents[60759])
+
+
 @unittest.skipUnless(HAS_PBF, "madeira-latest.osm.pbf not found")
 class TestValidate(unittest.TestCase):
     def setUp(self):
