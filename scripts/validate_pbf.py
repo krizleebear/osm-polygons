@@ -211,6 +211,30 @@ def generate_synthetic_defs(enriched, scanner, broken_ids):
     return defs
 
 
+def generate_parent_mapping(scanner, country_code=None):
+    """Generate a child_id -> parent metadata mapping from the scanner's admin boundary data."""
+    mapping = {}
+    for child_id, parent_ids in scanner.child_parents.items():
+        for parent_id in parent_ids:
+            if parent_id not in scanner.admin_relations:
+                continue
+            pinfo = scanner.admin_relations[parent_id]
+            # Filter by country if specified
+            if country_code:
+                iso1 = pinfo.get("iso1", "")
+                iso2 = pinfo.get("iso2", "")
+                cc_from_iso1 = iso1.upper().strip()
+                cc_from_iso2 = iso2.split("-")[0].upper().strip() if iso2 else ""
+                if cc_from_iso1 != country_code.upper() and cc_from_iso2 != country_code.upper():
+                    continue
+            mapping[str(child_id)] = {
+                "parent_osm_id": parent_id,
+                "parent_name": pinfo.get("name", ""),
+                "parent_iso3166_2": pinfo.get("iso2", ""),
+            }
+    return mapping
+
+
 def validate(pbf_path, country_code=None):
     print(f"Scanning {pbf_path} ...")
     if country_code:
@@ -222,16 +246,36 @@ def validate(pbf_path, country_code=None):
     broken = run_check_refs(pbf_path)
     print(f"  Found {len(broken)} relations with broken references.")
 
-    if not broken:
-        print("\nALL references OK — no broken relations.")
-        return 0
-
     # Step 2: Scan ALL admin boundary metadata (need membership for child detection)
     print("Step 2/3: Scanning admin boundary metadata ...", flush=True)
     scanner = AdminBoundaryScanner()
     scanner.apply_file(pbf_path)
     scanner.infer_missing_children()
     print(f"  Found {len(scanner.admin_relations)} admin boundary relations.")
+
+    # Always generate parent mapping (needed for child-to-parent enrichment)
+    parent_mapping = generate_parent_mapping(scanner, country_code)
+    mapping_path = pbf_path.replace(".osm.pbf", "-parent-mapping.json")
+    with open(mapping_path, "w") as f:
+        json.dump(parent_mapping, f, indent=2, ensure_ascii=False)
+    print(f"Parent mapping written to: {mapping_path} ({len(parent_mapping)} child entries)")
+
+    if not broken:
+        print("\nALL references OK — no broken relations.")
+        # Write empty validation summary
+        summary = {
+            "pbf_file": pbf_path,
+            "country_filter": country_code,
+            "total_relations": scanner.relation_count,
+            "broken_total": 0,
+            "broken_admin_boundary": 0,
+            "broken": [],
+        }
+        summary_path = pbf_path.replace(".osm.pbf", "-validation.json")
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+        print(f"JSON summary written to: {summary_path}")
+        return 0
 
     # Build child completeness
     broken_ids = set(broken.keys())

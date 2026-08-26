@@ -383,10 +383,12 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(len(results_es), 1)
         self.assertEqual(results_es[0]["properties"]["name"], "Santa Maria Maior")
 
-        # 3. If parent was already in stream with valid polygon, do not synthesize duplicate
+        # 3. If parent was already in stream with valid polygon, no Funchal duplicate
+        #    but Madeira L4 is still synthesized from the lone freguesia
         parent_funchal = feat({"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal", "ISO3166-1": "PT"})
         results_with_parent = list(filter_features([parent_funchal, parish1], country_code="PT"))
-        self.assertEqual(len(results_with_parent), 2)
+        # 3 features: real Funchal + parish1 + synthesized Madeira L4
+        self.assertEqual(len(results_with_parent), 3)
 
         # 4. If parent in stream had non-polygon or empty geometry (unclosed ring drop), synthesize from children
         broken_parent = {"type": "Feature", "geometry": None, "properties": {"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal"}}

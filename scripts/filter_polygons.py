@@ -345,6 +345,17 @@ def load_synthetic_defs(path):
         SYNTHETIC_PARENT_DEFINITIONS[rid] = pdef
 
 
+PARENT_MAPPING = {}
+
+
+def load_parent_mapping(path):
+    """Load child-to-parent mapping from JSON and set global dict."""
+    global PARENT_MAPPING
+    with open(path, "r") as f:
+        PARENT_MAPPING = json.load(f)
+    sys.stderr.write(f"Loaded parent mapping: {len(PARENT_MAPPING)} child entries\n")
+
+
 def extract_relation_centres(admin_pbf_path):
     """
     Extracts admin_centre and label member coordinates from an OSM admin PBF extract.
@@ -512,7 +523,7 @@ def derive_area_type(props, admin_level_str):
 
     return "administrative"
 
-def process_feature(data, require_wikidata=False, country_code=None, relation_centres=None):
+def process_feature(data, require_wikidata=False, country_code=None, relation_centres=None, parent_mapping=None):
     if data.get("type") != "Feature":
         return None
 
@@ -668,6 +679,16 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
             props["center_lat"] = centres["label"][1]
             props["center_lon"] = centres["label"][0]
 
+    # Task 11: Parent-child relationship enrichment
+    if osm_id_num is not None and parent_mapping:
+        parent_info = parent_mapping.get(str(osm_id_num))
+        if parent_info:
+            props["parent_osm_id"] = parent_info["parent_osm_id"]
+            if parent_info.get("parent_iso3166_2"):
+                props["parent_iso3166_2"] = parent_info["parent_iso3166_2"]
+            if parent_info.get("parent_name"):
+                props["parent_name"] = parent_info["parent_name"]
+
     return data
 
 class StreamProcessor:
@@ -675,11 +696,12 @@ class StreamProcessor:
     Processes a stream of GeoJSON features, tracking known entities and synthesizing
     missing parent divisions from constituent child divisions per SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md.
     """
-    def __init__(self, require_wikidata=False, country_code=None, relation_centres=None, admin_pbf=None):
+    def __init__(self, require_wikidata=False, country_code=None, relation_centres=None, admin_pbf=None, parent_mapping=None):
         self.require_wikidata = require_wikidata
         self.country_code = country_code
         self.seen_parents = set()
         self.parent_collected_polygons = {pid: [] for pid in SYNTHETIC_PARENT_DEFINITIONS}
+        self.parent_mapping = parent_mapping or PARENT_MAPPING
         if relation_centres is not None:
             self.relation_centres = relation_centres
         elif admin_pbf:
@@ -692,6 +714,7 @@ class StreamProcessor:
         self.count_with_admin_centre = 0
         self.count_with_label = 0
         self.count_synthesized = 0
+        self.count_with_parent = 0
 
     def process_line(self, line_str):
         if not line_str or not line_str.strip():
@@ -705,7 +728,8 @@ class StreamProcessor:
             data,
             require_wikidata=self.require_wikidata,
             country_code=self.country_code,
-            relation_centres=self.relation_centres
+            relation_centres=self.relation_centres,
+            parent_mapping=self.parent_mapping
         )
         if not processed:
             return None
@@ -718,6 +742,8 @@ class StreamProcessor:
             self.count_with_admin_centre += 1
         if "label:lat" in props:
             self.count_with_label += 1
+        if "parent_osm_id" in props:
+            self.count_with_parent += 1
 
         osm_id = props.get("id") or props.get("@id") or props.get("osm_id")
         try:
@@ -810,6 +836,7 @@ class StreamProcessor:
 
     def print_summary(self, stream_name=None):
         pct = (self.count_with_center / self.count_total * 100.0) if self.count_total > 0 else 0.0
+        parent_pct = (self.count_with_parent / self.count_total * 100.0) if self.count_total > 0 else 0.0
         label = f": {stream_name}" if stream_name else ""
         sys.stderr.write("============================================================\n")
         sys.stderr.write(f" filter_polygons Execution Summary{label}\n")
@@ -817,6 +844,7 @@ class StreamProcessor:
         sys.stderr.write(f" With Center Coordinates:   {self.count_with_center:,} ({pct:.1f}%)\n")
         sys.stderr.write(f"   - From admin_centre:     {self.count_with_admin_centre:,}\n")
         sys.stderr.write(f"   - From label:            {self.count_with_label:,}\n")
+        sys.stderr.write(f" With Parent Relation:      {self.count_with_parent:,} ({parent_pct:.1f}%)\n")
         if self.count_synthesized > 0:
             sys.stderr.write(f" Synthesized Parents:       {self.count_synthesized:,}\n")
         sys.stderr.write("============================================================\n")
@@ -846,11 +874,14 @@ def main():
     parser.add_argument("--country-code", type=str, help="Optional country code ISO override")
     parser.add_argument("--admin-pbf", type=str, help="Optional path to filtered admin PBF file to extract relation center coordinates")
     parser.add_argument("--synthetic-defs", type=str, help="Path to synthetic parent definitions JSON (from validate_pbf.py)")
+    parser.add_argument("--parent-mapping", type=str, help="Path to parent-mapping JSON (child_id -> parent info, from validate_pbf.py)")
     parser.add_argument("input_file", nargs="?", help="Input geojsonseq file (or stdin if omitted)")
     args = parser.parse_args()
 
     if args.synthetic_defs:
         load_synthetic_defs(args.synthetic_defs)
+    if args.parent_mapping:
+        load_parent_mapping(args.parent_mapping)
 
     processor = StreamProcessor(
         require_wikidata=args.require_wikidata,
