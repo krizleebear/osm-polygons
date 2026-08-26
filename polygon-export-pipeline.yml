@@ -1520,6 +1520,16 @@ stages:
         itemPattern: 'admin-polygons-simplified-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)/archives'
 
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download all validation artifacts'
+      continueOnError: true
+      inputs:
+        buildType: 'current'
+        buildVersionToDownload: 'latest'
+        itemPattern: 'validation-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/validation-artifacts'
+
     - task: Bash@3
       enabled: true
       displayName: 'Bundle global artifact & generate admin_level statistics'
@@ -1533,6 +1543,20 @@ stages:
             find archives -name "simplified-*.tar.gz" | while read -r archive; do
               tar xfz "$archive" -C . || true
             done
+          fi
+
+          # Collect all validation.json files into a single directory and archive
+          mkdir -p validation
+          if [ -d "validation-artifacts" ]; then
+            find validation-artifacts -name "*-validation.json" -o -name "validation.json" | while read -r vfile; do
+              cp "$vfile" validation/ || true
+            done
+          fi
+          VALIDATION_COUNT=$(find validation -name "*.json" 2>/dev/null | wc -l)
+          echo "Collected $VALIDATION_COUNT validation file(s)"
+          if [ "$VALIDATION_COUNT" -gt 0 ]; then
+            tar cfz validation.tar.gz validation/
+            python3 scripts/generate_validation_summary.py validation/ || true
           fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
@@ -1613,6 +1637,26 @@ stages:
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
         artifact: 'admin-levels-summary'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store validation archive artifact'
+      condition: succeeded()
+      continueOnError: true
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/validation.tar.gz'
+        artifact: 'admin-polygons-validation'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store validation summary artifact'
+      condition: succeeded()
+      continueOnError: true
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/validation/validation-summary.md'
+        artifact: 'validation-summary'
         publishLocation: 'pipeline'
 
     - task: Bash@3
