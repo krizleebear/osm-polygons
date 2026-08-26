@@ -1556,8 +1556,11 @@ stages:
           # Collect all validation.json files into a single directory and archive
           mkdir -p validation
           if [ -d "validation-artifacts" ]; then
-            find validation-artifacts -name "*-validation.json" -o -name "validation.json" | while read -r vfile; do
-              cp "$vfile" validation/ || true
+            for vdir in validation-artifacts/validation-*/; do
+              if [ -f "${vdir}validation.json" ]; then
+                ARTIFACT_NAME=$(basename "$vdir")
+                cp "${vdir}validation.json" "validation/${ARTIFACT_NAME}-validation.json" || true
+              fi
             done
           fi
           VALIDATION_COUNT=$(find validation -name "*.json" 2>/dev/null | wc -l)
