@@ -78,6 +78,12 @@ Filtered Admin PBF
 | 22 | `*-validation.json` | `validate_pbf.py` | `generate_validation_summary.py` |
 | 23 | `validation-summary.md/.json` | `generate_validation_summary.py` | GitHub Release asset |
 
+### D. External Fallback Sources
+
+| # | Mechanism | Purpose |
+|---|-----------|---------|
+| 24 | Overture Maps `divisions` theme | Fallback geometry source for missing parent polygons (e.g. US admin_level=2). Query via DuckDB + S3. Match by `wikidata` or `names.primary`. |
+
 ## Known Gaps
 
 ### US admin_level=2 (osm_id 148838)
@@ -86,7 +92,33 @@ The US country boundary relation has **1,710 outer ways** spanning the full Nort
 
 **Current state:** The 51 US states (L4) are correctly exported with `parent_osm_id=148838` (via `infer_missing_children()`), but the parent polygon itself is missing from the output.
 
-**Potential future fix:** Load missing geometries from Overture Maps using the known relation ID.
+### Overture Maps Fallback (Potential Fix)
+
+For missing parent geometries, Overture Maps `divisions` theme provides an alternative data source:
+
+**Query pattern (DuckDB):**
+```sql
+-- Step 1: Find Overture division ID by wikidata or name
+SET s3_region='us-west-2';
+SET variable division_id = (
+    SELECT id
+    FROM read_parquet('s3://overturemaps-us-west-2/release/2026-08-19.0/theme=divisions/type=division/*')
+    WHERE wikidata = 'Q30'  -- or names.primary = 'United States'
+    AND subtype = 'country'
+    LIMIT 1
+);
+
+-- Step 2: Fetch the polygon geometry
+COPY (
+    SELECT id, names.primary as name, subtype, admin_level, geometry
+    FROM read_parquet('s3://overturemaps-us-west-2/release/2026-08-19.0/theme=divisions/type=division_area/*')
+    WHERE division_id = getvariable('division_id')
+) TO 'overture_us_country.geojson' WITH (FORMAT GDAL, DRIVER 'GeoJSON');
+```
+
+**Verified result:** Overture provides a complete MultiPolygon with 29 sub-polygons (continental US + Alaska + Hawaii + territories). The main continental polygon has 73,154 coordinates.
+
+**Matching strategy:** Use `wikidata` tag (e.g. `Q30` for US) or `names.primary` to look up the Overture division, since OSM relation IDs are not directly stored in Overture.
 
 ### Other Potential L2 Gaps
 
