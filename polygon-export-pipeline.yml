@@ -6,8 +6,8 @@ resources:
   containers:
   - container: osmium-tool
     # Use mirror.gcr.io to prevent Docker Hub pull rate limits during multi-job matrix execution
-    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.19.0
-    #image: krizleebear/docker-osmium-tool:v1.19.0
+    image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.19.1
+    #image: krizleebear/docker-osmium-tool:v1.19.1
     #endpoint: docker-krizleebear
   - container: osm-tools
     #image: krizleebear/osm-tools:latest
@@ -803,19 +803,33 @@ stages:
             r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality \
             w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
 
-          # Step 2: Filter OSM place nodes companion dataset (points) per PLACE_NODE_EXPORTER_SPEC.md:
+          # Step 2b: Filter OSM place nodes companion dataset (points) per PLACE_NODE_EXPORTER_SPEC.md:
           osmium tags-filter --output ${PLACES_PBF} --overwrite ${INPUT_PBF} \
             n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality
+
+          # Step 3: Validate PBF for broken admin boundary references and generate synthetic parent definitions
+          python3 scripts/validate_pbf.py ${INPUT_PBF} --country $(COUNTRY_CODE) || true
+          SYNTHETIC_DEFS=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-synthetic-defs.json/')
+          VALIDATION_JSON=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-validation.json/')
+          if [ -f "${SYNTHETIC_DEFS}" ]; then
+            cp ${SYNTHETIC_DEFS} ./synthetic-defs.json
+            SYNTHETIC_DEFS=./synthetic-defs.json
+          else
+            SYNTHETIC_DEFS=""
+          fi
+          if [ -f "${VALIDATION_JSON}" ]; then
+            cp ${VALIDATION_JSON} ./validation.json
+          fi
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
 
-          # Step 3: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
+          # Step 4: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
           osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} > ${POLYGON_JSON}
+            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} ${SYNTHETIC_DEFS:+--synthetic-defs ${SYNTHETIC_DEFS}} > ${POLYGON_JSON}
           rm -f ${ADMIN_PBF}
 
-          # Step 4: Stream export place nodes directly to stdout and structure with filter_places.py
+          # Step 5: Stream export place nodes directly to stdout and structure with filter_places.py
           osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
@@ -826,6 +840,14 @@ stages:
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store validation artifacts'
+      inputs:
+        targetPath: 'validation.json'
+        artifact: 'validation-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
 
     - task: PublishPipelineArtifact@1
@@ -1498,6 +1520,16 @@ stages:
         itemPattern: 'admin-polygons-simplified-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)/archives'
 
+    - task: DownloadPipelineArtifact@2
+      enabled: true
+      displayName: 'Download all validation artifacts'
+      continueOnError: true
+      inputs:
+        buildType: 'current'
+        buildVersionToDownload: 'latest'
+        itemPattern: 'validation-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/validation-artifacts'
+
     - task: Bash@3
       enabled: true
       displayName: 'Bundle global artifact & generate admin_level statistics'
@@ -1511,6 +1543,20 @@ stages:
             find archives -name "simplified-*.tar.gz" | while read -r archive; do
               tar xfz "$archive" -C . || true
             done
+          fi
+
+          # Collect all validation.json files into a single directory and archive
+          mkdir -p validation
+          if [ -d "validation-artifacts" ]; then
+            find validation-artifacts -name "*-validation.json" -o -name "validation.json" | while read -r vfile; do
+              cp "$vfile" validation/ || true
+            done
+          fi
+          VALIDATION_COUNT=$(find validation -name "*.json" 2>/dev/null | wc -l)
+          echo "Collected $VALIDATION_COUNT validation file(s)"
+          if [ "$VALIDATION_COUNT" -gt 0 ]; then
+            tar cfz validation.tar.gz validation/
+            python3 scripts/generate_validation_summary.py validation/ || true
           fi
 
           OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
@@ -1591,6 +1637,26 @@ stages:
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
         artifact: 'admin-levels-summary'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store validation archive artifact'
+      condition: succeeded()
+      continueOnError: true
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/validation.tar.gz'
+        artifact: 'admin-polygons-validation'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store validation summary artifact'
+      condition: succeeded()
+      continueOnError: true
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/validation/validation-summary.md'
+        artifact: 'validation-summary'
         publishLocation: 'pipeline'
 
     - task: Bash@3

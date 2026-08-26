@@ -28,6 +28,8 @@ hs_err_pid*
 /*.pbf
 /*.parquet
 /*.places.jsonl
+*-validation.json
+*-synthetic-defs.json
 
 # IDE & Project Metadata
 .classpath

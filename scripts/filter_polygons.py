@@ -330,6 +330,21 @@ SYNTHETIC_PARENT_DEFINITIONS = {
     },
 }
 
+
+def load_synthetic_defs(path):
+    """Load synthetic parent definitions from JSON and merge into global dict."""
+    global SYNTHETIC_PARENT_DEFINITIONS
+    with open(path, "r") as f:
+        defs = json.load(f)
+    for rid_str, pdef in defs.items():
+        rid = int(rid_str)
+        if isinstance(pdef.get("child_relation_ids"), list):
+            pdef["child_relation_ids"] = set(pdef["child_relation_ids"])
+        if isinstance(pdef.get("child_names"), list):
+            pdef["child_names"] = set(pdef["child_names"])
+        SYNTHETIC_PARENT_DEFINITIONS[rid] = pdef
+
+
 def extract_relation_centres(admin_pbf_path):
     """
     Extracts admin_centre and label member coordinates from an OSM admin PBF extract.
@@ -830,8 +845,12 @@ def main():
     parser.add_argument("--require-wikidata", action="store_true", help="Require wikidata property")
     parser.add_argument("--country-code", type=str, help="Optional country code ISO override")
     parser.add_argument("--admin-pbf", type=str, help="Optional path to filtered admin PBF file to extract relation center coordinates")
+    parser.add_argument("--synthetic-defs", type=str, help="Path to synthetic parent definitions JSON (from validate_pbf.py)")
     parser.add_argument("input_file", nargs="?", help="Input geojsonseq file (or stdin if omitted)")
     args = parser.parse_args()
+
+    if args.synthetic_defs:
+        load_synthetic_defs(args.synthetic_defs)
 
     processor = StreamProcessor(
         require_wikidata=args.require_wikidata,

@@ -38,8 +38,8 @@ RUN apt-get update && \
     dpkg-reconfigure --frontend noninteractive tzdata && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy latest Osmium CLI Tool from official pipeline container (v1.19.0)
-COPY --from=krizleebear/docker-osmium-tool:v1.19.0 /usr/bin/osmium /usr/local/bin/osmium
+# Copy latest Osmium CLI Tool from official pipeline container (v1.19.1)
+COPY --from=krizleebear/docker-osmium-tool:v1.19.1 /usr/bin/osmium /usr/local/bin/osmium
 
 # 2b. Install DuckDB CLI + Spatial Extension (Multi-Arch)
 RUN set -eux; \
