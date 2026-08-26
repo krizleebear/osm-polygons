@@ -74,17 +74,7 @@ class AdminBoundaryScanner(osmium.SimpleHandler):
         self.admin_relations = {}     # id -> {name, level, iso1, iso2, ...}
         self.parent_children = defaultdict(set)  # parent_id -> {child_id, ...}
         self.child_parents = defaultdict(set)    # child_id -> {parent_id, ...}
-        self.all_way_ids = set()
-        self.node_count = 0
-        self.way_count = 0
         self.relation_count = 0
-
-    def node(self, n):
-        self.node_count += 1
-
-    def way(self, w):
-        self.all_way_ids.add(w.id)
-        self.way_count += 1
 
     def relation(self, r):
         self.relation_count += 1
@@ -210,7 +200,7 @@ def validate(pbf_path, country_code=None):
     # Step 2: Scan ALL admin boundary metadata (need membership for child detection)
     print("Step 2/3: Scanning admin boundary metadata ...", flush=True)
     scanner = AdminBoundaryScanner()
-    scanner.apply_file(pbf_path, locations=True)
+    scanner.apply_file(pbf_path)
     print(f"  Found {len(scanner.admin_relations)} admin boundary relations.")
 
     # Build child completeness
@@ -265,8 +255,6 @@ def validate(pbf_path, country_code=None):
 
     # Stats
     print(f"PBF statistics:")
-    print(f"  Nodes:       {scanner.node_count:>10,}")
-    print(f"  Ways:        {scanner.way_count:>10,}")
     print(f"  Relations:   {scanner.relation_count:>10,}")
     print()
 
@@ -302,8 +290,6 @@ def validate(pbf_path, country_code=None):
     summary = {
         "pbf_file": pbf_path,
         "country_filter": country_code,
-        "total_nodes": scanner.node_count,
-        "total_ways": scanner.way_count,
         "total_relations": scanner.relation_count,
         "broken_total": len(broken),
         "broken_admin_boundary": len(enriched),

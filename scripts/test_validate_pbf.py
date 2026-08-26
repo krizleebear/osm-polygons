@@ -131,9 +131,6 @@ class TestAdminBoundaryScanner(unittest.TestCase):
         parents = self.scanner.child_parents.get(8421413, set())
         self.assertIn(1629145, parents)
 
-    def test_way_count(self):
-        self.assertGreater(self.scanner.way_count, 100000)
-
     def test_relation_count(self):
         self.assertGreater(self.scanner.relation_count, 2000)
 
