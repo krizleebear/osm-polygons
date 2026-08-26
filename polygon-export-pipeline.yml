@@ -852,6 +852,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store validation artifacts'
+      continueOnError: true
       inputs:
         targetPath: 'validation.json'
         artifact: 'validation-$(COUNTRY_CODE)-$(OSM_REGION)'
