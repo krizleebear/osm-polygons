@@ -32,7 +32,6 @@ hs_err_pid*
 *-synthetic-defs.json
 validation-summary.json
 validation-summary.md
-map_viewer.html
 
 # IDE & Project Metadata
 .classpath
