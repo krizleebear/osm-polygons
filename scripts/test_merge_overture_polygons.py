@@ -13,6 +13,7 @@ from merge_overture_polygons import (
     derive_area_type,
     build_feature,
     read_present_osm_ids,
+    compute_health,
 )
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -151,7 +152,7 @@ class TestCliIntegration(unittest.TestCase):
             ov = {2088990: POLY}
             proc = self._run(tmp, [present_ft], val, ov, country="XK")
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("1 merged", proc.stderr)
+            self.assertIn("1 inserted", proc.stderr)
             out = [json.loads(l) for l in proc.stdout.splitlines() if l]
             self.assertEqual(len(out), 2)
             merged = out[1]["properties"]
@@ -193,6 +194,101 @@ class TestCliIntegration(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             out = [json.loads(l) for l in proc.stdout.splitlines() if l]
             self.assertEqual(len(out), 1)
+
+
+class TestHealthCheckReplace(unittest.TestCase):
+    """Present-but-damaged candidates must be replaced by the Overture LAND
+    geometry when coverage (land covered) or inside (overreach) falls below
+    the health thresholds. Requires the duckdb CLI + spatial extension."""
+
+    HALF = {"type": "Polygon", "coordinates": [[[20.0, 41.0], [20.5, 41.0], [20.5, 42.0], [20.0, 42.0], [20.0, 41.0]]]}
+    BIG = {"type": "Polygon", "coordinates": [[[19.0, 40.0], [22.0, 40.0], [22.0, 43.0], [19.0, 43.0], [19.0, 40.0]]]}
+
+    def _present(self, tmpdir, geom):
+        path = os.path.join(tmpdir, "in.geojsonseq")
+        ft = {"type": "Feature", "geometry": geom,
+              "properties": {"@type": "relation", "@id": 2088990, "id": 2088990,
+                             "name": "Kosova / Kosovo", "admin_level": "2", "ISO3166-1": "XK"}}
+        with open(path, "w") as fh:
+            fh.write(line(ft))
+        return path
+
+    def _run(self, tmpdir, present_geom, overture_geom, extra_args=None):
+        import subprocess
+        stream = self._present(tmpdir, present_geom)
+        val = os.path.join(tmpdir, "validation.json")
+        with open(val, "w") as fh:
+            json.dump({"broken": [{"id": 2088990, "admin_level": "2", "name": "Kosova / Kosovo", "iso1": "XK"}]}, fh)
+        ov = os.path.join(tmpdir, "overture.geojsonseq")
+        with open(ov, "w") as fh:
+            fh.write(line({"type": "Feature", "geometry": overture_geom, "properties": {"osm_id": 2088990}}))
+        cmd = ["python3", os.path.join(MODULE_DIR, "merge_overture_polygons.py"),
+               "--validation", val, "--overture", ov, "--candidates", CANDIDATES,
+               "--country-code", "XK"] + (extra_args or []) + [stream]
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    def test_present_healthy_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self._run(tmp, POLY, POLY)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("KEEP osm_id 2088990", proc.stderr)
+            self.assertIn("0 replaced", proc.stderr)
+            out = [json.loads(l) for l in proc.stdout.splitlines() if l]
+            self.assertEqual(len(out), 1)
+            self.assertEqual(out[0]["geometry"], POLY)
+            self.assertEqual(out[0]["properties"]["name"], "Kosova / Kosovo")
+
+    def test_present_truncated_replaced(self):
+        # Present polygon covers only ~50% of the land -> coverage < 0.95
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self._run(tmp, self.HALF, POLY)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("REPLACE osm_id 2088990", proc.stderr)
+            self.assertIn("1 replaced", proc.stderr)
+            out = [json.loads(l) for l in proc.stdout.splitlines() if l]
+            self.assertEqual(len(out), 1)
+            # Geometry swapped to the Overture LAND geometry; metadata preserved
+            self.assertEqual(out[0]["geometry"], POLY)
+            self.assertEqual(out[0]["properties"]["name"], "Kosova / Kosovo")
+            self.assertEqual(out[0]["properties"]["admin_level"], "2")
+
+    def test_present_overreach_replaced(self):
+        # Present polygon extends far beyond the land -> inside < 0.90
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self._run(tmp, self.BIG, POLY)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("REPLACE osm_id 2088990", proc.stderr)
+            self.assertIn("1 replaced", proc.stderr)
+            out = [json.loads(l) for l in proc.stdout.splitlines() if l]
+            self.assertEqual(len(out), 1)
+            self.assertEqual(out[0]["geometry"], POLY)
+
+    def test_present_loose_thresholds_keep(self):
+        # A lenient threshold must keep the truncated polygon untouched
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self._run(tmp, self.HALF, POLY, extra_args=["--min-coverage", "0.4", "--min-inside", "0.4"])
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("KEEP osm_id 2088990", proc.stderr)
+            self.assertIn("0 replaced", proc.stderr)
+            out = [json.loads(l) for l in proc.stdout.splitlines() if l]
+            self.assertEqual(out[0]["geometry"], self.HALF)
+
+
+class TestComputeHealth(unittest.TestCase):
+    def test_identical_geometry_is_healthy(self):
+        health = compute_health({2088990: POLY}, {2088990: POLY})
+        coverage, inside = health[2088990]
+        self.assertAlmostEqual(coverage, 1.0, delta=0.02)
+        self.assertAlmostEqual(inside, 1.0, delta=0.02)
+
+    def test_missing_land_omitted(self):
+        self.assertEqual(compute_health({2088990: POLY}, {}), {})
+
+    def test_null_present_geometry_unhealthy(self):
+        health = compute_health({2088990: None}, {2088990: POLY})
+        coverage, inside = health[2088990]
+        self.assertEqual(coverage, 0.0)
+        self.assertEqual(inside, 0.0)
 
 
 if __name__ == "__main__":

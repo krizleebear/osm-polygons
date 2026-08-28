@@ -47,8 +47,8 @@ Confirmed by the project owner (interview 2026-08-28):
 |---|---|---|
 | Execution | Optional **stage in `polygon-export-pipeline.yml`**, gated by pipeline parameter `fetchOverturePolygons` (default `false`) | No separate pipeline; runs only when enabled; mirrors the PBF-preload pattern |
 | Candidate list | Curated `scripts/overture-candidates.json` in repo | Stable, versioned, reviewable; extended only on evidence |
-| Merge point | Export stage, directly into the region `.geojsonseq` | simplify / parquet / package stages remain untouched |
-| Overwrite behavior | Insert **only if missing** | Never replace an existing (even imperfect) OSM geometry |
+| Merge point | Export stage, dedicated `merge_overture` matrix job republishing region `.geojsonseq` | simplify / parquet / package consume the merged artifact unchanged (only their stage conditions became skip-safe) |
+| Overwrite behavior | Insert **if missing**; health-check **replace** if present-but-damaged | Never replace a healthy OSM geometry; replace truncated / overreaching polygons with the Overture **land** geometry (coverage < 95% or inside < 90%) |
 | Release pinning | **Always "latest"** | Overture retention purges pinned versions after ~3 months |
 | Script execution | Python stdlib + DuckDB **CLI** | Identical local and CI paths (DuckDB CLI v1.5.5 with `spatial` + `httpfs` verified locally; container `osm2parquet:v1.0.6` is CLI-based and ships Python 3) |
 
@@ -89,28 +89,42 @@ Errors fail explicitly with diagnostics (AGENTS.md §5); the optional stage is i
 
 ### 4.3 Consumption — `scripts/merge_overture_polygons.py` (new)
 
-Run in the `export` job directly after `filter_polygons.py`:
+Runs in the dedicated `merge_overture` matrix job (container `osm2parquet:v1.0.6`, 25 country entries, `dependsOn: export`, gated by `fetchOverturePolygons`) right after the export stage publishes the raw streams:
 
 1. Load region `*-validation.json` → genuine broken set (ISO matched to `country_filter`).
 2. Load Overture artifact(s) → geometry map by `osm_id`.
-3. Read `filter_polygons.py` output → determine which broken relations are **actually absent**.
-4. For exactly those: build a feature from Overture geometry + OSM metadata (name, admin_level, `©id`, tags) from validation.json; append to the stream.
-5. Missing artifact / unresolved lookup → explicit failure (no silent fallback).
+3. Read the region `.geojsonseq` stream → determine which broken relations are **actually absent**.
+4. For exactly those: build a feature from Overture **land** geometry + OSM metadata (name, admin_level, `@id`, tags) from validation.json; append to the stream.
+5. **Health-check replace (present-but-damaged):** for candidates already present in the stream, run a DuckDB spatial intersection of present vs. Overture land geometry through the DuckDB CLI (`ST_GeomFromGeoJSON` over double-encoded NDJSON, `ST_Area(ST_Intersection(...))`, `COPY ... TO (FORMAT JSON)`). Two ratios drive the decision:
+   - `coverage = area(present ∩ land) / area(land)` — fraction of the country's land the present polygon actually covers (DuckDB `ST_Area` ≈ spherical/geodesic; exact for the decision).
+   - `inside = area(present ∩ land) / area(present)` — fraction of the present polygon that is land (overreach detection).
+   - Fix `--min-coverage 0.95`, `--min-inside 0.90`: **keep** if both healthy, otherwise **replace** the feature geometry with the Overture land geometry (OSM properties preserved untouched). Non-`Polygon`/`MultiPolygon` present geometries (e.g. `Point`/`LineString`, `geometry: null`) are always unhealthy → replaced.
+6. The merged stream replaces the region artifact in place (`PublishPipelineArtifact` same name); downstream (parquet / simplify / package) is unchanged.
+7. Missing artifact / unresolved lookup → explicit failure (no silent fallback).
 
-Downstream stages (simplify / parquet / package): **no changes**.
+Measured decisions on the real build-328 artifacts (DuckDB, vs. fixed Overture land geometry):
+
+| Country | present candidate | coverage | inside | decision |
+|---|---|---|---|---|
+| ES | r1311341 (continente, Kanaren fehlen) | 0.986 | 0.999 | KEEP |
+| GB | r62149 (Atlantik-Overreach, bbox bis lon −14.02) | 0.942 | 0.588 | REPLACE |
+| NO | r2978650 (nur Jan Mayen/Svalbard, bbox nur Nordinseln) | 0.000 | 0.000 | REPLACE |
+
+Regions with two candidates (ES + Ceuta L4, GB + NI) are validated per-candidate; a partially resolved region fails loudly rather than silently shipping a partial merge.
 
 ### 4.4 Pipeline — `polygon-export-pipeline.yml`
 
 1. New boolean parameter `fetchOverturePolygons` (default `false`).
 2. New stage `overture` (container `osm2parquet:v1.0.6`, `condition: eq(parameters.fetchOverturePolygons, true)`), produces `overture-polygons` artifact.
-3. Download step in the `export` job (same pattern as PBF preload, e.g. `itemPattern: 'overture-polygons/**'`).
-4. Invoke `merge_overture_polygons.py` after `filter_polygons.py`.
+3. Export jobs publish the **raw** filtered streams (the old inline merge step was removed).
+4. New matrix job `merge_overture` in the `export` stage: 25 candidate countries, container `osm2parquet`, `dependsOn: export`, `condition: and(succeeded(), eq(parameters.fetchOverturePolygons, true))`. Downloads `overture-polygons/**` + the region's `admin-polygons-*` / `validation-*` artifacts, runs `merge_overture_polygons.py`, republishes the region artifact (same name) — parquet / simplify / package consume the merged stream and are unchanged.
+5. Stage conditions of `parquet` / `simplify` use `in(dependencies.export.result, 'Succeeded', 'Skipped')` instead of `always()` so a merge failure fails loudly and downstream is skipped; the reuse-export skip semantics (entire `export` stage skipped) are preserved — in reuse mode `merge_overture` never runs and the reused artifacts pass through untouched.
 
 ## 5. Tests
 
-1. **Unit:** candidate ISO filter logic (exactly 29, no spillover); `merge_overture_polygons.py` schema mapping; lookup SQL determinism (division with multiple OSM sources); `fetch_overture_polygons.py` geometry SQL selects `is_land = true` land rows only, unions split/duplicate land rows deterministically, and never falls back to the territorial hull (tested end-to-end against a local fake `division_area` table via the DuckDB CLI, AGENTS.md §9/§18).
+1. **Unit:** candidate ISO filter logic (exactly 29, no spillover); `merge_overture_polygons.py` schema mapping + health-check decision (healthy KEEP, truncated REPLACE, overreach REPLACE, lenient thresholds KEEP, null geometry REPLACE); lookup SQL determinism (division with multiple OSM sources); `fetch_overture_polygons.py` geometry SQL selects `is_land = true` land rows only, unions split/duplicate land rows deterministically, and never falls back to the territorial hull (tested end-to-end against a local fake `division_area` table via the DuckDB CLI, AGENTS.md §9/§18).
 2. **Integration (US):** preload yields 1 feature (osm_id 148838, complete geometry incl. islands) from latest release; after merge US L2 present in `admin-polygons-north-america.parquet` with OSM properties.
-3. **Regression:** FR/NO/PT/Kosovo broken-but-present remain unmodified (no overwrite).
+3. **Regression:** ES/FR/PT/Kosovo broken-but-present remain unmodified (healthy KEEP); GB/NO replaced with Overture land geometry (verified point counts + exact equality on real build-328 artifacts).
 
 All tests run locally with the DuckDB CLI and mirror the CI execution path (AGENTS.md §9).
 
@@ -126,7 +140,8 @@ Deterministic full-run evidence (2026-08-19.0):
 
 - **Latest-release detection must not scan all old releases** — use directory-level listing, not data globs.
 - **Fragile lookups** — resolved by caching the division part locally and matching the exact expected OSM object (`subtype='country'` for L2, `r<id>@` prefix for regions); multi-source divisions (e.g. US node+relation) no longer cause variance.
-- **Ambiguous area rows** — `division_area` has land and territorial rows per division; selection is pinned to `is_land = true` with `ST_Union` aggregation so runs are deterministic and landlocked/coastal geometry is never replaced by an EEZ hull.
+- **Ambiguous area rows** — `division_area` has land and territorial rows per division; selection is pinned to `is_land = true` with `ST_Union` aggregation so runs are deterministic and landlocked/coastal geometry is never replaced by an EEZ hull. The same land-vs-hull distinction is enforced at merge time: the health check compares the present polygon against the **land** area — a present polygon matching the territorial hull (as happened for NO) fails the `inside` check and is replaced by land geometry.
 - **Lookup latency** — country-pruning verified; one local pass over the cached part ≈ seconds.
 - **Overture schema drift** — new releases could alter `sources` structure; manifest + explicit failure surfaces this.
 - **Release transition between preload and consumption** — manifest records the source release for full traceability.
+- **Merge job availability** — the health check needs the DuckDB CLI (`spatial`); it runs in the `osm2parquet` container, not the export container (`docker-osmium-tool` ships only python3/pyosmium). If a future container lacks DuckDB, the job fails loudly (AGENTS.md §5) with instructions rather than silently shipping unprefixed geometry.
