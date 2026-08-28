@@ -148,14 +148,25 @@ COPY (
 
 
 def build_geometry_sql(release_s3dir, division_ids, output_json):
-    """Fetch geometry from division_area for the resolved division ids."""
+    """Fetch the LAND area geometry from division_area for the resolved division ids.
+
+    `division_area` stores up to two area rows per division: the land area
+    (`is_land = true`) and a territorial hull (`is_land = false`, e.g. the
+    maritime/EEZ envelope). This pipeline feeds administrative boundary polygons,
+    so only the land rows are selected (verified: territorial hulls span the sea,
+    e.g. Norway BOX(4.09..31.76) vs land BOX(4.51..31.17)). `ST_Union_Agg` per
+    division collapses any (duplicate or split) land rows into exactly one
+    deterministic geometry — no first-row ambiguity remains.
+    """
     return f"""INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2';
 INSTALL spatial; LOAD spatial; SET geometry_always_xy=true;
 
 COPY (
-    SELECT DISTINCT division_id, ST_AsGeoJSON(geometry) AS geometry
-    FROM read_parquet('{release_s3dir}/theme=divisions/type=division_area/*')
-    WHERE division_id IN ({", ".join("'" + i + "'" for i in division_ids)})
+    SELECT a.division_id, ST_AsGeoJSON(ST_Union_Agg(a.geometry)) AS geometry
+    FROM read_parquet('{release_s3dir}/theme=divisions/type=division_area/*') a
+    WHERE a.division_id IN ({", ".join("'" + i + "'" for i in division_ids)})
+      AND a.is_land = true
+    GROUP BY a.division_id
 ) TO '{output_json}' (FORMAT JSON);
 """
 
@@ -206,7 +217,8 @@ def fetch_for_candidates(candidates, out_dir, release):
     if not division_to_osm:
         return {}
 
-    # Single division_area pass fetching geometry for all resolved division ids.
+    # Single division_area pass fetching LAND geometry for all resolved division
+    # ids (is_land=true; aggregated via ST_Union_Agg for full, deterministic areas).
     print(f"Fetching geometry for {len(division_to_osm)} resolved divisions ...")
     geom_json = os.path.join(out_dir, "tmp_geometry.json")
     sql = build_geometry_sql(release_s3dir, list(division_to_osm), geom_json)

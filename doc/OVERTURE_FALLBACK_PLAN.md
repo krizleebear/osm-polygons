@@ -79,9 +79,9 @@ Container `osm2parquet:v1.0.6` (DuckDB CLI + spatial + httpfs **and** Python 3 f
 1. **Resolve latest release**: cheap bucket listing of `release/*/` (directory-level listing, NOT a full data glob per version), take lexicographically greatest version. Regex extracts `2026-08-19.0` from paths.
 2. **Cache the division part locally**: single column-pruned download (`id, country, subtype, names, sources`) of the resolved release; the cached part is deleted after the run.
 3. **Lookup per candidate** `(country, osm_id, admin_level)` against the cached file in **one local SQL pass** (deterministic strategy above → `division_id`).
-4. **Geometry**: `division_area` fetched remotely per resolved `division_id IN (...)` (distinct), `geometry` column; `division_area` duplicate rows are deduplicated.
+4. **Geometry**: `division_area` fetched remotely per resolved `division_id IN (...)` with `is_land = true` and `ST_Union_Agg` aggregation per division → exactly one deterministic geometry per division. `division_area` stores up to two area rows per division (land area vs. territorial hull); the territorial row is a maritime envelope (e.g. Norway `BOX(4.09..31.76)` vs. land `BOX(4.51..31.17)`) and is **excluded** — administrative boundary polygons must follow the coastline, not the EEZ hull. Naive `SELECT DISTINCT ... geometry` + keep-first row order was non-deterministic across runs (pipeline build 328 accidentally shipped territorial polygons for 10 countries).
 5. **Artifact**: `overture-polygons/<COUNTRY>/<osm_id>.geojsonseq` features containing **only** `osm_id` + `geometry`, plus a manifest `manifest.json` (release + osm_id → country, admin_level, division_id).
-6. **Verified end-to-end**: 29/29 candidates resolved deterministically on release 2026-08-19.0; the `overture.geojsonseq` holds 29 features and the manifest tracks the source release.
+6. **Verified end-to-end (fixed)**: 29/29 candidates resolved deterministically on release 2026-08-19.0; `is_land = true` + `ST_Union_Agg` selects the land area (every division carries exactly one land row + one territorial row; the territorial row is a maritime hull and is excluded, e.g. Indonesia `POLYGON@24,811` territorial vs `MULTIPOLYGON@62,703` land).
 
 SQL is issued through the DuckDB CLI via a template with `sed` token substitution, following the existing pattern in `convert_to_parquet.sh:46-52` (DuckDB `COPY ... TO` requires literal paths; no `getvariable`).
 
@@ -108,7 +108,7 @@ Downstream stages (simplify / parquet / package): **no changes**.
 
 ## 5. Tests
 
-1. **Unit:** candidate ISO filter logic (exactly 29, no spillover); `merge_overture_polygons.py` schema mapping; lookup SQL determinism (division with multiple OSM sources).
+1. **Unit:** candidate ISO filter logic (exactly 29, no spillover); `merge_overture_polygons.py` schema mapping; lookup SQL determinism (division with multiple OSM sources); `fetch_overture_polygons.py` geometry SQL selects `is_land = true` land rows only, unions split/duplicate land rows deterministically, and never falls back to the territorial hull (tested end-to-end against a local fake `division_area` table via the DuckDB CLI, AGENTS.md §9/§18).
 2. **Integration (US):** preload yields 1 feature (osm_id 148838, complete geometry incl. islands) from latest release; after merge US L2 present in `admin-polygons-north-america.parquet` with OSM properties.
 3. **Regression:** FR/NO/PT/Kosovo broken-but-present remain unmodified (no overwrite).
 
@@ -126,6 +126,7 @@ Deterministic full-run evidence (2026-08-19.0):
 
 - **Latest-release detection must not scan all old releases** — use directory-level listing, not data globs.
 - **Fragile lookups** — resolved by caching the division part locally and matching the exact expected OSM object (`subtype='country'` for L2, `r<id>@` prefix for regions); multi-source divisions (e.g. US node+relation) no longer cause variance.
+- **Ambiguous area rows** — `division_area` has land and territorial rows per division; selection is pinned to `is_land = true` with `ST_Union` aggregation so runs are deterministic and landlocked/coastal geometry is never replaced by an EEZ hull.
 - **Lookup latency** — country-pruning verified; one local pass over the cached part ≈ seconds.
 - **Overture schema drift** — new releases could alter `sources` structure; manifest + explicit failure surfaces this.
 - **Release transition between preload and consumption** — manifest records the source release for full traceability.
