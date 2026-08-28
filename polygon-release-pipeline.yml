@@ -100,7 +100,7 @@ jobs:
         ls -lh release-assets/
 
         # Extract summary statistics and feature breakdown with DuckDB
-        docker run --rm -v $(System.DefaultWorkingDirectory):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.5 duckdb -c "
+        docker run --rm -v $(System.DefaultWorkingDirectory):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.6 duckdb -c "
         LOAD spatial;
         CREATE TABLE stats AS 
         SELECT 

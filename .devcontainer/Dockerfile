@@ -16,7 +16,8 @@ COPY --from=eclipse-temurin:21-jdk /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
-# 2. Base system tools, timezone, Python osmium & Osmium Tool runtime libraries
+# 2. Base system tools, timezone, Python osmium & Osmium Tool runtime libraries,
+#    and rootless Podman for local container verification (AGENTS.md §9)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
@@ -27,16 +28,38 @@ RUN apt-get update && \
       libexpat1 \
       liblz4-1 \
       maven \
+      podman \
       python3 \
       python3-pyosmium \
       python3-yaml \
+      slirp4netns \
       tar \
+      uidmap \
       unzip \
       zlib1g \
       tzdata && \
     ln -fs /usr/share/zoneinfo/Europe/Berlin /etc/localtime && \
     dpkg-reconfigure --frontend noninteractive tzdata && \
     rm -rf /var/lib/apt/lists/*
+
+# 2a. Configure rootless Podman for the ubuntu user:
+#  - vfs storage driver (no /dev/fuse required inside a non-privileged container)
+#  - subuid/subgid ranges for user-namespace remapping (uidmap)
+#  - runroot/graphroot under the user's home (no systemd /run/user session)
+RUN set -eux; \
+    install -d -o ubuntu -g ubuntu \
+      /home/ubuntu/.config/containers \
+      /home/ubuntu/.local/share/containers/storage \
+      /home/ubuntu/.local/share/containers/runroot \
+      /tmp/runtime-ubuntu; \
+    echo 'ubuntu:100000:65536' >> /etc/subuid; \
+    echo 'ubuntu:100000:65536' >> /etc/subgid; \
+    printf '%s\n' \
+      '[storage]' \
+      'driver = "vfs"' \
+      'runroot = "/home/ubuntu/.local/share/containers/runroot"' \
+      'graphroot = "/home/ubuntu/.local/share/containers/storage"' \
+      > /etc/containers/storage.conf
 
 # Copy latest Osmium CLI Tool from official pipeline container (v1.19.1)
 COPY --from=krizleebear/docker-osmium-tool:v1.19.1 /usr/bin/osmium /usr/local/bin/osmium
@@ -93,6 +116,7 @@ RUN install -d -o ubuntu -g ubuntu \
       /home/ubuntu/.m2
 
 ENV HOME=/home/ubuntu
+ENV XDG_RUNTIME_DIR=/tmp/runtime-ubuntu
 
 # Copy pre-installed DuckDB extensions (spatial) to ubuntu user
 RUN cp -r /tmp/.duckdb-ext-cache /home/ubuntu/.duckdb && \
