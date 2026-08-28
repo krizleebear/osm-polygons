@@ -176,6 +176,18 @@ jobs:
         - **\`admin-polygons-north-america.parquet\`**: Greenland & Mexico dataset (~52 MB).
         - **\`admin-polygons-central-america.parquet\`**: Central America & Caribbean dataset (~22 MB).
 
+        ### Geographical Coverage & Multi-Country Extracts
+        Global extracts are partitioned along Geofabrik regional boundaries. Note that combined multi-country Geofabrik extracts are integrated into their respective continental datasets:
+        - **\`gcc-states\`** (in \`admin-polygons-asia.parquet\`): Covers Bahrain (\`BH\`), Kuwait (\`KW\`), Oman (\`OM\`), Qatar (\`QA\`), Saudi Arabia (\`SA\`), and United Arab Emirates (\`AE\`).
+        - **\`malaysia-singapore-brunei\`** (in \`admin-polygons-asia.parquet\`): Covers Malaysia (\`MY\`), Singapore (\`SG\`), and Brunei (\`BN\`).
+        - **\`israel-and-palestine\`** (in \`admin-polygons-asia.parquet\`): Covers Israel (\`IL\`) and Palestine (\`PS\`).
+        - **\`senegal-and-gambia\`** (in \`admin-polygons-africa.parquet\`): Covers Senegal (\`SN\`) and The Gambia (\`GM\`).
+        - **\`canary-islands\`** (in \`admin-polygons-africa.parquet\`): Covers the Canary Islands (\`ES\`).
+        - **\`haiti-and-domrep\`** (in \`admin-polygons-central-america.parquet\`): Covers Haiti (\`HT\`) and Dominican Republic (\`DO\`).
+        - **\`ireland-and-northern-ireland\`** (in \`admin-polygons-europe.parquet\`): Covers Republic of Ireland (\`IE\`) and Northern Ireland (\`GB\`).
+        - **\`kosovo\`** (in \`admin-polygons-europe.parquet\`): Exported under user-assigned code \`XK\`.
+        - **\`swaziland\`** (in \`admin-polygons-africa.parquet\`): Exported under ISO code \`SZ\` (Eswatini).
+
         ---
         *Built with DuckDB spatial extension and ZSTD compression.*
         EOF

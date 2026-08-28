@@ -132,7 +132,7 @@ stages:
         canary-islands:
           OSM_REGION: 'canary-islands'
           PBF_URL: 'https://download.geofabrik.de/africa/canary-islands-latest.osm.pbf'
-          COUNTRY_CODE: 'ES-CN'
+          COUNTRY_CODE: 'ES'
         cape-verde:
           OSM_REGION: 'cape-verde'
           PBF_URL: 'https://download.geofabrik.de/africa/cape-verde-latest.osm.pbf'
@@ -779,17 +779,11 @@ stages:
           PBF_URL: 'https://download.geofabrik.de/europe/ukraine-latest.osm.pbf'
           COUNTRY_CODE: 'UA'
 
-  #Short list of entries I wasn't 100% sure about and why:
-  #
-  #canary-islands — COUNTRY_CODE: "ES-CN" is non‑standard. Canary Islands belong to Spain (ES); remove “-CN” or use ES only.
-  #senegal-and-gambia — set to "SN" but the region contains both Senegal (SN) and The Gambia (GM). Decide SN, GM, or both.
-  #haiti-and-domrep — set to "HT" but includes Dominican Republic (DO) as well. Decide HT, DO, or split.
-  #ireland-and-northern-ireland — set to "IE" but includes Northern Ireland (part of GB/UK). Decide IE, GB, or split.
-  #gcc-states — set to "AE" but this is a multi‑country region (AE, SA, KW, OM, QA, BH). Needs a regional token or per‑country split.
-  #malaysia-singapore-brunei — set to "MY" but covers MY, SG, BN. Decide one or list multiple.
-  #israel-and-palestine — set to "IL" but could include PS (Palestine) as well; clarify desired code(s).
-  #kosovo — "XK" is a common user‑assigned code (not official ISO); confirm if acceptable.
-  #swaziland — "SZ" is correct code but country renamed to Eswatini (no code change); just noting.
+  # Note on Geofabrik multi-country composite extracts:
+  # Geofabrik provides several combined regional extracts (e.g. gcc-states, malaysia-singapore-brunei,
+  # senegal-and-gambia, haiti-and-domrep, israel-and-palestine, ireland-and-northern-ireland).
+  # Each matrix entry uses the primary ISO 3166-1 alpha-2 country code for filename prefixes (e.g. AE, MY, SN, HT, IL, IE).
+  # Distinct country tags (ISO3166-1 / ISO3166-2) within OSM features remain preserved in the exported dataset.
 
     steps:
 

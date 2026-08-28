@@ -144,7 +144,7 @@ def compute_health(present_geometries, land_geometries):
         sql = f"""INSTALL spatial; LOAD spatial; SET geometry_always_xy=true;
 CREATE TABLE g AS
   SELECT CAST(osm_id AS BIGINT) AS osm_id, CAST(kind AS VARCHAR) AS kind,
-         ST_GeomFromGeoJSON(geom) AS geo
+         ST_MakeValid(ST_GeomFromGeoJSON(geom)) AS geo
   FROM read_ndjson('{tmp_ndjson}');
 COPY (
   WITH land AS (SELECT osm_id, geo FROM g WHERE kind = 'LAND'),

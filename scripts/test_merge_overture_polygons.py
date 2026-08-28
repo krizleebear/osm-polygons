@@ -290,6 +290,19 @@ class TestComputeHealth(unittest.TestCase):
         self.assertEqual(coverage, 0.0)
         self.assertEqual(inside, 0.0)
 
+    def test_self_intersecting_invalid_geometry_handled(self):
+        # Self-intersecting bowtie polygon (invalid OGC simple feature)
+        bowtie = {
+            "type": "Polygon",
+            "coordinates": [[[20.0, 41.0], [20.0, 42.0], [21.0, 41.0], [21.0, 42.0], [20.0, 41.0]]]
+        }
+        # ST_MakeValid must ensure ST_Intersection does not throw TopologyException
+        health = compute_health({2088990: bowtie}, {2088990: POLY})
+        self.assertIn(2088990, health)
+        coverage, inside = health[2088990]
+        self.assertGreater(coverage, 0.0)
+        self.assertGreater(inside, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
