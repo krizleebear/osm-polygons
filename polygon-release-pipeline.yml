@@ -177,6 +177,10 @@ jobs:
         - **\`admin-polygons-central-america.parquet\`**: Central America & Caribbean dataset (~22 MB).
 
         ---
+        ### Data Source & License
+        This dataset is derived from [OpenStreetMap](https://www.openstreetmap.org/) data and is made available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1.0/).
+        © OpenStreetMap contributors — https://www.openstreetmap.org/copyright
+
         *Built with DuckDB spatial extension and ZSTD compression.*
         EOF
 

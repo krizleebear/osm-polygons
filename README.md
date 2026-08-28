@@ -65,7 +65,12 @@ flowchart TD
    - **Assets**: Uploads `simplified-all.tar.gz`, continental archives (`simplified-*.tar.gz`), and individual country `.geojsonseq` stream files.
 
 ## License
-This osm-polygons data is made available under the Open Database License: http://opendatacommons.org/licenses/odbl/1.0/. Any rights in individual contents of the database are licensed under the Database Contents License: http://opendatacommons.org/licenses/dbcl/1.0/
+
+© OpenStreetMap contributors
+
+This data is derived from OpenStreetMap data and is made available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License (DCbL)](https://opendatacommons.org/licenses/dbcl/1.0/).
+
+You must attribute OpenStreetMap in any public use of this data. For details, see https://www.openstreetmap.org/copyright.
 
 ## Reverse Geocoding (what's here?)
 The polygons offered by this project can e.g. be used to draw the outlines of your city.
