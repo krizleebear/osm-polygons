@@ -250,6 +250,39 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(alaska["properties"]["wikidata"], "Q797")
         self.assertEqual(alaska["properties"]["ISO3166-2"], "US-AK")
         self.assertEqual(alaska["geometry"]["type"], "MultiPolygon")
+
+    def test_synthetic_papua_new_guinea_l2(self):
+        # relation 307866 "Papua Niugini" is broken (missing_ways) in the
+        # australia-oceania extract; the 4 L3 Regions are complete.
+        stream = [
+            feat({"@type": "relation", "id": 3778610, "admin_level": "3", "name": "Highlands Region", "ISO3166-1": "PG"}),
+            feat({"@type": "relation", "id": 3778611, "admin_level": "3", "name": "Islands Region", "ISO3166-1": "PG"}),
+            feat({"@type": "relation", "id": 3778629, "admin_level": "3", "name": "Momase Region", "ISO3166-1": "PG"}),
+            feat({"@type": "relation", "id": 3778630, "admin_level": "3", "name": "Southern Region", "ISO3166-1": "PG"}),
+        ]
+        results = list(filter_features(stream, country_code="PG"))
+        # 4 L3 children + 1 synthesised L2
+        self.assertEqual(len(results), 5)
+
+        pg_l2 = [f for f in results if f["properties"].get("id") == 307866]
+        self.assertEqual(len(pg_l2), 1, "Synthesised PG L2 must appear exactly once")
+        props = pg_l2[0]["properties"]
+        self.assertEqual(props["name"], "Papua Niugini")
+        self.assertEqual(props["admin_level"], "2")
+        self.assertEqual(props["ISO3166-1"], "PG")
+        self.assertEqual(props["wikidata"], "Q691")
+        self.assertEqual(pg_l2[0]["geometry"]["type"], "MultiPolygon")
+
+    def test_synthetic_papua_new_guinea_not_duplicated_if_present(self):
+        # If the L2 relation is present (not broken), synthesis must be skipped.
+        pg_l2_feature = feat({
+            "@type": "relation", "id": 307866,
+            "admin_level": "2", "name": "Papua Niugini", "ISO3166-1": "PG",
+        })
+        child = feat({"@type": "relation", "id": 3778610, "admin_level": "3", "name": "Highlands Region", "ISO3166-1": "PG"})
+        results = list(filter_features([pg_l2_feature, child], country_code="PG"))
+        pg_l2_results = [f for f in results if f["properties"].get("id") == 307866]
+        self.assertEqual(len(pg_l2_results), 1, "L2 must not be duplicated when already present")
     def test_admin_centre_enrichment(self):
         # Feature with relation @id = 62428 (Munich)
         feature = feat({"@type": "relation", "id": 62428, "admin_level": "6", "name": "München"})
@@ -395,6 +428,53 @@ class TestFilterPolygons(unittest.TestCase):
         results_broken = list(filter_features([broken_parent, parish1, parish2], country_code="PT"))
         self.assertEqual(len(results_broken), 3)
         self.assertEqual(results_broken[-1]["properties"]["name"], "Funchal")
+
+    def test_foreign_exclave_exclusion_ceuta(self):
+        # Ceuta (relation 1154756, ISO3166-2=ES-CE) must be dropped when exporting MA.
+        ceuta = feat({
+            "@type": "relation", "id": 1154756,
+            "admin_level": "4", "name": "Ceuta", "ISO3166-2": "ES-CE",
+        })
+        result = process_feature(ceuta, country_code="MA")
+        self.assertIsNone(result, "Ceuta must be excluded from the MA export (ISO3166-2 ES-CE)")
+
+    def test_foreign_exclave_exclusion_melilla(self):
+        # Melilla (relation 5812120, ISO3166-2=ES-ML) must be dropped when exporting MA.
+        melilla = feat({
+            "@type": "relation", "id": 5812120,
+            "admin_level": "4", "name": "Melilla", "ISO3166-2": "ES-ML",
+        })
+        result = process_feature(melilla, country_code="MA")
+        self.assertIsNone(result, "Melilla must be excluded from the MA export (ISO3166-2 ES-ML)")
+
+    def test_foreign_exclave_exclusion_by_relation_id(self):
+        # A Ceuta-like feature without ISO3166-2 but with the known relation id is also excluded.
+        ceuta_no_iso = feat({
+            "@type": "relation", "id": 1154756,
+            "admin_level": "4", "name": "Ceuta",
+        })
+        result = process_feature(ceuta_no_iso, country_code="MA")
+        self.assertIsNone(result, "Ceuta must be excluded via relation id even without ISO3166-2")
+
+    def test_foreign_exclave_normal_ma_feature_kept(self):
+        # A normal Moroccan feature must not be affected by the exclusion.
+        casablanca = feat({
+            "@type": "relation", "id": 12345678,
+            "admin_level": "6", "name": "الدار البيضاء",
+        })
+        result = process_feature(casablanca, country_code="MA")
+        self.assertIsNotNone(result, "Regular MA feature must not be dropped")
+
+    def test_foreign_exclave_no_exclusion_for_composite_extracts(self):
+        # senegal-and-gambia (COUNTRY_CODE=SN) has no exclusion entry — Gambia features
+        # must pass through unmodified.
+        gambia = feat({
+            "@type": "relation", "id": 192791,
+            "admin_level": "2", "name": "The Gambia", "ISO3166-1": "GM",
+        })
+        result = process_feature(gambia, country_code="SN")
+        self.assertIsNotNone(result, "Gambia features in the SN composite extract must not be dropped")
+
 
 if __name__ == "__main__":
     unittest.main()

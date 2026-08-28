@@ -14,8 +14,9 @@ resources:
     image: mirror.gcr.io/krizleebear/osm-tools:master-2b3843cecae063416c0622eb978d31527c119008
     #endpoint: docker-krizleebear
   - container: osm2parquet
-    # DuckDB spatial converter for unsimplified GeoParquet 1.1 exports
-    image: ghcr.io/krizleebear/osm2parquet:v1.0.5
+    # DuckDB spatial converter for unsimplified GeoParquet 1.1 exports;
+    # v1.0.6+ also ships python3 (stdlib) + duckdb httpfs/spatial for Overture fallback (fetch_overture_polygons.py)
+    image: ghcr.io/krizleebear/osm2parquet:v1.0.6
 
 trigger:
 - none
@@ -40,12 +41,53 @@ parameters:
   displayName: 'Specific Build ID to reuse export artifacts from (default "auto" uses latest export build)'
   type: string
   default: 'auto'
+- name: fetchOverturePolygons
+  displayName: 'Fetch Overture divisions fallback polygons and merge genuinely broken admin relations'
+  type: boolean
+  default: false
 
 
 stages:
+- stage: overture
+  displayName: 'Fetch Overture fallback polygons'
+  condition: eq('${{ parameters.fetchOverturePolygons }}', true)
+
+  jobs:
+
+  - job: fetch_overture
+    timeoutInMinutes: 240
+    workspace:
+      clean: all
+    container: osm2parquet
+
+    steps:
+    - checkout: self
+
+    - task: Bash@3
+      displayName: 'Fetch Overture division fallback geometry'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -eux
+          ls -la
+          python3 scripts/fetch_overture_polygons.py \
+            --candidates scripts/overture-candidates.json \
+            --out-dir overture-polygons
+          ls -la overture-polygons
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Store Overture fallback polygons'
+      inputs:
+        targetPath: 'overture-polygons'
+        artifact: 'overture-polygons'
+        publishLocation: 'pipeline'
+
 - stage: export
   displayName: 'Export polygons from OSM PBF'
-  condition: eq('${{ parameters.reuseExportArtifacts }}', false)
+  dependsOn: overture
+  condition: and(
+    eq('${{ parameters.reuseExportArtifacts }}', false),
+    in(dependencies.overture.result, 'Succeeded', 'Skipped'))
 
   jobs:
 
@@ -90,7 +132,7 @@ stages:
         canary-islands:
           OSM_REGION: 'canary-islands'
           PBF_URL: 'https://download.geofabrik.de/africa/canary-islands-latest.osm.pbf'
-          COUNTRY_CODE: 'ES-CN'
+          COUNTRY_CODE: 'ES'
         cape-verde:
           OSM_REGION: 'cape-verde'
           PBF_URL: 'https://download.geofabrik.de/africa/cape-verde-latest.osm.pbf'
@@ -737,17 +779,11 @@ stages:
           PBF_URL: 'https://download.geofabrik.de/europe/ukraine-latest.osm.pbf'
           COUNTRY_CODE: 'UA'
 
-  #Short list of entries I wasn't 100% sure about and why:
-  #
-  #canary-islands — COUNTRY_CODE: "ES-CN" is non‑standard. Canary Islands belong to Spain (ES); remove “-CN” or use ES only.
-  #senegal-and-gambia — set to "SN" but the region contains both Senegal (SN) and The Gambia (GM). Decide SN, GM, or both.
-  #haiti-and-domrep — set to "HT" but includes Dominican Republic (DO) as well. Decide HT, DO, or split.
-  #ireland-and-northern-ireland — set to "IE" but includes Northern Ireland (part of GB/UK). Decide IE, GB, or split.
-  #gcc-states — set to "AE" but this is a multi‑country region (AE, SA, KW, OM, QA, BH). Needs a regional token or per‑country split.
-  #malaysia-singapore-brunei — set to "MY" but covers MY, SG, BN. Decide one or list multiple.
-  #israel-and-palestine — set to "IL" but could include PS (Palestine) as well; clarify desired code(s).
-  #kosovo — "XK" is a common user‑assigned code (not official ISO); confirm if acceptable.
-  #swaziland — "SZ" is correct code but country renamed to Eswatini (no code change); just noting.
+  # Note on Geofabrik multi-country composite extracts:
+  # Geofabrik provides several combined regional extracts (e.g. gcc-states, malaysia-singapore-brunei,
+  # senegal-and-gambia, haiti-and-domrep, israel-and-palestine, ireland-and-northern-ireland).
+  # Each matrix entry uses the primary ISO 3166-1 alpha-2 country code for filename prefixes (e.g. AE, MY, SN, HT, IL, IE).
+  # Distinct country tags (ISO3166-1 / ISO3166-2) within OSM features remain preserved in the exported dataset.
 
     steps:
 
@@ -841,9 +877,23 @@ stages:
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
 
+          # Step 6: Determine dynamically if this region has Overture fallback candidates
+          IS_CANDIDATE=$(python3 -c "import json; c=json.load(open('scripts/overture-candidates.json')); print('true' if any(x.get('country')=='$(COUNTRY_CODE)' for x in c.get('candidates', [])) else 'false')")
+          echo "##vso[task.setvariable variable=IS_OVERTURE_CANDIDATE]$IS_CANDIDATE"
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store raw polygon artifacts (for Overture fallback candidate regions)'
+      condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true), eq(variables['IS_OVERTURE_CANDIDATE'], 'true'))
+      inputs:
+        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
+        artifact: 'raw-admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
+        publishLocation: 'pipeline'
+
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store polygon artifacts'
+      condition: and(succeeded(), or(ne('${{ parameters.fetchOverturePolygons }}', true), ne(variables['IS_OVERTURE_CANDIDATE'], 'true')))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
@@ -873,6 +923,148 @@ stages:
         targetType: 'inline'
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
+
+  - job: merge_overture
+    displayName: 'Merge Overture fallback polygons (insert + health-check replace)'
+    # Runs AFTER export in the osm2parquet container: DuckDB spatial powers the
+    # health check that replaces present-but-damaged candidate polygons with the
+    # Overture LAND geometry (see scripts/merge_overture_polygons.py).
+    dependsOn: export
+    condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true))
+    timeoutInMinutes: 120
+    workspace:
+      clean: all
+    container: osm2parquet
+    strategy:
+      matrix:
+        burkina-faso:
+          REGION: 'burkina-faso'
+          COUNTRY_CODE: 'BF'
+        bhutan:
+          REGION: 'bhutan'
+          COUNTRY_CODE: 'BT'
+        belize:
+          REGION: 'belize'
+          COUNTRY_CODE: 'BZ'
+        china:
+          REGION: 'china'
+          COUNTRY_CODE: 'CN'
+        spain:
+          REGION: 'spain'
+          COUNTRY_CODE: 'ES'
+        france:
+          REGION: 'france'
+          COUNTRY_CODE: 'FR'
+        great-britain:
+          REGION: 'great-britain'
+          COUNTRY_CODE: 'GB'
+        haiti-and-domrep:
+          REGION: 'haiti-and-domrep'
+          COUNTRY_CODE: 'HT'
+        indonesia:
+          REGION: 'indonesia'
+          COUNTRY_CODE: 'ID'
+        iran:
+          REGION: 'iran'
+          COUNTRY_CODE: 'IR'
+        north-korea:
+          REGION: 'north-korea'
+          COUNTRY_CODE: 'KP'
+        malaysia-singapore-brunei:
+          REGION: 'malaysia-singapore-brunei'
+          COUNTRY_CODE: 'MY'
+        nigeria:
+          REGION: 'nigeria'
+          COUNTRY_CODE: 'NG'
+        netherlands:
+          REGION: 'netherlands'
+          COUNTRY_CODE: 'NL'
+        norway:
+          REGION: 'norway'
+          COUNTRY_CODE: 'NO'
+        papua-new-guinea:
+          REGION: 'papua-new-guinea'
+          COUNTRY_CODE: 'PG'
+        philippines:
+          REGION: 'philippines'
+          COUNTRY_CODE: 'PH'
+        portugal:
+          REGION: 'portugal'
+          COUNTRY_CODE: 'PT'
+        sudan:
+          REGION: 'sudan'
+          COUNTRY_CODE: 'SD'
+        suriname:
+          REGION: 'suriname'
+          COUNTRY_CODE: 'SR'
+        taiwan:
+          REGION: 'taiwan'
+          COUNTRY_CODE: 'TW'
+        tanzania:
+          REGION: 'tanzania'
+          COUNTRY_CODE: 'TZ'
+        us:
+          REGION: 'us'
+          COUNTRY_CODE: 'US'
+        vietnam:
+          REGION: 'vietnam'
+          COUNTRY_CODE: 'VN'
+        kosovo:
+          REGION: 'kosovo'
+          COUNTRY_CODE: 'XK'
+
+    steps:
+    - checkout: self
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Overture fallback polygons'
+      inputs:
+        buildType: 'current'
+        itemPattern: 'overture-polygons/**'
+        targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download raw region polygon & validation artifacts'
+      inputs:
+        buildType: 'current'
+        itemPattern: |
+          raw-admin-polygons-$(COUNTRY_CODE)-$(REGION)/**
+          validation-$(COUNTRY_CODE)-$(REGION)/**
+        targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: Bash@3
+      displayName: 'Merge Overture fallback polygons'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -eux
+          STREAM=$(find "raw-admin-polygons-$(COUNTRY_CODE)-$(REGION)" -name "*.admin-polygons.geojsonseq" | head -n 1)
+          if [ -z "$STREAM" ] || [ ! -s "$STREAM" ]; then
+            echo " ERROR: no raw polygon stream found for '$(COUNTRY_CODE)/$(REGION)'."
+            echo " Cause: export job for this region did not publish a raw-admin-polygons artifact,"
+            echo " or it is empty (0 bytes)."
+            exit 1
+          fi
+          VALIDATION=$(find "validation-$(COUNTRY_CODE)-$(REGION)" -name "validation.json" | head -n 1)
+          if [ -z "$VALIDATION" ]; then
+            echo " ERROR: validation.json missing for '$(COUNTRY_CODE)/$(REGION)'."
+            echo " Cause: the region's validation artifact was not published by the export job."
+            exit 1
+          fi
+          mkdir -p "admin-polygons-$(COUNTRY_CODE)-$(REGION)"
+          TARGET="admin-polygons-$(COUNTRY_CODE)-$(REGION)/$(COUNTRY_CODE)_$(REGION).admin-polygons.geojsonseq"
+          python3 scripts/merge_overture_polygons.py "$STREAM" \
+            --validation "$VALIDATION" \
+            --overture overture-polygons/overture.geojsonseq \
+            --candidates scripts/overture-candidates.json \
+            --country-code $(COUNTRY_CODE) > "$TARGET"
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Store merged polygon artifacts'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/admin-polygons-$(COUNTRY_CODE)-$(REGION)'
+        artifact: 'admin-polygons-$(COUNTRY_CODE)-$(REGION)'
+        publishLocation: 'pipeline'
 
   - job: tag_export
     displayName: 'Tag build with export artifacts & save metadata'
@@ -907,7 +1099,7 @@ stages:
 - stage: parquet
   displayName: 'Convert to GeoParquet by continent'
   dependsOn: export
-  condition: and(always(), eq('${{ parameters.exportParquet }}', 'true'))
+  condition: and(in(dependencies.export.result, 'Succeeded', 'Skipped'), eq('${{ parameters.exportParquet }}', 'true'))
 
   jobs:
   - job: parquet
@@ -1296,7 +1488,7 @@ stages:
 - stage: simplify
   displayName: 'Simplify polygons by continent'
   dependsOn: export
-  condition: and(always(), eq('${{ parameters.simplifyPolygons }}', 'true'))
+  condition: and(in(dependencies.export.result, 'Succeeded', 'Skipped'), eq('${{ parameters.simplifyPolygons }}', 'true'))
 
   jobs:
   - job: simplify

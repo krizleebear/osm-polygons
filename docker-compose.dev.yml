@@ -22,6 +22,9 @@ services:
     entrypoint: ["/bin/bash"]
     stdin_open: true
     tty: true
+    security_opt:
+      # Allow user-namespace creation (unshare CLONE_NEWUSER) for rootless Podman
+      - seccomp:unconfined
 
 volumes:
   osm-polygons-m2:

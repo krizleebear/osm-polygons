@@ -44,6 +44,24 @@ LEVEL_4_FALLBACK_COUNTRIES = {
     "EE", "HR", "ME", "SI", "XK", "CY", "IS", "LV", "MK"
 }
 
+# Foreign administrative entities that leak into a neighbouring country's Geofabrik
+# extract bounding box and must NOT be exported under that neighbour's country code.
+# Keyed by the Geofabrik COUNTRY_CODE of the export job (e.g. "MA").
+# Each entry specifies:
+#   iso3166_2_prefixes — ISO3166-2 tag prefixes that identify a foreign country (e.g. "ES-").
+#   relation_ids       — explicit OSM relation IDs of the exclave parent entities.
+# Only L4 (city-level) exclaves are covered here; L8 subdivisions without ISO tags
+# are a documented follow-up (issue #6 — vorerst nur L4).
+FOREIGN_FEATURE_EXCLUSIONS = {
+    # Morocco: Spanish exclaves Ceuta (r1154756, ES-CE) and Melilla (r5812120, ES-ML)
+    # are geographically within the africa/morocco Geofabrik bbox and thus present in
+    # morocco-latest.osm.pbf, but they belong to Spain (ISO3166-2 ES-*).
+    "MA": {
+        "iso3166_2_prefixes": ("ES-",),
+        "relation_ids": {1154756, 5812120},
+    },
+}
+
 # Sub-municipal boundary tag values (Rule 2 of SPEC_OSM_POLYGONS_SUBDIVISIONS.md & feat/named-areas):
 # boundary IN (local_authority, borough, traditional, statistical, cadastral) without admin_level -> default admin_level.
 SUBMUNICIPAL_BOUNDARY_VALUES = ("local_authority", "borough", "traditional", "statistical", "cadastral")
@@ -298,6 +316,25 @@ SYNTHETIC_PARENT_DEFINITIONS = {
         },
         "child_admin_level": "7",
     },
+    # ── Papua New Guinea: National territory (relation 307866, admin_level 2) ─
+    # osmium export drops this relation because the Geofabrik
+    # australia-oceania extract clips outer ways for small island territories,
+    # leaving unclosed rings that AreaAssembler cannot resolve.
+    # The four administrative Regions (admin_level=3) are all complete and
+    # cover the full national territory — they are used to reconstruct the L2.
+    307866: {
+        "country_code": "PG",
+        "properties": {
+            "@id": 307866, "@type": "relation", "id": 307866,
+            "admin_level": "2", "boundary": "administrative",
+            "name": "Papua Niugini",
+            "name:en": "Papua New Guinea",
+            "wikidata": "Q691", "ISO3166-1": "PG",
+        },
+        "child_relation_ids": {3778610, 3778611, 3778629, 3778630},
+        "child_admin_level": "3",
+    },
+
     # United States: Alaska (relation 1116270, admin_level 4)
     1116270: {
         "country_code": "US",
@@ -586,6 +623,19 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
         if not props.get("name"):
             props["name"] = info["default_name"]
         props["ISO3166-1"] = info["country"]
+
+    # Foreign-exclave exclusion: drop features that belong to a neighbouring country's
+    # territory but leak into this extract's bounding box (e.g. Ceuta/Melilla in MA).
+    # Only applies when a curated exclusion entry exists for the current country_code.
+    if country_code:
+        excl = FOREIGN_FEATURE_EXCLUSIONS.get(str(country_code).upper().strip())
+        if excl:
+            iso2_val = str(props.get("ISO3166-2", "")).strip()
+            for prefix in excl.get("iso3166_2_prefixes", ()):
+                if iso2_val.upper().startswith(prefix.upper()):
+                    return None
+            if osm_id_num in excl.get("relation_ids", set()):
+                return None
 
     # Filter L2 border ways: Exclude non-relation border ways (@type=way) tagged admin_level=2 without ISO3166-1
     element_type = str(props.get("@type", props.get("osm_type", ""))).strip().lower()

@@ -46,3 +46,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+
+# Scratch / local investigation artifacts
+/madeira-latest-parent-mapping.json
+/overture-polygons/
