@@ -885,7 +885,17 @@ stages:
 
     - task: PublishPipelineArtifact@1
       enabled: true
+      displayName: 'Store raw polygon artifacts (for Overture fallback candidate regions)'
+      condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true), in(variables['COUNTRY_CODE'], 'BF', 'BT', 'BZ', 'CN', 'ES', 'FR', 'GB', 'HT', 'ID', 'IR', 'KP', 'MY', 'NG', 'NL', 'NO', 'PG', 'PH', 'PT', 'SD', 'SR', 'TW', 'TZ', 'US', 'VN', 'XK'))
+      inputs:
+        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
+        artifact: 'raw-admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
       displayName: 'Store polygon artifacts'
+      condition: and(succeeded(), or(ne('${{ parameters.fetchOverturePolygons }}', true), not(in(variables['COUNTRY_CODE'], 'BF', 'BT', 'BZ', 'CN', 'ES', 'FR', 'GB', 'HT', 'ID', 'IR', 'KP', 'MY', 'NG', 'NL', 'NO', 'PG', 'PH', 'PT', 'SD', 'SR', 'TW', 'TZ', 'US', 'VN', 'XK'))))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
@@ -1016,11 +1026,11 @@ stages:
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download region polygon & validation artifacts'
+      displayName: 'Download raw region polygon & validation artifacts'
       inputs:
         buildType: 'current'
         itemPattern: |
-          admin-polygons-$(COUNTRY_CODE)-$(REGION)/**
+          raw-admin-polygons-$(COUNTRY_CODE)-$(REGION)/**
           validation-$(COUNTRY_CODE)-$(REGION)/**
         targetPath: '$(System.DefaultWorkingDirectory)'
 
@@ -1030,10 +1040,10 @@ stages:
         targetType: 'inline'
         script: |
           set -eux
-          STREAM=$(find "admin-polygons-$(COUNTRY_CODE)-$(REGION)" -name "*.admin-polygons.geojsonseq" | head -n 1)
+          STREAM=$(find "raw-admin-polygons-$(COUNTRY_CODE)-$(REGION)" -name "*.admin-polygons.geojsonseq" | head -n 1)
           if [ -z "$STREAM" ] || [ ! -s "$STREAM" ]; then
-            echo " ERROR: no polygon stream found for '$(COUNTRY_CODE)/$(REGION)'."
-            echo " Cause: export job for this region did not publish an admin-polygons artifact,"
+            echo " ERROR: no raw polygon stream found for '$(COUNTRY_CODE)/$(REGION)'."
+            echo " Cause: export job for this region did not publish a raw-admin-polygons artifact,"
             echo " or it is empty (0 bytes)."
             exit 1
           fi
@@ -1043,12 +1053,13 @@ stages:
             echo " Cause: the region's validation artifact was not published by the export job."
             exit 1
           fi
+          mkdir -p "admin-polygons-$(COUNTRY_CODE)-$(REGION)"
+          TARGET="admin-polygons-$(COUNTRY_CODE)-$(REGION)/$(COUNTRY_CODE)_$(REGION).admin-polygons.geojsonseq"
           python3 scripts/merge_overture_polygons.py "$STREAM" \
             --validation "$VALIDATION" \
             --overture overture-polygons/overture.geojsonseq \
             --candidates scripts/overture-candidates.json \
-            --country-code $(COUNTRY_CODE) > merged.geojsonseq
-          mv merged.geojsonseq "$STREAM"
+            --country-code $(COUNTRY_CODE) > "$TARGET"
 
     - task: PublishPipelineArtifact@1
       displayName: 'Store merged polygon artifacts'
