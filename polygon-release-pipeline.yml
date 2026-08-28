@@ -182,7 +182,7 @@ jobs:
         - **\`malaysia-singapore-brunei\`** (in \`admin-polygons-asia.parquet\`): Covers Malaysia (\`MY\`), Singapore (\`SG\`), and Brunei (\`BN\`).
         - **\`israel-and-palestine\`** (in \`admin-polygons-asia.parquet\`): Covers Israel (\`IL\`) and Palestine (\`PS\`).
         - **\`senegal-and-gambia\`** (in \`admin-polygons-africa.parquet\`): Covers Senegal (\`SN\`) and The Gambia (\`GM\`).
-        - **\`canary-islands\`** (in \`admin-polygons-africa.parquet\`): Covers the Canary Islands (\`ES\`).
+        - **\`canary-islands\`** (in \`admin-polygons-europe.parquet\`): Covers the Canary Islands (\`ES\`).
         - **\`haiti-and-domrep\`** (in \`admin-polygons-central-america.parquet\`): Covers Haiti (\`HT\`) and Dominican Republic (\`DO\`).
         - **\`ireland-and-northern-ireland\`** (in \`admin-polygons-europe.parquet\`): Covers Republic of Ireland (\`IE\`) and Northern Ireland (\`GB\`).
         - **\`kosovo\`** (in \`admin-polygons-europe.parquet\`): Exported under user-assigned code \`XK\`.

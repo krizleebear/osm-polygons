@@ -1111,7 +1111,7 @@ stages:
       matrix:
         africa:
           CONTINENT: 'africa'
-          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon canary-islands cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
+          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
           ARTIFACT_PATTERNS: |
             *-algeria/**
             *-angola/**
@@ -1120,7 +1120,6 @@ stages:
             *-burkina-faso/**
             *-burundi/**
             *-cameroon/**
-            *-canary-islands/**
             *-cape-verde/**
             *-central-african-republic/**
             *-chad/**
@@ -1170,7 +1169,7 @@ stages:
             *-zimbabwe/**
         asia:
           CONTINENT: 'asia'
-          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkmenistan uzbekistan vietnam yemen'
+          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkey turkmenistan uzbekistan vietnam yemen'
           ARTIFACT_PATTERNS: |
             *-afghanistan/**
             *-armenia/**
@@ -1205,6 +1204,7 @@ stages:
             *-taiwan/**
             *-tajikistan/**
             *-thailand/**
+            *-turkey/**
             *-turkmenistan/**
             *-uzbekistan/**
             *-vietnam/**
@@ -1265,12 +1265,13 @@ stages:
             *-venezuela/**
         europe:
           CONTINENT: 'europe'
-          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland turkey ukraine'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria canary-islands croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland ukraine'
           ARTIFACT_PATTERNS: |
             *-albania/**
             *-andorra/**
             *-austria/**
             *-azores/**
+            *-canary-islands/**
             *-belarus/**
             *-belgium/**
             *-bosnia-herzegovina/**
@@ -1313,7 +1314,6 @@ stages:
             *-spain/**
             *-sweden/**
             *-switzerland/**
-            *-turkey/**
             *-ukraine/**
 
     steps:
@@ -1500,10 +1500,10 @@ stages:
       matrix:
         africa:
           CONTINENT: 'africa'
-          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon canary-islands cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
+          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
         asia:
           CONTINENT: 'asia'
-          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkmenistan uzbekistan vietnam yemen'
+          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkey turkmenistan uzbekistan vietnam yemen'
         australia_oceania:
           CONTINENT: 'australia-oceania'
           REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
@@ -1542,7 +1542,7 @@ stages:
           REGIONS: 'ireland-and-northern-ireland'
         europe_rest:
           CONTINENT: 'europe-rest'
-          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria croatia cyprus czech-republic denmark estonia faroe-islands finland georgia greece hungary iceland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland turkey ukraine'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria canary-islands croatia cyprus czech-republic denmark estonia faroe-islands finland georgia greece hungary iceland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland ukraine'
         russia:
           CONTINENT: 'russia'
           REGIONS: 'russia'
