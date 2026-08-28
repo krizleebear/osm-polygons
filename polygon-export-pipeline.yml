@@ -883,10 +883,14 @@ stages:
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
 
+          # Step 6: Determine dynamically if this region has Overture fallback candidates
+          IS_CANDIDATE=$(python3 -c "import json; c=json.load(open('scripts/overture-candidates.json')); print('true' if any(x.get('country')=='$(COUNTRY_CODE)' for x in c.get('candidates', [])) else 'false')")
+          echo "##vso[task.setvariable variable=IS_OVERTURE_CANDIDATE]$IS_CANDIDATE"
+
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store raw polygon artifacts (for Overture fallback candidate regions)'
-      condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true), in(variables['COUNTRY_CODE'], 'BF', 'BT', 'BZ', 'CN', 'ES', 'FR', 'GB', 'HT', 'ID', 'IR', 'KP', 'MY', 'NG', 'NL', 'NO', 'PG', 'PH', 'PT', 'SD', 'SR', 'TW', 'TZ', 'US', 'VN', 'XK'))
+      condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true), eq(variables['IS_OVERTURE_CANDIDATE'], 'true'))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'raw-admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
@@ -895,7 +899,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store polygon artifacts'
-      condition: and(succeeded(), or(ne('${{ parameters.fetchOverturePolygons }}', true), not(in(variables['COUNTRY_CODE'], 'BF', 'BT', 'BZ', 'CN', 'ES', 'FR', 'GB', 'HT', 'ID', 'IR', 'KP', 'MY', 'NG', 'NL', 'NO', 'PG', 'PH', 'PT', 'SD', 'SR', 'TW', 'TZ', 'US', 'VN', 'XK'))))
+      condition: and(succeeded(), or(ne('${{ parameters.fetchOverturePolygons }}', true), ne(variables['IS_OVERTURE_CANDIDATE'], 'true')))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
