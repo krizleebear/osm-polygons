@@ -822,19 +822,29 @@ stages:
 
           INPUT_PBF=osm-data-$(OSM_REGION)/$(OSM_REGION).osm.pbf
           if [ ! -f "$INPUT_PBF" ]; then
-            echo "****************************************************************"
-            echo " ERROR: Missing PBF file for region '$(OSM_REGION)'!"
-            echo ""
-            echo " File '$INPUT_PBF' was not found."
-            echo ""
-            echo " Cause:"
-            echo " The PBF download pipeline has not been executed for '$(OSM_REGION)' yet."
-            echo ""
-            echo " Solution:"
-            echo " Please run the PBF download pipeline ('osm-download') in Azure DevOps"
-            echo " first to generate the required PBF dataset for '$(OSM_REGION)'."
-            echo "****************************************************************"
-            exit 1
+            echo "[INFO] No pre-downloaded artifact found for region '$(OSM_REGION)'."
+            echo "[INFO] Downloading PBF directly from Geofabrik: $(PBF_URL)"
+            mkdir -p "osm-data-$(OSM_REGION)"
+            curl --fail --location --retry 3 --retry-delay 10 \
+              --output "$INPUT_PBF" \
+              "$(PBF_URL)"
+            if [ ! -f "$INPUT_PBF" ] || [ ! -s "$INPUT_PBF" ]; then
+              echo "****************************************************************"
+              echo " ERROR: Failed to download PBF for region '$(OSM_REGION)'!"
+              echo ""
+              echo " URL: $(PBF_URL)"
+              echo ""
+              echo " Cause:"
+              echo " The direct Geofabrik download failed (network error, HTTP error,"
+              echo " or the URL is incorrect)."
+              echo ""
+              echo " Solution:"
+              echo " Verify PBF_URL in the export matrix is correct and Geofabrik"
+              echo " is reachable from the Azure DevOps runner."
+              echo "****************************************************************"
+              exit 1
+            fi
+            echo "[INFO] Direct download complete: $(du -h "$INPUT_PBF" | cut -f1)"
           fi
           ADMIN_PBF=$(OSM_REGION).admins.pbf
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
