@@ -89,7 +89,55 @@ stages:
 
   jobs:
 
+  # Preflight: verify the PBF download pipeline (definition 9) has published the
+  # expected artifacts BEFORE launching the expensive 179-region export matrix.
+  # This catches a missing/broken upstream artifact early instead of after minutes
+  # of per-region curl fallback downloads.
+  - job: artifact_preflight
+    displayName: 'Preflight: verify PBF artifacts available from download pipeline'
+    timeoutInMinutes: 30
+    workspace:
+      clean: all
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: none
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Probe guadeloupe PBF artifact from download pipeline (definition 9)'
+      inputs:
+        buildType: 'specific'
+        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+        definition: '9'
+        buildVersionToDownload: 'latest'
+        itemPattern: 'osm-data-guadeloupe/**'
+        targetPath: '$(System.DefaultWorkingDirectory)'
+    - bash: |
+        set -euo pipefail
+        probe="$(System.DefaultWorkingDirectory)/osm-data-guadeloupe/guadeloupe.osm.pbf"
+        if [ -f "$probe" ] && [ -s "$probe" ]; then
+          echo "[OK] Preflight: guadeloupe PBF artifact available ($(du -h "$probe" | cut -f1))."
+          echo "##vso[task.setvariable variable=ARTIFACTS_READY]true"
+        else
+          echo "****************************************************************"
+          echo " ERROR: Preflight failed — no 'osm-data-guadeloupe' artifact found!"
+          echo ""
+          echo " Cause:"
+          echo " The osm-download pipeline (definition 9) has not yet published a"
+          echo " complete artifact for the FR-DOM probe region 'guadeloupe'."
+          echo ""
+          echo " Possible reasons:"
+          echo "  - The download pipeline is still running (wait for it to finish)."
+          echo "  - The download pipeline build failed for that region."
+          echo ""
+          echo " Remediation:"
+          echo "  Verify build of definition 9 (osm-download) completed, then re-run."
+          echo "****************************************************************"
+          exit 1
+        fi
+      displayName: 'Verify guadeloupe PBF artifact present'
+
   - job: export
+    dependsOn: artifact_preflight
     timeoutInMinutes: 360
     workspace:
       clean: all
