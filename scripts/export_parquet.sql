@@ -4,13 +4,15 @@
 
 INSTALL spatial;
 LOAD spatial;
+INSTALL json;
+LOAD json;
 
 -- Load country -> continent/name mapping from SSOT (scripts/countries.json)
 CREATE TEMP TABLE countries_meta AS
     SELECT key AS cc, value->>'continent' AS continent
     FROM (
         SELECT unnest(json_keys(doc)) AS key, doc->(unnest(json_keys(doc))) AS value
-        FROM (SELECT parse_json(read_text('__COUNTRIES_JSON__')) AS doc)
+        FROM (SELECT json(content) AS doc FROM read_text('__COUNTRIES_JSON__'))
     );
 
 COPY (
