@@ -1,18 +1,18 @@
 # OSM Polygon Manual GitHub Release Pipeline
-# Downloads latest build artifacts, packages global + continent GeoParquet files, and creates GitHub Release.
+# Downloads latest build artifacts, packages per-country GeoParquet files, generates index.json, and creates GitHub Release.
 name: polygon-release-pipeline
 
 trigger: none # Never runs automatically
 
 parameters:
 - name: releaseTag
-  displayName: 'GitHub Release Tag (e.g. v1.7.0)'
+  displayName: 'GitHub Release Tag (e.g. v2.4.0)'
   type: string
-  default: 'v1.7.0'
+  default: 'v2.4.0'
 - name: releaseTitle
   displayName: 'GitHub Release Title'
   type: string
-  default: 'OSM Administrative Polygons GeoParquet Release v1.7.0'
+  default: 'OSM Administrative Polygons GeoParquet Release v2.4.0'
 - name: specificBuildId
   displayName: 'Build ID from export pipeline (use "latest" or "auto" for newest build)'
   type: string
@@ -38,7 +38,7 @@ jobs:
 
   # Download latest GeoParquet build artifacts from build definition '4' (krizleebear.osm-polygons)
   - task: DownloadPipelineArtifact@2
-    displayName: 'Download latest GeoParquet build artifacts'
+    displayName: 'Download latest per-country GeoParquet build artifacts'
     inputs:
       buildType: 'specific'
       project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
@@ -56,18 +56,18 @@ jobs:
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
   - task: Bash@3
-    displayName: 'Prepare Release Assets & Traceability Metadata'
+    displayName: 'Prepare Release Assets, index.json & Traceability Metadata'
     inputs:
       targetType: 'inline'
       script: |
         set -e
         mkdir -p release-assets
 
-        # 1. Continental Administrative GeoParquet files (< 2 GB per file)
-        find downloads -name "admin-polygons-*.parquet" ! -name "admin-polygons-all.parquet" -exec cp {} release-assets/ \;
+        # 1. Per-country Administrative GeoParquet files
+        find downloads -name "admin-polygons-*.parquet" -exec cp {} release-assets/ \;
 
-        # 2. Continental OSM Place-Nodes GeoParquet files
-        find downloads -name "osm-places-*.parquet" ! -name "osm-places-all.parquet" -exec cp {} release-assets/ \;
+        # 2. Per-country OSM Place-Nodes GeoParquet files
+        find downloads -name "osm-places-*.parquet" -exec cp {} release-assets/ \;
 
         # 3. Validation Summary & Archive
         if [ -d "downloads/validation-summary" ]; then
@@ -80,14 +80,14 @@ jobs:
         # Reclaim runner disk space immediately by removing downloaded temp folders
         rm -rf downloads
 
-        PARQUET_COUNT=$(find release-assets -name "*.parquet" | wc -l)
+        PARQUET_COUNT=$(find release-assets -name "admin-polygons-*.parquet" | wc -l)
         if [ "$PARQUET_COUNT" -eq 0 ]; then
           echo "****************************************************************"
-          echo " ERROR: No continental GeoParquet (.parquet) files found in downloads!"
+          echo " ERROR: No per-country GeoParquet (.parquet) files found in downloads!"
           echo ""
           echo " Cause:"
           echo " The latest build run of the export pipeline (definition 4) failed"
-          echo " or did not publish its continental GeoParquet artifacts."
+          echo " or did not publish its per-country GeoParquet artifacts."
           echo ""
           echo " Solution:"
           echo " Please run and verify that 'polygon-export-pipeline.yml' completes"
@@ -96,43 +96,93 @@ jobs:
           exit 1
         fi
 
-        echo "[INFO] Found $PARQUET_COUNT continental GeoParquet file(s) for release."
+        echo "[INFO] Found $PARQUET_COUNT per-country GeoParquet file(s) for release."
         ls -lh release-assets/
 
-        # Extract summary statistics and feature breakdown with DuckDB
-        docker run --rm -v $(System.DefaultWorkingDirectory):/workspace -w /workspace ghcr.io/krizleebear/osm2parquet:v1.0.6 duckdb -c "
-        LOAD spatial;
-        CREATE TABLE stats AS 
-        SELECT 
-            admin_level,
-            count(*) AS total_features,
-            count(CASE WHEN name IS NOT NULL AND name != '' THEN 1 END) AS with_name,
-            count(CASE WHEN wikidata IS NOT NULL THEN 1 END) AS with_wikidata,
-            count(CASE WHEN iso3166_2 IS NOT NULL THEN 1 END) AS with_iso3166_2
-        FROM read_parquet('release-assets/admin-polygons-*.parquet')
-        GROUP BY 1
-        ORDER BY 1;
+        # 4. Generate index.json from SSOT (scripts/countries.json)
+        python3 - <<'PYEOF'
+        import json, os, datetime
 
-        COPY stats TO 'release-assets/admin-levels-summary.md' (FORMAT CSV, HEADER, DELIMITER '|');
-        " || true
+        release_tag = os.environ.get('RELEASE_TAG', '${{ parameters.releaseTag }}')
+        base_url = f"https://github.com/krizleebear/osm-polygons/releases/download/{release_tag}/"
+        file_pattern = "admin-polygons-{cc}.parquet"
 
-        # Generate Release Notes Markdown
+        with open('scripts/countries.json') as f:
+            countries_meta = json.load(f)
+
+        # Only include countries that actually have a parquet file in this release
+        available = set()
+        for fname in os.listdir('release-assets'):
+            if fname.startswith('admin-polygons-') and fname.endswith('.parquet'):
+                cc = fname[len('admin-polygons-'):-len('.parquet')]
+                available.add(cc)
+
+        countries_list = []
+        for cc, meta in sorted(countries_meta.items()):
+            if cc in available:
+                countries_list.append({
+                    "cc": cc,
+                    "continent": meta["continent"],
+                    "name": meta["name"]
+                })
+
+        index = {
+            "version": release_tag.lstrip('v'),
+            "generated_at": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "base_url": base_url,
+            "file_pattern": file_pattern,
+            "countries": countries_list
+        }
+
+        with open('release-assets/index.json', 'w') as f:
+            json.dump(index, f, indent=2, ensure_ascii=False)
+
+        print(f"[INFO] index.json generated with {len(countries_list)} countries.")
+        PYEOF
+
+        # 5. Generate Release Notes Markdown
         cat <<EOF > release-notes.md
         ## OSM Administrative Polygons GeoParquet Release (${{ parameters.releaseTag }})
 
-        Continental OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons and companion place nodes extracted directly from OpenStreetMap.
+        Per-country OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons and companion place nodes extracted directly from OpenStreetMap.
 
         ### Key Highlights
-        - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts or gaps between bordering municipalities.
+        - **Per-country files:** One \`admin-polygons-{CC}.parquet\` per country — no more 2 GiB continental aggregates.
+        - **\`index.json\` catalog:** Machine-readable country list with continent assignment, \`base_url\`, and \`file_pattern\` — DuckDB globbing workaround for HTTP range queries.
+        - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts.
         - **OGC GeoParquet 1.1 Specification:** Native WGS84 (\`OGC:CRS84\`) geometry with ZSTD compression and spatial bounding-box indexing.
-        - **OSM Place-Nodes Companion Dataset (\`osm-places-*.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
+        - **OSM Place-Nodes Companion Dataset (\`osm-places-{CC}.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
         - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
+
+        ### Querying Multiple Countries with DuckDB
+
+        \`\`\`python
+        import duckdb, json, urllib.request
+
+        BASE = "https://github.com/krizleebear/osm-polygons/releases/download/${{ parameters.releaseTag }}/"
+        idx = json.load(urllib.request.urlopen(BASE + "index.json"))
+
+        # Select all European countries
+        ccs  = [c["cc"] for c in idx["countries"] if c["continent"] == "europe"]
+        urls = [idx["base_url"] + idx["file_pattern"].replace("{cc}", cc) for cc in ccs]
+
+        # Point-in-Polygon query for Munich across all European countries
+        result = duckdb.sql(f"""
+            INSTALL spatial; LOAD spatial;
+            SELECT admin_level, name, wikidata, iso3166_2
+            FROM read_parquet({urls})
+            WHERE bbox_minx <= 11.5761 AND bbox_maxx >= 11.5761
+              AND bbox_miny <= 48.1371 AND bbox_maxy >= 48.1371
+              AND ST_Contains(geom, ST_Point(11.5761, 48.1371))
+            ORDER BY admin_level
+        """)
+        \`\`\`
 
         ### Dataset Schema & Attributes
         | Column | Type | Nullable | Description |
         | :--- | :--- | :---: | :--- |
-        | **\`continent\`** | \`VARCHAR\` | No | Continental region (\`europe\`, \`asia\`, \`north-america\`, \`us\`, etc.) |
-        | **\`country_code\`** | \`VARCHAR\` | No | ISO 3166-1 alpha-2 country code (\`DE\`, \`FR\`, \`US\`, etc.) |
+        | **\`continent\`** | \`VARCHAR\` | No | Continental region (\`europe\`, \`asia\`, \`north-america\`, \`us\`, \`russia\`, etc.) |
+        | **\`country_code\`** | \`VARCHAR\` | No | ISO 3166-1 alpha-2 country code derived from feature tags (\`DE\`, \`FR\`, \`GB\`, etc.) |
         | **\`admin_level\`** | \`TINYINT\` | No | OSM administrative level (\`2\` to \`11\`) |
         | **\`area_type\`** | \`VARCHAR\` | No | Semantic area type (\`municipality\`, \`suburb\`, \`quarter\`, \`hamlet\`, etc.) |
         | **\`boundary\`** | \`VARCHAR\` | No | Boundary classification (\`administrative\`, \`traditional\`, \`statistical\`, \`cadastral\`, \`local_authority\`) |
@@ -151,42 +201,15 @@ jobs:
         | **\`tags\`** | \`JSON\` | Yes | Complete raw OSM tag dictionary |
         | **\`geom\`** | \`GEOMETRY\` | No | Valid OGC Polygon / MultiPolygon (WGS84) |
 
-        ### Querying with DuckDB
-        \`\`\`sql
-        INSTALL spatial; LOAD spatial;
+        ### Continent Assignments
+        Continent assignments follow political reality, not Geofabrik server paths. Notable cases:
+        - **\`ES\`** (Spain): includes Canary Islands (Geofabrik: \`africa/\`) — all under \`europe\`.
+        - **\`TR\`** (Turkey): assigned to \`europe\`.
+        - **\`GP\`/\`MQ\`/\`GF\`/\`RE\`/\`YT\`** (French overseas territories): assigned to \`europe\` as EU outermost regions.
+        - **\`GB\`** (United Kingdom): includes Northern Ireland (correct \`country_code\` derivation from \`iso3166_2\` prefix).
+        - Multi-country Geofabrik extracts (e.g. \`gcc-states\`, \`malaysia-singapore-brunei\`) are fully split into individual country files.
 
-        -- Point-in-Polygon query on Europe over HTTP
-        SELECT admin_level, name, wikidata, iso3166_2
-        FROM read_parquet('https://github.com/krizleebear/osm-polygons/releases/download/${{ parameters.releaseTag }}/admin-polygons-europe.parquet')
-        WHERE bbox_minx <= 11.5761 AND bbox_maxx >= 11.5761
-          AND bbox_miny <= 48.1371 AND bbox_maxy >= 48.1371
-          AND ST_Contains(geom, ST_Point(11.5761, 48.1371))
-        ORDER BY admin_level;
-        \`\`\`
-
-        ### Download Assets
-        - **\`admin-polygons-europe.parquet\`**: European administrative boundaries excluding Russia (~1.85 GB).
-        - **\`admin-polygons-russia.parquet\`**: Russia dataset (~244 MB).
-        - **\`admin-polygons-asia.parquet\`**: Asia dataset (~765 MB).
-        - **\`admin-polygons-south-america.parquet\`**: South America dataset (~612 MB).
-        - **\`admin-polygons-africa.parquet\`**: Africa dataset (~231 MB).
-        - **\`admin-polygons-us.parquet\`**: United States dataset (~145 MB).
-        - **\`admin-polygons-australia-oceania.parquet\`**: Australia & Oceania dataset (~111 MB).
-        - **\`admin-polygons-canada.parquet\`**: Canada dataset (~78 MB).
-        - **\`admin-polygons-north-america.parquet\`**: Greenland & Mexico dataset (~52 MB).
-        - **\`admin-polygons-central-america.parquet\`**: Central America & Caribbean dataset (~22 MB).
-
-        ### Geographical Coverage & Multi-Country Extracts
-        Global extracts are partitioned along Geofabrik regional boundaries. Note that combined multi-country Geofabrik extracts are integrated into their respective continental datasets:
-        - **\`gcc-states\`** (in \`admin-polygons-asia.parquet\`): Covers Bahrain (\`BH\`), Kuwait (\`KW\`), Oman (\`OM\`), Qatar (\`QA\`), Saudi Arabia (\`SA\`), and United Arab Emirates (\`AE\`).
-        - **\`malaysia-singapore-brunei\`** (in \`admin-polygons-asia.parquet\`): Covers Malaysia (\`MY\`), Singapore (\`SG\`), and Brunei (\`BN\`).
-        - **\`israel-and-palestine\`** (in \`admin-polygons-asia.parquet\`): Covers Israel (\`IL\`) and Palestine (\`PS\`).
-        - **\`senegal-and-gambia\`** (in \`admin-polygons-africa.parquet\`): Covers Senegal (\`SN\`) and The Gambia (\`GM\`).
-        - **\`canary-islands\`** (in \`admin-polygons-europe.parquet\`): Covers the Canary Islands (\`ES\`).
-        - **\`haiti-and-domrep\`** (in \`admin-polygons-central-america.parquet\`): Covers Haiti (\`HT\`) and Dominican Republic (\`DO\`).
-        - **\`ireland-and-northern-ireland\`** (in \`admin-polygons-europe.parquet\`): Covers Republic of Ireland (\`IE\`) and Northern Ireland (\`GB\`).
-        - **\`kosovo\`** (in \`admin-polygons-europe.parquet\`): Exported under user-assigned code \`XK\`.
-        - **\`swaziland\`** (in \`admin-polygons-africa.parquet\`): Exported under ISO code \`SZ\` (Eswatini).
+        See \`index.json\` for the complete country list and continent assignments.
 
         ---
         ### Data Source & License
@@ -213,12 +236,9 @@ jobs:
       releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
       assets: |
         $(System.DefaultWorkingDirectory)/release-assets/*.parquet
-        $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.md
+        $(System.DefaultWorkingDirectory)/release-assets/index.json
         $(System.DefaultWorkingDirectory)/release-assets/validation-summary.md
         $(System.DefaultWorkingDirectory)/release-assets/validation.tar.gz
       assetUploadMode: 'delete'
       isDraft: ${{ parameters.isDraft }}
       isPreRelease: ${{ parameters.isPreRelease }}
-
-
-

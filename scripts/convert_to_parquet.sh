@@ -2,20 +2,21 @@
 set -euo pipefail
 
 # Convert OSM administrative polygon GeoJSON sequence stream to GeoParquet using DuckDB
-# Usage: ./scripts/convert_to_parquet.sh <CONTINENT> <COUNTRY_CODE> <INPUT_GEOJSONSEQ> <OUTPUT_PARQUET>
+# Usage: ./scripts/convert_to_parquet.sh <COUNTRY_CODE> <INPUT_GEOJSONSEQ> <OUTPUT_PARQUET>
+# continent is resolved at runtime via scripts/countries.json (SSOT)
 
-if [ "$#" -ne 4 ]; then
-    echo "Usage: $0 <CONTINENT> <COUNTRY_CODE> <INPUT_GEOJSONSEQ> <OUTPUT_PARQUET>" >&2
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <COUNTRY_CODE> <INPUT_GEOJSONSEQ> <OUTPUT_PARQUET>" >&2
     exit 1
 fi
 
-CONTINENT="$1"
-COUNTRY_CODE="$2"
-INPUT_GEOJSONSEQ="$3"
-OUTPUT_PARQUET="$4"
+COUNTRY_CODE="$1"
+INPUT_GEOJSONSEQ="$2"
+OUTPUT_PARQUET="$3"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_TEMPLATE="${SCRIPT_DIR}/export_parquet.sql"
+COUNTRIES_JSON="${SCRIPT_DIR}/countries.json"
 
 if [ ! -f "$INPUT_GEOJSONSEQ" ]; then
     echo "ERROR: Input file '$INPUT_GEOJSONSEQ' not found." >&2
@@ -32,21 +33,26 @@ if [ ! -f "$SQL_TEMPLATE" ]; then
     exit 1
 fi
 
+if [ ! -f "$COUNTRIES_JSON" ]; then
+    echo "ERROR: SSOT file '$COUNTRIES_JSON' not found." >&2
+    exit 1
+fi
+
 echo "============================================================"
 echo " Converting GeoJSON to GeoParquet"
-echo " Continent:    $CONTINENT"
 echo " Country Code: $COUNTRY_CODE"
 echo " Input:        $INPUT_GEOJSONSEQ ($(wc -l < "$INPUT_GEOJSONSEQ") features, $(du -h "$INPUT_GEOJSONSEQ" | cut -f1))"
 echo " Output:       $OUTPUT_PARQUET"
+echo " SSOT:         $COUNTRIES_JSON"
 echo "============================================================"
 
 TMP_SQL="$(mktemp /tmp/export_parquet_XXXXXX.sql)"
 trap 'rm -f "$TMP_SQL"' EXIT
 
-sed -e "s|__CONTINENT__|${CONTINENT}|g" \
-    -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
+sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
     -e "s|__INPUT_GEOJSONSEQ__|${INPUT_GEOJSONSEQ}|g" \
     -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
+    -e "s|__COUNTRIES_JSON__|${COUNTRIES_JSON}|g" \
     "$SQL_TEMPLATE" > "$TMP_SQL"
 
 duckdb < "$TMP_SQL"
@@ -59,7 +65,7 @@ fi
 echo "============================================================"
 echo " GeoParquet Artifact Summary: $OUTPUT_PARQUET"
 duckdb -c "
-SELECT 
+SELECT
     COUNT(*) AS total_rows,
     COUNT(center_lat) AS with_center,
     COUNT(admin_centre_lat) AS with_admin_centre,

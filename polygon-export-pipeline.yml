@@ -9,10 +9,6 @@ resources:
     image: mirror.gcr.io/krizleebear/docker-osmium-tool:v1.19.1
     #image: krizleebear/docker-osmium-tool:v1.19.1
     #endpoint: docker-krizleebear
-  - container: osm-tools
-    #image: krizleebear/osm-tools:latest
-    image: mirror.gcr.io/krizleebear/osm-tools:master-2b3843cecae063416c0622eb978d31527c119008
-    #endpoint: docker-krizleebear
   - container: osm2parquet
     # DuckDB spatial converter for unsimplified GeoParquet 1.1 exports;
     # v1.0.6+ also ships python3 (stdlib) + duckdb httpfs/spatial for Overture fallback (fetch_overture_polygons.py)
@@ -27,10 +23,6 @@ pool:
 parameters:
 - name: exportParquet
   displayName: 'Generate GeoParquet artifacts (OGC GeoParquet 1.1 unsimplified, 0% border-bleeding)'
-  type: boolean
-  default: true
-- name: simplifyPolygons
-  displayName: 'Run polygon simplification (osm-tools Java simplifier)'
   type: boolean
   default: true
 - name: reuseExportArtifacts
@@ -762,6 +754,26 @@ stages:
           OSM_REGION: 'spain'
           PBF_URL: 'https://download.geofabrik.de/europe/spain-latest.osm.pbf'
           COUNTRY_CODE: 'ES'
+        guadeloupe:
+          OSM_REGION: 'guadeloupe'
+          PBF_URL: 'https://download.geofabrik.de/europe/france/guadeloupe-latest.osm.pbf'
+          COUNTRY_CODE: 'GP'
+        martinique:
+          OSM_REGION: 'martinique'
+          PBF_URL: 'https://download.geofabrik.de/europe/france/martinique-latest.osm.pbf'
+          COUNTRY_CODE: 'MQ'
+        guyane:
+          OSM_REGION: 'guyane'
+          PBF_URL: 'https://download.geofabrik.de/europe/france/guyane-latest.osm.pbf'
+          COUNTRY_CODE: 'GF'
+        reunion:
+          OSM_REGION: 'reunion'
+          PBF_URL: 'https://download.geofabrik.de/europe/france/reunion-latest.osm.pbf'
+          COUNTRY_CODE: 'RE'
+        mayotte:
+          OSM_REGION: 'mayotte'
+          PBF_URL: 'https://download.geofabrik.de/europe/france/mayotte-latest.osm.pbf'
+          COUNTRY_CODE: 'YT'
         sweden:
           OSM_REGION: 'sweden'
           PBF_URL: 'https://download.geofabrik.de/europe/sweden-latest.osm.pbf'
@@ -1097,7 +1109,7 @@ stages:
 
 
 - stage: parquet
-  displayName: 'Convert to GeoParquet by continent'
+  displayName: 'Convert to GeoParquet by country'
   dependsOn: export
   condition: and(in(dependencies.export.result, 'Succeeded', 'Skipped'), eq('${{ parameters.exportParquet }}', 'true'))
 
@@ -1398,10 +1410,12 @@ stages:
               [ -n "$file" ] || continue
               [ -s "$file" ] || continue
               filename=$(basename "$file")
-              country_code=$(echo "$filename" | cut -d'_' -f1)
+              # matrix_cc is the primary country code from the export job filename prefix
+              matrix_cc=$(echo "$filename" | cut -d'_' -f1)
               parquet_out="temp_parquet/${filename%.geojsonseq}.parquet"
               echo "Processing polygons $file -> $parquet_out ..."
-              ./scripts/convert_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$parquet_out"
+              # continent and country_code are derived inside convert_to_parquet.sh from features + countries.json
+              ./scripts/convert_to_parquet.sh "$matrix_cc" "$file" "$parquet_out"
               rm -rf "$(dirname "$file")"
             done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \))
 
@@ -1409,10 +1423,10 @@ stages:
               [ -n "$file" ] || continue
               [ -s "$file" ] || continue
               filename=$(basename "$file")
-              country_code=$(echo "$filename" | cut -d'_' -f1)
+              matrix_cc=$(echo "$filename" | cut -d'_' -f1)
               places_out="temp_places_parquet/${filename%.jsonl}.parquet"
               echo "Processing places $file -> $places_out ..."
-              ./scripts/convert_places_to_parquet.sh "$(CONTINENT)" "$country_code" "$file" "$places_out"
+              ./scripts/convert_places_to_parquet.sh "$matrix_cc" "$file" "$places_out"
               rm -rf "$(dirname "$file")"
             done < <(find . -type f \( -name "*_${region}.places.jsonl" -o -name "${region}.places.jsonl" \))
           done
@@ -1425,54 +1439,86 @@ stages:
             exit 1
           fi
 
-          echo "Merging $TEMP_COUNT country Parquet files into single unified continent Parquet: parquet/admin-polygons-$(CONTINENT).parquet"
+          # Merge per-region temp parquets into per-country parquets (groups spain+canary-islands -> ES, etc.)
+          echo "Producing per-country GeoParquet files from $TEMP_COUNT region parquet(s)..."
           duckdb -c "LOAD spatial;
-          COPY (
-            SELECT * FROM read_parquet('temp_parquet/*.parquet')
-            ORDER BY continent, country_code, admin_level, bbox_miny, bbox_minx
-          ) TO 'parquet/admin-polygons-$(CONTINENT).parquet' (
-            FORMAT PARQUET,
-            COMPRESSION ZSTD,
-            ROW_GROUP_SIZE 5000
-          );"
+          CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
+          CREATE TABLE country_list AS SELECT DISTINCT country_code FROM combined ORDER BY country_code;
+          SELECT country_code, count(*) AS features FROM combined GROUP BY country_code ORDER BY country_code;
+          " > /tmp/country_summary.txt 2>&1 || true
+          cat /tmp/country_summary.txt || true
+
+          duckdb << 'DUCKDB_EOF'
+          LOAD spatial;
+          CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
+          SELECT DISTINCT country_code FROM combined ORDER BY country_code;
+          DUCKDB_EOF
+
+          # Write one parquet per country_code
+          duckdb -c "
+          LOAD spatial;
+          CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
+          CREATE TABLE ccs AS SELECT DISTINCT country_code AS cc FROM combined ORDER BY cc;
+          COPY (SELECT cc FROM ccs) TO '/tmp/country_codes_$(CONTINENT).csv' (HEADER false);
+          "
+          while IFS= read -r cc; do
+            [ -n "$cc" ] || continue
+            out="parquet/admin-polygons-${cc}.parquet"
+            echo "Writing $out ..."
+            duckdb -c "
+            LOAD spatial;
+            CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
+            COPY (
+              SELECT * FROM combined WHERE country_code = '${cc}'
+              ORDER BY admin_level, bbox_miny, bbox_minx
+            ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+            "
+          done < /tmp/country_codes_$(CONTINENT).csv
           rm -rf temp_parquet
 
+          # per-country places parquets
+          HAS_PLACES=false
           PLACES_TEMP_COUNT=$(find temp_places_parquet -name "*.parquet" 2>/dev/null | wc -l)
           if [ "$PLACES_TEMP_COUNT" -gt 0 ]; then
-            echo "Merging $PLACES_TEMP_COUNT country places Parquet files into single unified continent Parquet: parquet/osm-places-$(CONTINENT).parquet"
-            duckdb -c "LOAD spatial;
-            COPY (
-              SELECT * FROM read_parquet('temp_places_parquet/*.parquet')
-              ORDER BY continent, country_code, place_type, lat, lon
-            ) TO 'parquet/osm-places-$(CONTINENT).parquet' (
-              FORMAT PARQUET,
-              COMPRESSION ZSTD,
-              ROW_GROUP_SIZE 5000
-            );"
+            duckdb -c "
+            LOAD spatial;
+            CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
+            COPY (SELECT DISTINCT country_code AS cc FROM pcombined ORDER BY cc) TO '/tmp/places_ccs_$(CONTINENT).csv' (HEADER false);
+            "
+            while IFS= read -r cc; do
+              [ -n "$cc" ] || continue
+              pout="parquet/osm-places-${cc}.parquet"
+              echo "Writing $pout ..."
+              duckdb -c "
+              LOAD spatial;
+              CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
+              COPY (
+                SELECT * FROM pcombined WHERE country_code = '${cc}'
+                ORDER BY place_type, lat, lon
+              ) TO '${pout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+              "
+              HAS_PLACES=true
+            done < /tmp/places_ccs_$(CONTINENT).csv
             rm -rf temp_places_parquet
           fi
 
-          if [ -f "parquet/osm-places-$(CONTINENT).parquet" ]; then
-            echo "##vso[task.setvariable variable=HAS_PLACES_PARQUET]true"
-          else
-            echo "##vso[task.setvariable variable=HAS_PLACES_PARQUET]false"
-          fi
-
+          echo "##vso[task.setvariable variable=HAS_PLACES_PARQUET]$HAS_PLACES"
+          echo "=== Per-country GeoParquet files produced ==="
           ls -lh parquet/
 
     - task: PublishPipelineArtifact@1
-      displayName: 'Store GeoParquet continent artifact'
+      displayName: 'Store per-country GeoParquet artifacts'
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet/admin-polygons-$(CONTINENT).parquet'
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet'
         artifact: 'admin-polygons-parquet-$(CONTINENT)'
         publishLocation: 'pipeline'
 
     - task: PublishPipelineArtifact@1
-      displayName: 'Store OSM places GeoParquet continent artifact'
+      displayName: 'Store per-country OSM places GeoParquet artifacts'
       condition: and(succeeded(), eq(variables['HAS_PLACES_PARQUET'], 'true'))
       continueOnError: true
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet/osm-places-$(CONTINENT).parquet'
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet'
         artifact: 'osm-places-parquet-$(CONTINENT)'
         publishLocation: 'pipeline'
 
@@ -1485,240 +1531,21 @@ stages:
           rm -rf $(System.DefaultWorkingDirectory)/*
 
 
-- stage: simplify
-  displayName: 'Simplify polygons by continent'
-  dependsOn: export
-  condition: and(in(dependencies.export.result, 'Succeeded', 'Skipped'), eq('${{ parameters.simplifyPolygons }}', 'true'))
-
-  jobs:
-  - job: simplify
-    timeoutInMinutes: 360
-    workspace:
-      clean: all
-    container: osm-tools
-    strategy:
-      matrix:
-        africa:
-          CONTINENT: 'africa'
-          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
-        asia:
-          CONTINENT: 'asia'
-          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkey turkmenistan uzbekistan vietnam yemen'
-        australia_oceania:
-          CONTINENT: 'australia-oceania'
-          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
-        central_america:
-          CONTINENT: 'central-america'
-          REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
-        north_america:
-          CONTINENT: 'north-america'
-          REGIONS: 'greenland mexico'
-        canada:
-          CONTINENT: 'canada'
-          REGIONS: 'canada'
-        us:
-          CONTINENT: 'us'
-          REGIONS: 'us'
-        south_america:
-          CONTINENT: 'south-america'
-          REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
-
-        # European heavyweights partitioned into dedicated matrix jobs to avoid runner bottlenecks:
-        # - france: ~35,000 administrative communes (admin_level 8)
-        # - germany: ~11,000 municipalities/Gemeinden (admin_level 8)
-        # - great_britain: ~12,500 civil parishes & wards (admin_level 10)
-        # - ireland: >65,000 features (>61,800 historic Townlands/baile fearainn mapped in OSM as admin_level 10)
-        france:
-          CONTINENT: 'france'
-          REGIONS: 'france'
-        germany:
-          CONTINENT: 'germany'
-          REGIONS: 'germany'
-        great_britain:
-          CONTINENT: 'great-britain'
-          REGIONS: 'great-britain'
-        ireland:
-          CONTINENT: 'ireland'
-          REGIONS: 'ireland-and-northern-ireland'
-        europe_rest:
-          CONTINENT: 'europe-rest'
-          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria canary-islands croatia cyprus czech-republic denmark estonia faroe-islands finland georgia greece hungary iceland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland ukraine'
-        russia:
-          CONTINENT: 'russia'
-          REGIONS: 'russia'
-
-    steps:
-    - checkout: none #skip checking out the default repository resource
-
-    - ${{ if and(ne(parameters.exportBuildId, 'auto'), ne(parameters.exportBuildId, '')) }}:
-      - task: DownloadPipelineArtifact@2
-        enabled: true
-        displayName: 'Download export artifacts from specific build (${{ parameters.exportBuildId }})'
-        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '4'
-          buildVersionToDownload: 'specific'
-          pipelineId: '${{ parameters.exportBuildId }}'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: |
-            admin-polygons-*/**
-            !admin-polygons-simplified*/**
-            !admin-polygons-parquet*/**
-            !admin-polygons-export-metadata/**
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - ${{ if or(eq(parameters.exportBuildId, 'auto'), eq(parameters.exportBuildId, '')) }}:
-      - task: DownloadPipelineArtifact@2
-        enabled: true
-        displayName: 'Download export artifacts from latest build with export artifacts'
-        condition: ${{ eq(parameters.reuseExportArtifacts, true) }}
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '4'
-          buildVersionToDownload: 'latest'
-          tags: 'has-export-artifacts'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: |
-            admin-polygons-*/**
-            !admin-polygons-simplified*/**
-            !admin-polygons-parquet*/**
-            !admin-polygons-export-metadata/**
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download export artifacts from current build'
-      condition: ${{ eq(parameters.reuseExportArtifacts, false) }}
-      inputs:
-        buildType: 'current'
-        itemPattern: |
-          admin-polygons-*/**
-          !admin-polygons-simplified*/**
-          !admin-polygons-parquet*/**
-          !admin-polygons-export-metadata/**
-        targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: Bash@3
-      enabled: true
-      displayName: 'simplify polygons'
-      inputs:
-        workingDirectory: '$(System.DefaultWorkingDirectory)'
-        targetType: 'inline'
-        script: |
-          set -e
-          export JAVA_TOOL_OPTIONS="-Xmx6g"
-          mkdir -p simplified
-
-          # Prune export directories belonging to other continents to conserve runner disk space
-          for dir in admin-polygons-*; do
-            [ -d "$dir" ] || continue
-            keep=false
-            for region in $(REGIONS); do
-              if [[ "$dir" == *"-${region}"* ]] || [[ "$dir" == *"_${region}"* ]]; then
-                keep=true
-                break
-              fi
-            done
-            if [ "$keep" = "false" ]; then
-              rm -rf "$dir"
-            fi
-          done
-          echo "Pruned non-target region directories from workspace."
-
-          for region in $(REGIONS); do
-            find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) | while read -r file; do
-              if [ ! -s "$file" ]; then
-                echo "WARNING: File $file is empty (0 bytes). Skipping simplification."
-                rm -f "$file"
-                continue
-              fi
-              echo "Simplifying $file ($(wc -l < "$file") features)..."
-              /simplify.sh "$file"
-              SIMPLIFIED_OUTPUT=$(find $(dirname "$file") -name "*.simplified.geojsonseq" | head -n 1)
-              if [ -n "$SIMPLIFIED_OUTPUT" ] && [ -f "$SIMPLIFIED_OUTPUT" ]; then
-                mv "$SIMPLIFIED_OUTPUT" "simplified/$(basename "$file")"
-              fi
-              rm -rf "$(dirname "$file")"
-            done
-          done
-
-
-
-          # Copy export metadata if present
-          find . -name "export-info.json" -exec cp {} simplified/export-info.json \; 2>/dev/null || true
-
-          # Save osm-tools container git version info
-          unzip -p /app/app.jar git.properties > simplified/osm-tools-version.info 2>/dev/null || true
-
-          ls -laR simplified/
-
-          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
-          if [ "$SIMPLIFIED_COUNT" -eq 0 ]; then
-            echo "****************************************************************"
-            echo " ERROR: No simplified polygon files were produced for continent '$(CONTINENT)'!"
-            echo ""
-            echo " Cause:"
-            echo " Upstream export artifacts for regions in '$(CONTINENT)' were missing"
-            echo " or contained 0 features."
-            echo ""
-            echo " Solution:"
-            echo " Check upstream 'export' stage logs to verify .geojsonseq artifacts"
-            echo " were generated and downloaded correctly."
-            echo "****************************************************************"
-            exit 1
-          fi
-
-          tar cfz simplified-$(CONTINENT).tar.gz simplified/
-
-
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store simplified continent artifact'
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/simplified-$(CONTINENT).tar.gz'
-        artifact: 'admin-polygons-simplified-$(CONTINENT)'
-        publishLocation: 'pipeline'
-
-    - task: Bash@3
-      displayName: 'Cleanup workspace'
-      condition: always()
-      inputs:
-        targetType: 'inline'
-        script: |
-          rm -rf $(System.DefaultWorkingDirectory)/*
-
 - stage: package
-  displayName: 'Package global simplified & GeoParquet polygons'
+  displayName: 'Package validation artifacts'
   dependsOn:
-  - simplify
   - parquet
-  condition: or(succeeded('simplify'), succeeded('parquet'))
+  condition: succeeded('parquet')
 
   jobs:
   - job: package
-    timeoutInMinutes: 360
+    timeoutInMinutes: 120
     workspace:
       clean: all
     pool:
       vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
-
-    - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download all simplified continent artifacts'
-      continueOnError: true
-      inputs:
-        buildType: 'current'
-        buildVersionToDownload: 'latest'
-        itemPattern: 'admin-polygons-simplified-*/**'
-        targetPath: '$(System.DefaultWorkingDirectory)/archives'
 
     - task: DownloadPipelineArtifact@2
       enabled: true
@@ -1732,18 +1559,11 @@ stages:
 
     - task: Bash@3
       enabled: true
-      displayName: 'Bundle global artifact & generate admin_level statistics'
+      displayName: 'Bundle validation artifacts & generate export metadata'
       inputs:
         targetType: 'inline'
         script: |
           set -e
-          set -x
-          mkdir -p simplified
-          if [ -d "archives" ]; then
-            find archives -name "simplified-*.tar.gz" | while read -r archive; do
-              tar xfz "$archive" -C . || true
-            done
-          fi
 
           # Collect all validation.json files into a single directory and archive
           mkdir -p validation
@@ -1762,44 +1582,18 @@ stages:
             python3 scripts/generate_validation_summary.py validation/ || true
           fi
 
-          OSM_TOOLS_COMMIT=$(grep "git.commit.id.full" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
-          OSM_TOOLS_BUILD_TIME=$(grep "git.build.time" simplified/osm-tools-version.info 2>/dev/null | cut -d'=' -f2 || echo "")
-
-          if [ -z "$OSM_TOOLS_COMMIT" ] || [ "$OSM_TOOLS_COMMIT" = "latest" ]; then
-            OSM_TOOLS_COMMIT="2b3843cecae063416c0622eb978d31527c119008"
-          fi
-
           # Extract and parse export metadata
-          EXPORTED_AT=""
-          EXPORT_COMMIT=""
-          EXPORT_BUILD_ID=""
-          EXPORT_BUILD_NUM=""
-          if [ -f "simplified/export-info.json" ]; then
-            EXPORTED_AT=$(jq -r '.exported_at // ""' simplified/export-info.json 2>/dev/null || echo "")
-            EXPORT_COMMIT=$(jq -r '.export_pipeline_commit // ""' simplified/export-info.json 2>/dev/null || echo "")
-            EXPORT_BUILD_ID=$(jq -r '.export_build_id // ""' simplified/export-info.json 2>/dev/null || echo "")
-            EXPORT_BUILD_NUM=$(jq -r '.export_build_number // ""' simplified/export-info.json 2>/dev/null || echo "")
-          fi
-
-          if [ -z "$EXPORTED_AT" ]; then
-            EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          fi
-          if [ -z "$EXPORT_COMMIT" ]; then
-            EXPORT_COMMIT="$(Build.SourceVersion)"
-          fi
-          if [ -z "$EXPORT_BUILD_ID" ]; then
-            EXPORT_BUILD_ID="$(Build.BuildId)"
-          fi
-          if [ -z "$EXPORT_BUILD_NUM" ]; then
-            EXPORT_BUILD_NUM="$(Build.BuildNumber)"
-          fi
+          EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          EXPORT_COMMIT="$(Build.SourceVersion)"
+          EXPORT_BUILD_ID="$(Build.BuildId)"
+          EXPORT_BUILD_NUM="$(Build.BuildNumber)"
 
           REUSED_EXPORT=false
-          if [ "${{ parameters.reuseExportArtifacts }}" = "true" ] || [ "${{ parameters.reuseExportArtifacts }}" = "True" ] || [ "$EXPORT_BUILD_ID" != "$(Build.BuildId)" ]; then
+          if [ "${{ parameters.reuseExportArtifacts }}" = "true" ] || [ "${{ parameters.reuseExportArtifacts }}" = "True" ]; then
             REUSED_EXPORT=true
           fi
 
-          # Generate export-info.json and metadata artifact
+          # Generate export-info.json metadata artifact
           cat <<EOF > export-info.json
           {
             "exported_at": "$EXPORTED_AT",
@@ -1809,38 +1603,10 @@ stages:
             "release_pipeline_commit": "$(Build.SourceVersion)",
             "release_build_id": "$(Build.BuildId)",
             "release_build_number": "$(Build.BuildNumber)",
-            "osm_tools_commit": "$OSM_TOOLS_COMMIT",
-            "osm_tools_build_time": "$OSM_TOOLS_BUILD_TIME",
             "reused_export_artifacts": $REUSED_EXPORT
           }
           EOF
-
           cat export-info.json
-
-          SIMPLIFIED_COUNT=$(find simplified -name "*.geojsonseq" | wc -l)
-          if [ "$SIMPLIFIED_COUNT" -gt 0 ]; then
-            python3 scripts/generate_release_stats.py simplified || true
-            tar cfz simplified.tar.gz simplified/
-          fi
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store global simplified artifact'
-      condition: and(succeeded(), eq('${{ parameters.simplifyPolygons }}', 'true'))
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/simplified.tar.gz'
-        artifact: 'admin-polygons-simplified'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store admin-level statistics artifact'
-      condition: and(succeeded(), eq('${{ parameters.simplifyPolygons }}', 'true'))
-      continueOnError: true
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/simplified/admin-levels-summary.md'
-        artifact: 'admin-levels-summary'
-        publishLocation: 'pipeline'
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -1860,6 +1626,16 @@ stages:
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/validation/validation-summary.md'
         artifact: 'validation-summary'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store export metadata artifact'
+      condition: succeeded()
+      continueOnError: true
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/export-info.json'
+        artifact: 'export-info'
         publishLocation: 'pipeline'
 
     - task: Bash@3
