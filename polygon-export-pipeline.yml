@@ -1685,6 +1685,9 @@ stages:
           if [ "$VALIDATION_COUNT" -gt 0 ]; then
             tar cfz validation.tar.gz validation/
             python3 scripts/generate_validation_summary.py validation/ || true
+            echo "##vso[task.setvariable variable=HAS_VALIDATION]true"
+          else
+            echo "##vso[task.setvariable variable=HAS_VALIDATION]false"
           fi
 
           # Extract and parse export metadata
@@ -1716,7 +1719,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store validation archive artifact'
-      condition: succeeded()
+      condition: and(succeeded(), eq(variables['HAS_VALIDATION'], 'true'))
       continueOnError: true
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/validation.tar.gz'
@@ -1726,7 +1729,7 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store validation summary artifact'
-      condition: succeeded()
+      condition: and(succeeded(), eq(variables['HAS_VALIDATION'], 'true'))
       continueOnError: true
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/validation/validation-summary.md'
