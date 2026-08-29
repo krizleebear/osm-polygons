@@ -1657,6 +1657,37 @@ stages:
 
     - task: DownloadPipelineArtifact@2
       enabled: true
+      displayName: 'Download all per-country parquet artifacts for duplicate check'
+      inputs:
+        buildType: 'current'
+        itemPattern: 'admin-polygons-parquet-*/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/parquet-check'
+
+    - task: Bash@3
+      enabled: true
+      displayName: 'Verify no duplicate country_code parquet files across continents'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -e
+          echo "=== Checking for duplicate per-country parquet files ==="
+          DUPLICATES=$(find parquet-check -name "admin-polygons-*.parquet" -exec basename {} \; | sort | uniq -d)
+          if [ -n "$DUPLICATES" ]; then
+            echo "ERROR: Duplicate per-country parquet files found across continents:"
+            echo "$DUPLICATES"
+            echo ""
+            echo "Each country_code must produce exactly one parquet file."
+            echo "Cause: a feature's country_code was derived to a value that conflicts"
+            echo "with another continent's parquet (e.g. FR from australia-oceania vs europe)."
+            echo "Fix: add a CC remap in scripts/convert_to_parquet.sh for the affected extract."
+            exit 1
+          fi
+          echo "OK: No duplicate parquet files found."
+          find parquet-check -name "admin-polygons-*.parquet" -exec basename {} \; | sort | head -20
+          echo "... ($(find parquet-check -name 'admin-polygons-*.parquet' | wc -l) total files)"
+
+    - task: DownloadPipelineArtifact@2
+      enabled: true
       displayName: 'Download all validation artifacts'
       continueOnError: true
       inputs:

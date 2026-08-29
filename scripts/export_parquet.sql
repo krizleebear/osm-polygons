@@ -1,6 +1,10 @@
 -- DuckDB SQL script to export OSM administrative polygon GeoJSON sequence streams into OGC GeoParquet 1.1 format.
 -- Placeholders (__COUNTRY_CODE__, __INPUT_GEOJSONSEQ__, __OUTPUT_PARQUET__, __COUNTRIES_JSON__) are replaced via sed before execution.
 -- Note: continent is resolved via __COUNTRIES_JSON__ lookup per derived country_code (not a static token anymore).
+--
+-- country_code derivation (simple):
+--   COALESCE(ISO3166-1, matrix_CC)
+--   Per-extract CC remapping (e.g. FR→NC for new-caledonia) is handled in convert_to_parquet.sh.
 
 INSTALL spatial;
 LOAD spatial;
@@ -18,24 +22,17 @@ CREATE TEMP TABLE countries_meta AS
 COPY (
     SELECT
         COALESCE(m.continent, 'unknown') AS continent,
-        -- country_code derived from feature tags (generic fix for NI/Belfast, Ceuta/Melilla, multi-country extracts):
-        -- 1) ISO3166-2 prefix (e.g. GB-NIR -> GB, ES-CE -> ES)
-        -- 2) ISO3166-1 (e.g. DE, FR)
-        -- 3) fallback to matrix COUNTRY_CODE
         COALESCE(
-            NULLIF(SUBSTRING(COALESCE(
-                json_extract_string(properties, '$.ISO3166-2'),
-                json_extract_string(properties, '$.iso3166-2')
-            ), 1, 2), ''),
             json_extract_string(properties, '$.ISO3166-1'),
             json_extract_string(properties, '$.ISO3166-1:alpha2'),
+            json_extract_string(properties, '$.ISO3166-1:alpha3'),
             '__COUNTRY_CODE__'
         ) AS country_code,
         TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) AS admin_level,
         COALESCE(json_extract_string(properties, '$.area_type'), 'administrative') AS area_type,
         COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') AS boundary,
         TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.@id'), json_extract_string(properties, '$.id'), '0'), '[^0-9]', '', 'g') AS BIGINT) AS osm_id,
-        COALESCE(json_extract_string(properties, '$.@type'), 'relation') AS osm_type,
+        COALESCE(json_extract_string(properties, '$.@type'), json_extract_string(properties, '$.osm_type'), 'relation') AS osm_type,
         COALESCE(json_extract_string(properties, '$.name'), json_extract_string(properties, '$.name:en'), json_extract_string(properties, '$.official_name'), '') AS name,
         json_extract_string(properties, '$.name:en') AS name_en,
         json_extract_string(properties, '$.wikidata') AS wikidata,
@@ -61,16 +58,7 @@ COPY (
     FROM (
         SELECT
             properties,
-            ST_GeomFromGeoJSON(geometry) AS geom,
-            COALESCE(
-                NULLIF(SUBSTRING(COALESCE(
-                    json_extract_string(properties, '$.ISO3166-2'),
-                    json_extract_string(properties, '$.iso3166-2')
-                ), 1, 2), ''),
-                json_extract_string(properties, '$.ISO3166-1'),
-                json_extract_string(properties, '$.ISO3166-1:alpha2'),
-                '__COUNTRY_CODE__'
-            ) AS _cc
+            ST_GeomFromGeoJSON(geometry) AS geom
         FROM read_json('__INPUT_GEOJSONSEQ__',
             format='newline_delimited',
             columns={'properties': 'JSON', 'geometry': 'JSON'},
@@ -81,7 +69,12 @@ COPY (
           AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
           AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')
     ) raw
-    LEFT JOIN countries_meta m ON m.cc = raw._cc
+    LEFT JOIN countries_meta m ON m.cc = COALESCE(
+        json_extract_string(raw.properties, '$.ISO3166-1'),
+        json_extract_string(raw.properties, '$.ISO3166-1:alpha2'),
+        json_extract_string(raw.properties, '$.ISO3166-1:alpha3'),
+        '__COUNTRY_CODE__'
+    )
     WHERE geom IS NOT NULL
       AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')
       AND ST_IsValid(geom)

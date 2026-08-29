@@ -57,6 +57,39 @@ sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
 
 duckdb < "$TMP_SQL"
 
+# Per-extract CC remapping: features tagged with a parent country's ISO3166-1
+# (e.g. FR for Nouvelle-Calédonie, DK for Greenland) are remapped to the
+# extract's own matrix CC. This prevents parquet collisions when the same
+# country_code appears in multiple continents.
+# Format: MATRIX_CC:OLD_CC=NEW_CC (multiple entries separated by spaces)
+CC_REMAP=""
+case "$COUNTRY_CODE" in
+  NC) CC_REMAP="NC:FR=NC" ;;        # Nouvelle-Calédonie (FR-NC → NC)
+  PF) CC_REMAP="PF:FR=PF" ;;        # French Polynesia (FR-PF → PF)
+  WF) CC_REMAP="WF:FR=WF" ;;        # Wallis and Futuna (FR-WF → WF)
+  GL) CC_REMAP="GL:DK=GL" ;;        # Greenland (DK-GL → GL)
+  FO) CC_REMAP="FO:DK=FO" ;;        # Faroe Islands (DK-FO → FO)
+  HK) CC_REMAP="HK:CN=HK" ;;        # Hong Kong (CN-HK → HK)
+  MO)  CC_REMAP="MO:CN=MO" ;;        # Macao (CN-MO → MO)
+esac
+
+if [ -n "$CC_REMAP" ]; then
+  echo "Applying CC remap: $CC_REMAP"
+  OLD_CC=$(echo "$CC_REMAP" | cut -d= -f1 | cut -d: -f2)
+  NEW_CC=$(echo "$CC_REMAP" | cut -d= -f2)
+  duckdb -c "
+  LOAD spatial;
+  CREATE TABLE t AS SELECT * FROM read_parquet('${OUTPUT_PARQUET}');
+  COPY (
+    SELECT * REPLACE(
+      CASE WHEN country_code = '${OLD_CC}' THEN '${NEW_CC}' ELSE country_code END AS country_code
+    )
+    FROM t
+  ) TO '${OUTPUT_PARQUET}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+  "
+  echo "Remapped country_code '${OLD_CC}' -> '${NEW_CC}' in ${OUTPUT_PARQUET}"
+fi
+
 if [ ! -s "$OUTPUT_PARQUET" ]; then
     echo "ERROR: Parquet conversion failed or output '$OUTPUT_PARQUET' is empty." >&2
     exit 1
