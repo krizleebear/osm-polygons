@@ -830,10 +830,25 @@ stages:
           if [ ! -f "$INPUT_PBF" ]; then
             echo "[INFO] No pre-downloaded artifact found for region '$(OSM_REGION)'."
             echo "[INFO] Downloading PBF directly from Geofabrik: $(PBF_URL)"
+
+            # Portable download: try curl, then wget, then python3 (urllib).
+            # The CI container image may not ship curl/wget, so fall back gracefully.
+            download_file() {
+              local url="$1" out="$2"
+              if command -v curl >/dev/null 2>&1; then
+                curl --fail --location --retry 3 --retry-delay 10 --output "$out" "$url"
+              elif command -v wget >/dev/null 2>&1; then
+                wget --tries=3 --retry-connrefused --waitretry=10 --timeout=60 -O "$out" "$url"
+              elif command -v python3 >/dev/null 2>&1; then
+                python3 -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$url" "$out"
+              else
+                echo "ERROR: No download tool (curl/wget/python3) available in container." >&2
+                return 1
+              fi
+            }
+
             mkdir -p "osm-data-$(OSM_REGION)"
-            curl --fail --location --retry 3 --retry-delay 10 \
-              --output "$INPUT_PBF" \
-              "$(PBF_URL)"
+            download_file "$(PBF_URL)" "$INPUT_PBF"
             if [ ! -f "$INPUT_PBF" ] || [ ! -s "$INPUT_PBF" ]; then
               echo "****************************************************************"
               echo " ERROR: Failed to download PBF for region '$(OSM_REGION)'!"
@@ -842,7 +857,7 @@ stages:
               echo ""
               echo " Cause:"
               echo " The direct Geofabrik download failed (network error, HTTP error,"
-              echo " or the URL is incorrect)."
+              echo " missing download tool, or the URL is incorrect)."
               echo ""
               echo " Solution:"
               echo " Verify PBF_URL in the export matrix is correct and Geofabrik"
