@@ -804,7 +804,7 @@ stages:
       inputs:
         buildType: 'specific'
         project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-        definition: '3'
+        definition: '9'
         buildVersionToDownload: 'latest'
         itemPattern: 'osm-data-$(OSM_REGION)/$(OSM_REGION).osm.pbf'
         targetPath: '$(System.DefaultWorkingDirectory)'
