@@ -1686,6 +1686,41 @@ stages:
           find parquet-check -name "admin-polygons-*.parquet" -exec basename {} \; | sort | head -20
           echo "... ($(find parquet-check -name 'admin-polygons-*.parquet' | wc -l) total files)"
 
+    - task: Bash@3
+      enabled: true
+      displayName: 'Verify admin_level=2 polygon exists per country'
+      continueOnError: true
+      inputs:
+        targetType: 'inline'
+        script: |
+          set +e
+          echo "=== Checking admin_level=2 coverage per country ==="
+          MISSING_L2=""
+          TOTAL=0
+          for pq in parquet-check/admin-polygons-*.parquet; do
+            [ -f "$pq" ] || continue
+            CC=$(basename "$pq" .parquet | sed 's/^admin-polygons-//')
+            TOTAL=$((TOTAL + 1))
+            HAS_L2=$(duckdb -c "
+              INSTALL spatial; LOAD spatial;
+              SELECT count(*) FROM read_parquet('${pq}')
+              WHERE admin_level = 2
+            " 2>/dev/null | tail -1)
+            if [ "${HAS_L2:-0}" -eq 0 ]; then
+              MISSING_L2="${MISSING_L2}  ${CC}\n"
+            fi
+          done
+          echo "Checked $TOTAL country parquets."
+          if [ -n "$MISSING_L2" ]; then
+            echo ""
+            echo "WARNING: The following countries have NO admin_level=2 polygon:"
+            echo -e "$MISSING_L2"
+            echo "This may indicate a missing Overture fallback, a broken OSM relation,"
+            echo "or a country_code derivation error. Investigate before release."
+          else
+            echo "OK: All countries have at least one admin_level=2 polygon."
+          fi
+
     - task: DownloadPipelineArtifact@2
       enabled: true
       displayName: 'Download all validation artifacts'
