@@ -21,10 +21,6 @@ pool:
   vmImage: 'ubuntu-latest'
 
 parameters:
-- name: exportParquet
-  displayName: 'Generate GeoParquet artifacts (OGC GeoParquet 1.1 unsimplified, 0% border-bleeding)'
-  type: boolean
-  default: true
 - name: reuseExportArtifacts
   displayName: 'Reuse existing exported .geojsonseq artifacts (Skip slow PBF filter stage)'
   type: boolean
@@ -37,12 +33,22 @@ parameters:
   displayName: 'Fetch Overture divisions fallback polygons and merge genuinely broken admin relations'
   type: boolean
   default: false
+- name: reuseOvertureArtifacts
+  displayName: 'Reuse existing overture-polygons artifact from a previous build (skip Overture S3 fetch)'
+  type: boolean
+  default: false
+- name: overtureBuildId
+  displayName: 'Specific Build ID to reuse overture-polygons from (default "auto" uses latest overture build)'
+  type: string
+  default: 'auto'
 
 
 stages:
 - stage: overture
   displayName: 'Fetch Overture fallback polygons'
-  condition: eq('${{ parameters.fetchOverturePolygons }}', true)
+  condition: and(
+    eq('${{ parameters.fetchOverturePolygons }}', true),
+    eq('${{ parameters.reuseOvertureArtifacts }}', false))
 
   jobs:
 
@@ -1038,8 +1044,38 @@ stages:
     steps:
     - checkout: self
 
+    - ${{ if and(ne(parameters.overtureBuildId, 'auto'), ne(parameters.overtureBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download Overture fallback polygons from specific build (${{ parameters.overtureBuildId }})'
+        condition: ${{ eq(parameters.reuseOvertureArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'specific'
+          pipelineId: '${{ parameters.overtureBuildId }}'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'overture-polygons/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - ${{ if or(eq(parameters.overtureBuildId, 'auto'), eq(parameters.overtureBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download Overture fallback polygons from latest overture build'
+        condition: ${{ eq(parameters.reuseOvertureArtifacts, true) }}
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '4'
+          buildVersionToDownload: 'latest'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'overture-polygons/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download Overture fallback polygons'
+      displayName: 'Download Overture fallback polygons from current build'
+      condition: ${{ eq(parameters.reuseOvertureArtifacts, false) }}
       inputs:
         buildType: 'current'
         itemPattern: 'overture-polygons/**'
@@ -1121,7 +1157,7 @@ stages:
 - stage: parquet
   displayName: 'Convert to GeoParquet by country'
   dependsOn: export
-  condition: and(in(dependencies.export.result, 'Succeeded', 'Skipped'), eq('${{ parameters.exportParquet }}', 'true'))
+  condition: in(dependencies.export.result, 'Succeeded', 'Skipped')
 
   jobs:
   - job: parquet
