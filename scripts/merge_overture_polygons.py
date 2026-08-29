@@ -388,7 +388,10 @@ def main():
         if osm_id in present_features:
             continue
         if osm_id not in validation:
-            unresolved.append((osm_id, "missing in validation.json"))
+            sys.stderr.write(
+                f"merge_overture_polygons ({country_code}): SKIP osm_id {osm_id} "
+                f"(not in validation.json — relation not broken in this region)\n"
+            )
             continue
         if osm_id not in overture:
             unresolved.append((osm_id, "missing geometry in Overture artifact"))

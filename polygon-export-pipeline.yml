@@ -1043,6 +1043,9 @@ stages:
         spain:
           REGION: 'spain'
           COUNTRY_CODE: 'ES'
+        canary-islands:
+          REGION: 'canary-islands'
+          COUNTRY_CODE: 'ES'
         france:
           REGION: 'france'
           COUNTRY_CODE: 'FR'
@@ -1526,7 +1529,7 @@ stages:
               # continent and country_code are derived inside convert_to_parquet.sh from features + countries.json
               ./scripts/convert_to_parquet.sh "$matrix_cc" "$file" "$parquet_out"
               rm -rf "$(dirname "$file")"
-            done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \))
+            done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) -not -path "*/raw-admin-polygons-*/*")
 
             while IFS= read -r file; do
               [ -n "$file" ] || continue
