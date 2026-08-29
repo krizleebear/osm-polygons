@@ -579,3 +579,11 @@ jobs:
       targetPath: '$(OSM_REGION).osm.pbf'
       artifact: 'osm-data-$(OSM_REGION)'
       publishLocation: 'pipeline'
+
+  - task: Bash@3
+    displayName: 'Cleanup downloaded PBF from runner disk'
+    condition: always()
+    inputs:
+      targetType: 'inline'
+      script: |
+        rm -f "$(OSM_REGION).osm.pbf"
