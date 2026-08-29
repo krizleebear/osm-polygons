@@ -1639,15 +1639,11 @@ stages:
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
 
-
-- stage: package
-  displayName: 'Package validation artifacts'
-  dependsOn:
-  - parquet
-  condition: succeeded('parquet')
-
-  jobs:
+  # Aggregates validation artifacts and export metadata AFTER the per-country
+  # parquet matrix completes. Runs on a host pool (no heavy container needed).
   - job: package
+    displayName: 'Bundle validation artifacts & export metadata'
+    dependsOn: parquet
     timeoutInMinutes: 120
     workspace:
       clean: all
