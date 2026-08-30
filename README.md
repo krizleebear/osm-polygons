@@ -34,85 +34,89 @@ Here's an example of one of the exported GeoJSON objects:
 }
 ```
 
-## Pipeline Architecture & Release Workflow
+### Pipeline Architecture & Data Flow
 
-The polygon export and release workflow is organized across three interconnected Azure DevOps pipelines and GitHub Releases:
+The polygon export and release workflow is organized across two interconnected Azure DevOps pipelines in `osm-polygons` and automated GitHub Releases:
 
 ```mermaid
 flowchart TD
-    A["1. PBF Download Pipeline<br/>(azure-pipelines-download-osm.yml in osm-tools)"] -->|Stores internal osm-data-* PBF artifacts| B["2. Polygon Export Pipeline<br/>(polygon-export-pipeline.yml in osm-polygons)"]
-    B -->|Generates & simplifies polygons| C["3. Build Artifacts<br/>(admin-polygons-simplified)"]
-    C -->|Manual Release Trigger| D["4. GitHub Release Pipeline<br/>(polygon-release-pipeline.yml in osm-polygons)"]
-    D -->|Publishes Assets & Release Notes| E["GitHub Release<br/>(simplified-all.tar.gz, *.geojsonseq)"]
+    subgraph DL["1. Download Pipeline (osm-download-pipeline.yml)"]
+        D1["Geofabrik OSM Extracts<br/>(174 country/regional PBFs)"] -->|Download with Retry & Jitter| D2["osm-data-* Artifacts"]
+        D3["Postpass API (postpass.geofabrik.de)<br/>(45 unclipped OSM relations)"] -->|fetch_postpass_polygons.py| D4["admin-polygons-reference<br/>(reference-polygons.geojsonseq)"]
+    end
+
+    subgraph EXP["2. Polygon Export Pipeline (polygon-export-pipeline.yml)"]
+        E1["Export Stage (174 Regions Matrix)"]
+        D2 --> E1
+        D4 --> E1
+        E1 -->|osmium tags-filter & export| E2["Raw Stream (.geojsonseq)"]
+        E2 -->|Inline Reference Merge<br/>merge_reference_polygons.py| E3["admin-polygons-$(CC)-$(REGION)"]
+        
+        E3 --> P1["Parquet Stage (7 Continents)"]
+        P1 -->|DuckDB Stream Conversion<br/>convert_to_parquet.sh| P2["Per-Country GeoParquet 1.1<br/>admin-polygons-{CC}.parquet<br/>osm-places-{CC}.parquet"]
+        
+        P2 --> K1["Package & Verification Stage"]
+        K1 -->|generate_admin_levels_summary.py| K2["admin-levels-summary.md / .json"]
+        K1 -->|Verify L2 Coverage & Duplicates| K3["Final Quality Checks"]
+    end
+
+    subgraph REL["3. GitHub Release Pipeline (polygon-release-pipeline.yml)"]
+        K2 --> R1["Catalog & Release Packaging"]
+        P2 --> R1
+        R1 -->|Generate index.json & release-notes.md| R2["GitHub Release Asset Upload"]
+    end
 ```
 
 ### Pipeline Overview
 
-1. **PBF Download Pipeline (`azure-pipelines-download-osm.yml` in `osm-tools`)**
-   - Downloads 169 region PBF extracts worldwide from Geofabrik.
-   - Stores internal PBF extracts as pipeline artifacts (`osm-data-<region>`).
-   - Supports incremental cache-reuse to preserve existing byte-for-byte baseline PBF data.
+1. **OSM PBF & Reference Download Pipeline (`osm-download-pipeline.yml`)**
+   - **PBF Downloads**: Downloads 174 country and regional OSM PBF extracts worldwide from Geofabrik with randomized startup jitter, exponential backoff, `--speed-limit` aborts on stalled streams, and `--continue-at -` resumption.
+   - **Postpass Reference Fetcher (`fetch_postpass_polygons.py`)**: Fetches 45 intact sovereign state boundaries (Level 2), disputed/cross-border regions (Level 4), and island concelhos (Level 7) directly from the unclipped planet database at `postpass.geofabrik.de` into `admin-polygons-reference`.
 
+2. **Polygon Export Pipeline (`polygon-export-pipeline.yml`)**
+   - **Export Stage (174 parallel matrix jobs)**:
+     1. Filters administrative boundaries (`boundary=administrative`) and sub-municipal places via `osmium tags-filter`.
+     2. Extracts point features for OSM place nodes (`osm-places-*.jsonl`).
+     3. Streams features through `filter_polygons.py` to synthesize missing admin levels and enrich admin center coordinates.
+     4. **Inline Postpass Reference Merge (`merge_reference_polygons.py`)**: Automatically inserts or replaces damaged country polygons using the intact reference geometry.
+   - **Parquet Stage (7 continental matrix jobs)**:
+     - Converts `.geojsonseq` streams directly into per-country OGC GeoParquet 1.1 files (`admin-polygons-{CC}.parquet`) using DuckDB Spatial (ZSTD compressed, WGS84, bounding-box indexed).
+   - **Package & Quality Stage**:
+     - Verifies no duplicate country codes across continental boundaries.
+     - Verifies Level 2 country polygon completeness.
+     - Generates global `admin-levels-summary.md` and `.json` coverage reports.
 
-2. **Polygon Export Pipeline (`polygon-export-pipeline.yml` in `osm-polygons`)**
-   - **Export Stage**: Filters administrative boundary relations (`boundary=administrative`) using `osmium-tool`.
-   - **Simplify Stage**: Runs `CoverageSimplifier` from `osm-tools` in Docker (`krizleebear/osm-tools:latest`) to simplify geometries while preserving topology, tags, and maritime coastline buffers (~1.1 km into the sea).
-   - **Package Stage**: Packages all continental archives (`simplified-<continent>.tar.gz`) and individual country `.geojsonseq` files into a unified global archive (`simplified.tar.gz`) with full build metadata (`build-info.json`).
+3. **Standalone Manual GitHub Release Pipeline (`polygon-release-pipeline.yml`)**
+   - **On-Demand Release**: Manually triggered when a build is validated.
+   - **Catalog Index**: Generates machine-readable `index.json` catalog mapping every ISO country code and continent to its asset download URL.
+   - **Release Publishing**: Publishes individual per-country `.parquet` files and place node datasets directly as GitHub Release assets.
 
-3. **Standalone Manual GitHub Release Pipeline (`polygon-release-pipeline.yml` in `osm-polygons`)**
-   - **Manual Trigger**: Executed on-demand (`trigger: none`) when a verified build is ready for release.
-   - **Traceability**: Generates GitHub Release notes containing a Markdown traceability matrix linking directly to exact Git commit SHAs of both `osm-tools` and `osm-polygons`.
-   - **Assets**: Uploads `simplified-all.tar.gz`, continental archives (`simplified-*.tar.gz`), and individual country `.geojsonseq` stream files.
+## Administrative Hierarchy & Boundary Rescue
+
+- **100% Intact National Boundaries (Level 2)**: Large cross-border countries (e.g. US, France, Spain, Monaco, China, Russia, Azerbaijan) whose national relations are clipped by Geofabrik regional bounding boxes are restored via Postpass planet queries.
+- **Per-Country OGC GeoParquet 1.1**: Direct selective querying via DuckDB HTTP range requests without downloading monolithic multi-gigabyte archives.
+- **Place Nodes Companion Dataset**: Includes settlements (cities, towns, villages, hamlets, suburbs, quarters) as point features (`osm-places-{CC}.parquet`).
+
+### Querying Datasets with DuckDB
+
+You can query remote release assets directly via HTTP range requests without downloading the entire file:
+
+```sql
+INSTALL spatial; LOAD spatial;
+INSTALL httpfs; LOAD httpfs;
+
+-- Point-in-Polygon administrative hierarchy lookup for Munich
+SELECT admin_level, name, wikidata, iso3166_2
+FROM read_parquet('https://github.com/krizleebear/osm-polygons/releases/download/v3.0.0/admin-polygons-DE.parquet')
+WHERE bbox_minx <= 11.5761 AND bbox_maxx >= 11.5761
+  AND bbox_miny <= 48.1371 AND bbox_maxy >= 48.1371
+  AND ST_Contains(geom, ST_Point(11.5761, 48.1371))
+ORDER BY admin_level;
+```
 
 ## License
 
 © OpenStreetMap contributors
 
 This data is derived from OpenStreetMap data and is made available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License (DCbL)](https://opendatacommons.org/licenses/dbcl/1.0/).
-
-You must attribute OpenStreetMap in any public use of this data. For details, see https://www.openstreetmap.org/copyright.
-
-## Reverse Geocoding (what's here?)
-The polygons offered by this project can e.g. be used to draw the outlines of your city.
-Or perform reverse geocoding: Take a point on a map and resolve its administrative membership: City, County, State and City.
-My other open source project https://github.com/krizleebear/osm-tools provides tools to do that in Java.
-So if you're trying to reverse-geocode huge amounts of data, voilá.
-
-### License considerations
-Be aware that you must adhere to ODbL (as stated above) also while reverse geocoding. There's a special guide for that: https://wiki.osmfoundation.org/wiki/Licence/Community_Guidelines/Geocoding_-_Guideline
-
-### Administrative Hierarchy Notes for Geocoders (`admin_level`)
-* **National Level Variations**: Countries with overseas territories (such as France, the Netherlands, or the United Kingdom) structure their administrative relations differently in OSM:
-  * `admin_level=2`: Represents the entire global sovereign state (e.g., *République française*, relation 2202162). In single-country PBF extracts (such as `france-latest.osm.pbf`), `admin_level=2` relations may be incomplete due to member relations located outside the extract.
-  * `admin_level=3`: Represents the mainland territory (e.g., *France métropolitaine*, relation 1403916). Reverse geocoders should query both `admin_level=2` and `admin_level=3` to properly capture mainland country polygons.
-* **Missing `admin_level=2` Polygons in Large Countries**: You may notice that the `admin_level=2` (national boundary) polygon is completely missing from the `.geojsonseq` exports for certain large countries (e.g., United States, China, India). 
-  * **Cause**: This project builds polygons from single-country Geofabrik `.pbf` extracts. If a country's national border is extremely large, extends far into maritime territories, or involves internationally disputed boundaries, the extract's bounding box often slices through the outer relation. As a result, the national boundary is structurally incomplete (a broken MultiPolygon) and gets automatically dropped by the geometry builder to ensure topological validity.
-  * **Geocoding Recommendation**: If your reverse geocoder strictly relies on intersecting `admin_level=2` polygons to resolve the country, it will fail for these regions. We recommend resolving the country context by either inspecting `admin_level=4` (States/Provinces) which are perfectly intact, or by using a dedicated global country-boundaries dataset (like a global OSM L2 extract) as your foundation layer.
-
-### Non-Polygonal Features (`LineString`, `Point`)
-* The exported `.geojsonseq` stream files preserve all valid `boundary=administrative` entities with `name`, `admin_level`, and `wikidata` attributes, including non-polygonal geometries (`LineString`, `Point`).
-* **Maritime & Boundary Lines**: Linear features represent 12-nautical-mile territorial waters boundaries, EEZs, and bilateral border segments.
-* **Point Features & Admin Centres**: Point features contain administrative centre coordinates (e.g., city centres, capitals), providing valuable auxiliary metadata for spatial indices alongside boundary polygons.
-
-
-### Inspecting & Profiling Datasets with DuckDB
-You can quickly query and inspect `.geojsonseq` stream files directly from the command line using [DuckDB](https://duckdb.org/):
-
-```bash
-# Breakdown features by admin_level and check name/wikidata completeness:
-duckdb -c "
-SELECT 
-    json_extract_string(properties, '$.admin_level') AS admin_level,
-    count(*) AS count,
-    count(json_extract_string(properties, '$.name')) AS count_with_name,
-    count(json_extract_string(properties, '$.wikidata')) AS count_with_wikidata
-FROM read_ndjson('<country>.admin-polygons.geojsonseq')
-GROUP BY 1
-ORDER BY TRY_CAST(admin_level AS INT);
-"
-```
-
-https://github.com/krizleebear/osm-polygons/releases/tag/v1.0
-
-
 
