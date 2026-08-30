@@ -95,6 +95,15 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - Post-processing data audits (such as Level 2 completeness checks, feature deduplication verifications, or empty dataset checks) should emit native Azure DevOps warning annotations (`echo "##vso[task.logissue type=warning]..."`) and run with `continueOnError: true` unless hard-failing is strictly required. This highlights anomalies prominently in the Azure DevOps run summary without breaking long-running packaging pipelines.
 26. **Modular & Testable Validation Tooling:**
     - Complex verification steps must never be written as long inline Bash loops inside pipeline YAML. Implement them as dedicated, standalone CLI tools in Python (e.g. `scripts/validate_parquet.py`) with accompanying unit test suites (`scripts/test_*.py`) runnable in the local Docker environment.
+27. **Country-Specific Ground Truth Hierarchy Invariant:**
+    - Administrative level completeness must be verified against the official OSM mapping standards defined per country in `scripts/countries.json` (`levels`). Never assume all sovereign nations define `admin_level=4` (e.g. Iceland, Cyprus, Kosovo, Latvia, and Jamaica officially use `admin_level=5` as their primary subnational level).
+28. **1-Pass PBF Extraction & Pipeline Performance Invariant:**
+    - Large raw PBF files (such as Brazil, Germany, USA 3-5 GB) must be scanned only ONCE. Use a single combined `osmium tags-filter` pass to extract both admin boundaries and place nodes into a combined compact PBF, delete the heavy raw input PBF immediately, and perform downstream splits and hierarchy scans (`scripts/extract_region.py`) on the small extract.
+29. **Multi-Extract Feature Deduplication Invariant:**
+    - When consolidating multiple regional Geofabrik extracts into a single per-country GeoParquet file (e.g. Spain + Canary Islands), DuckDB consolidation queries must deduplicate shared parent boundaries using `ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level)` for polygons, and `ROW_NUMBER() OVER (PARTITION BY osm_id ORDER BY place_type)` for place nodes.
+30. **Guaranteed Artifact Existence Invariant:**
+    - Azure DevOps `PublishPipelineArtifact` tasks fail with runner warnings if the target file does not exist on disk. Export jobs and post-processing steps must ensure all declared artifact targets (such as `validation.json`) exist (touching empty fallback files if necessary) to keep build results 100% clean and green.
+
 
 
 
