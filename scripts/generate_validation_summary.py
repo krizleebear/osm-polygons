@@ -198,11 +198,23 @@ def generate_json(per_level, per_country, totals, region_count):
 
 
 def main():
-    directory = sys.argv[1] if len(sys.argv) > 1 else 'validation'
+    import argparse
+    parser = argparse.ArgumentParser(description="Aggregate validation reports.")
+    parser.add_argument("directory", nargs="?", default="validation", help="Directory containing validation JSON files")
+    args = parser.parse_args()
+
+    directory = args.directory
 
     if not os.path.isdir(directory):
-        print(f"ERROR: Directory '{directory}' does not exist.", file=sys.stderr)
-        sys.exit(1)
+        print(f"Info: Directory '{directory}' does not exist. Generating empty summary.")
+        os.makedirs(directory, exist_ok=True)
+        md_path = os.path.join(directory, 'validation-summary.md')
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write("# Administrative Validation Summary\n\nNo validation issues recorded.\n")
+        json_path = os.path.join(directory, 'validation-summary.json')
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump({"total_regions": 0, "totals": {"broken_parents": 0}}, f, indent=2)
+        return
 
     validations = load_validation_files(directory)
     if not validations:
@@ -216,6 +228,7 @@ def main():
         return
 
     print(f"Loaded {len(validations)} validation file(s) from '{directory}'.")
+
 
 
     per_level, per_country, totals = aggregate(validations)

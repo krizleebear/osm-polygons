@@ -1422,10 +1422,10 @@ stages:
     timeoutInMinutes: 120
     workspace:
       clean: all
-    pool:
-      vmImage: 'ubuntu-latest'
+    container: osm2parquet
     steps:
     - checkout: self
+
 
     - task: DownloadPipelineArtifact@2
       enabled: true
