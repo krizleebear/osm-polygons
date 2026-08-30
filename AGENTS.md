@@ -88,5 +88,13 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - Never assume an issue is fixed or make claims based solely on commit history, code reviews, or theoretical assumptions. Always gather concrete empirical evidence by directly querying the live release artifacts or test outputs.
     - Use DuckDB with `httpfs` to query remote GitHub Release assets directly (`duckdb -c "INSTALL httpfs; LOAD httpfs; SELECT ... FROM 'https://github.com/.../releases/download/.../....parquet'"`).
     - When reporting or investigating anomalies across upstream/downstream boundaries, provide reproducible SQL queries against the exact release dataset to eliminate ambiguity and immediately isolate root causes.
+24. **Long-Form CLI Parameters & Download Resilience Invariant:**
+    - Always use explicit, readable long-form parameters in pipeline scripts (e.g., `--continue-at -` instead of `-C -`).
+    - Large external file downloads (such as Geofabrik PBF extracts) must specify stall timeouts (`--speed-limit 10240 --speed-time 30`), resume capabilities (`--continue-at -`), and emit lightweight background progress heartbeats to prevent silent runner hangs.
+25. **Non-Breaking Pipeline Quality Audits (`##vso[task.logissue type=warning]`):**
+    - Post-processing data audits (such as Level 2 completeness checks, feature deduplication verifications, or empty dataset checks) should emit native Azure DevOps warning annotations (`echo "##vso[task.logissue type=warning]..."`) and run with `continueOnError: true` unless hard-failing is strictly required. This highlights anomalies prominently in the Azure DevOps run summary without breaking long-running packaging pipelines.
+26. **Modular & Testable Validation Tooling:**
+    - Complex verification steps must never be written as long inline Bash loops inside pipeline YAML. Implement them as dedicated, standalone CLI tools in Python (e.g. `scripts/validate_parquet.py`) with accompanying unit test suites (`scripts/test_*.py`) runnable in the local Docker environment.
+
 
 
