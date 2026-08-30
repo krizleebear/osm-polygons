@@ -914,6 +914,9 @@ stages:
             REF_ARG="--reference-polygons ${REF_STREAM}"
           fi
 
+          POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
+          PLACES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl
+
           python3 scripts/extract_region.py \
             --input-pbf "${INPUT_PBF}" \
             --country-code "$(COUNTRY_CODE)" \
@@ -921,6 +924,7 @@ stages:
             --polygon-out "${POLYGON_JSON}" \
             --places-out "${PLACES_JSONL}" \
             ${REF_ARG}
+
 
 
     - task: PublishPipelineArtifact@1
