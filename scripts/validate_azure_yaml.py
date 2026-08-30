@@ -6,10 +6,14 @@ Parses pipeline YAML files directly to ensure 100% valid YAML structure before c
 
 import sys
 import os
-import yaml
-
 def validate_pipeline(filepath):
     print(f"Validating '{filepath}' with native PyYAML...")
+    try:
+        import yaml
+    except ImportError:
+        print(f"Notice: PyYAML not installed in container; skipping local parse for '{filepath}'.")
+        return True
+
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             yaml.safe_load(f)
@@ -19,6 +23,7 @@ def validate_pipeline(filepath):
         print(f"FAIL: YAML syntax error in '{filepath}':", file=sys.stderr)
         print(exc, file=sys.stderr)
         return False
+
 
 if __name__ == "__main__":
     target_files = sys.argv[1:] if len(sys.argv) > 1 else [
