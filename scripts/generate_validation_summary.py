@@ -77,7 +77,12 @@ def aggregate(validations):
 
     for v in validations:
         country = v.get('country_filter') or 'XX'
-        for entry in v.get('broken', []):
+        broken_list = v.get('broken')
+        if not isinstance(broken_list, list):
+            continue
+        for entry in broken_list:
+            if not isinstance(entry, dict):
+                continue
             lvl = str(entry.get('admin_level', '')).strip()
             if not lvl.isdigit() or int(lvl) < 2 or int(lvl) > 11:
                 lvl = 'other'
@@ -86,15 +91,18 @@ def aggregate(validations):
             per_country[country][lvl]['broken_parents'] += 1
             total_broken += 1
 
-            for child in entry.get('children', []):
-                if child.get('complete', False):
-                    per_level[lvl]['children_complete'] += 1
-                    per_country[country][lvl]['children_complete'] += 1
-                    total_children_complete += 1
-                else:
-                    per_level[lvl]['children_broken'] += 1
-                    per_country[country][lvl]['children_broken'] += 1
-                    total_children_broken += 1
+            children_list = entry.get('children')
+            if isinstance(children_list, list):
+                for child in children_list:
+                    if isinstance(child, dict) and child.get('complete', False):
+                        per_level[lvl]['children_complete'] += 1
+                        per_country[country][lvl]['children_complete'] += 1
+                        total_children_complete += 1
+                    else:
+                        per_level[lvl]['children_broken'] += 1
+                        per_country[country][lvl]['children_broken'] += 1
+                        total_children_broken += 1
+
 
     totals = {
         'total_broken': total_broken,
