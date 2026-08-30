@@ -884,70 +884,20 @@ stages:
             fi
             echo "[INFO] Direct download complete: $(du -h "$INPUT_PBF" | cut -f1)"
           fi
-          ADMIN_PBF=$(OSM_REGION).admins.pbf
-          POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
-          PLACES_PBF=$(OSM_REGION).places.pbf
-          PLACES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl
-
-          # Step 1: Filter administrative and place boundaries (broad osmium filter, expressions OR-combined;
-          # precise sub-municipal refinement happens in filter_polygons.py per SPEC_OSM_POLYGONS_SUBDIVISIONS.md & feat/named-areas):
-          # - Rule 1: boundary=administrative (admin_level 2..11)
-          # - Rule 2: boundary=traditional,statistical,cadastral,local_authority,borough
-          # - Rule 3: relations & closed ways with place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
-          osmium tags-filter --output ${ADMIN_PBF} --overwrite ${INPUT_PBF} \
-            boundary=administrative,traditional,statistical,cadastral,local_authority,borough \
-            r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality \
-            w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality
-
-          # Step 2b: Filter OSM place nodes companion dataset (points) per PLACE_NODE_EXPORTER_SPEC.md:
-          osmium tags-filter --output ${PLACES_PBF} --overwrite ${INPUT_PBF} \
-            n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality
-
-          # Step 3: Extract admin boundary parent-child hierarchy mapping (skipping slow check-refs)
-          python3 scripts/validate_pbf.py ${INPUT_PBF} --country $(COUNTRY_CODE) --parent-mapping-only || true
-          PARENT_MAPPING=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-parent-mapping.json/')
-
-          VALIDATION_JSON=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-validation.json/')
-          if [ -f "${PARENT_MAPPING}" ]; then
-            cp ${PARENT_MAPPING} ./parent-mapping.json
-            PARENT_MAPPING=./parent-mapping.json
-          else
-            PARENT_MAPPING=""
-          fi
-          if [ -f "${VALIDATION_JSON}" ]; then
-            cp ${VALIDATION_JSON} ./validation.json
-          else
-            echo "{}" > ./validation.json
-          fi
-
-
-
-          # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
-          rm -rf osm-data-$(OSM_REGION)
-
-          # Step 4: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
-          osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} ${PARENT_MAPPING:+--parent-mapping ${PARENT_MAPPING}} > ${POLYGON_JSON}.raw
-          rm -f ${ADMIN_PBF}
-
-          # Step 5: Merge Postpass reference polygons inline if reference dataset is available
           REF_STREAM=$(find admin-polygons-reference -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
+          REF_ARG=""
           if [ -n "$REF_STREAM" ] && [ -s "$REF_STREAM" ]; then
-            python3 scripts/merge_reference_polygons.py "${POLYGON_JSON}.raw" \
-              --reference "$REF_STREAM" \
-              --candidates scripts/postpass-candidates.json \
-              --country-code $(COUNTRY_CODE) \
-              --out "${POLYGON_JSON}"
-            rm -f "${POLYGON_JSON}.raw"
-          else
-            mv "${POLYGON_JSON}.raw" "${POLYGON_JSON}"
+            REF_ARG="--reference-polygons ${REF_STREAM}"
           fi
 
+          python3 scripts/extract_region.py \
+            --input-pbf "${INPUT_PBF}" \
+            --country-code "$(COUNTRY_CODE)" \
+            --region "$(OSM_REGION)" \
+            --polygon-out "${POLYGON_JSON}" \
+            --places-out "${PLACES_JSONL}" \
+            ${REF_ARG}
 
-          # Step 6: Stream export place nodes directly to stdout and structure with filter_places.py
-          osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-            | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
-          rm -f ${PLACES_PBF}
 
     - task: PublishPipelineArtifact@1
       enabled: true

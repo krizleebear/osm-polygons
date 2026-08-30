@@ -247,11 +247,19 @@ def validate(pbf_path, country_code=None, parent_mapping_only=False):
         scanner.apply_file(pbf_path)
         scanner.infer_missing_children()
         parent_mapping = generate_parent_mapping(scanner, country_code)
-        mapping_path = pbf_path.replace(".osm.pbf", "-parent-mapping.json")
+        mapping_path = pbf_path
+        if mapping_path.endswith(".osm.pbf"):
+            mapping_path = mapping_path[:-8] + "-parent-mapping.json"
+        elif mapping_path.endswith(".pbf"):
+            mapping_path = mapping_path[:-4] + "-parent-mapping.json"
+        else:
+            mapping_path = mapping_path + "-parent-mapping.json"
         with open(mapping_path, "w") as f:
             json.dump(parent_mapping, f, indent=2, ensure_ascii=False)
         print(f"Parent mapping written to: {mapping_path} ({len(parent_mapping)} child entries)")
         return 0
+
+
 
     # Step 1: osmium check-refs (C++, fast)
     print("Step 1/3: Running osmium check-refs ...", flush=True)
