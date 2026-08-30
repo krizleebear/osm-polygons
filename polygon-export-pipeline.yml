@@ -856,7 +856,45 @@ stages:
 
     steps:
 
+    - ${{ if and(ne(parameters.referenceBuildId, 'auto'), ne(parameters.referenceBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download reference fallback polygons from specific build (${{ parameters.referenceBuildId }})'
+        condition: and(succeeded(), ${{ eq(parameters.reuseReferenceArtifacts, true) }})
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '9'
+          buildVersionToDownload: 'specific'
+          pipelineId: '${{ parameters.referenceBuildId }}'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-reference/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - ${{ if or(eq(parameters.referenceBuildId, 'auto'), eq(parameters.referenceBuildId, '')) }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download reference fallback polygons from latest download build'
+        condition: and(succeeded(), ${{ eq(parameters.reuseReferenceArtifacts, true) }})
+        inputs:
+          buildType: 'specific'
+          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+          definition: '9'
+          buildVersionToDownload: 'latest'
+          allowFailedBuilds: true
+          allowPartiallySucceededBuilds: true
+          itemPattern: 'admin-polygons-reference/**'
+          targetPath: '$(System.DefaultWorkingDirectory)'
+
     - task: DownloadPipelineArtifact@2
+      displayName: 'Download reference fallback polygons from current build'
+      condition: and(succeeded(), ${{ eq(parameters.reuseReferenceArtifacts, false) }})
+      inputs:
+        buildType: 'current'
+        itemPattern: 'admin-polygons-reference/**'
+        targetPath: '$(System.DefaultWorkingDirectory)'
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download OSM PBF from download pipeline'
       enabled: true
       inputs:
         buildType: 'specific'
@@ -878,6 +916,7 @@ stages:
           osmium --version
 
           INPUT_PBF=osm-data-$(OSM_REGION)/$(OSM_REGION).osm.pbf
+
           if [ ! -f "$INPUT_PBF" ]; then
             echo "[INFO] No pre-downloaded artifact found for region '$(OSM_REGION)'."
             echo "[INFO] Downloading PBF directly from Geofabrik: $(PBF_URL)"
@@ -937,17 +976,10 @@ stages:
           osmium tags-filter --output ${PLACES_PBF} --overwrite ${INPUT_PBF} \
             n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality
 
-          # Step 3: Validate PBF for broken admin boundary references and generate synthetic parent definitions
+          # Step 3: Validate PBF for broken admin boundary references and record validation/parent mappings
           python3 scripts/validate_pbf.py ${INPUT_PBF} --country $(COUNTRY_CODE) || true
-          SYNTHETIC_DEFS=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-synthetic-defs.json/')
           PARENT_MAPPING=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-parent-mapping.json/')
           VALIDATION_JSON=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-validation.json/')
-          if [ -f "${SYNTHETIC_DEFS}" ]; then
-            cp ${SYNTHETIC_DEFS} ./synthetic-defs.json
-            SYNTHETIC_DEFS=./synthetic-defs.json
-          else
-            SYNTHETIC_DEFS=""
-          fi
           if [ -f "${PARENT_MAPPING}" ]; then
             cp ${PARENT_MAPPING} ./parent-mapping.json
             PARENT_MAPPING=./parent-mapping.json
@@ -958,41 +990,40 @@ stages:
             cp ${VALIDATION_JSON} ./validation.json
           fi
 
+
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
           rm -rf osm-data-$(OSM_REGION)
 
           # Step 4: Stream export polygons directly to stdout and filter/enhance with filter_polygons.py
           osmium export ${ADMIN_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
-            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} ${SYNTHETIC_DEFS:+--synthetic-defs ${SYNTHETIC_DEFS}} ${PARENT_MAPPING:+--parent-mapping ${PARENT_MAPPING}} > ${POLYGON_JSON}
+            | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} ${PARENT_MAPPING:+--parent-mapping ${PARENT_MAPPING}} > ${POLYGON_JSON}.raw
           rm -f ${ADMIN_PBF}
 
-          # Step 5: Stream export place nodes directly to stdout and structure with filter_places.py
+          # Step 5: Merge Postpass reference polygons inline if candidate region and reference dataset is available
+          REF_STREAM=$(find admin-polygons-reference -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
+          if [ "${{ parameters.useReferencePolygons }}" = "true" ] && [ -n "$REF_STREAM" ] && [ -s "$REF_STREAM" ]; then
+            python3 scripts/merge_reference_polygons.py "${POLYGON_JSON}.raw" \
+              --reference "$REF_STREAM" \
+              --candidates scripts/postpass-candidates.json \
+              --country-code $(COUNTRY_CODE) \
+              --out "${POLYGON_JSON}"
+            rm -f "${POLYGON_JSON}.raw"
+          else
+            mv "${POLYGON_JSON}.raw" "${POLYGON_JSON}"
+          fi
+
+          # Step 6: Stream export place nodes directly to stdout and structure with filter_places.py
           osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
 
-          # Step 6: Determine dynamically if this region has Postpass reference fallback candidates
-          IS_CANDIDATE=$(python3 -c "import json; c=json.load(open('scripts/postpass-candidates.json')); print('true' if any(x.get('country')=='$(COUNTRY_CODE)' for x in c.get('candidates', [])) else 'false')")
-          echo "##vso[task.setvariable variable=IS_REFERENCE_CANDIDATE]$IS_CANDIDATE"
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store raw polygon artifacts (for reference candidate regions)'
-      condition: and(succeeded(), eq('${{ parameters.useReferencePolygons }}', true), eq(variables['IS_REFERENCE_CANDIDATE'], 'true'))
-      inputs:
-        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
-        artifact: 'raw-admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
-        publishLocation: 'pipeline'
-
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store polygon artifacts'
-      condition: and(succeeded(), or(ne('${{ parameters.useReferencePolygons }}', true), ne(variables['IS_REFERENCE_CANDIDATE'], 'true')))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
-
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -1019,186 +1050,6 @@ stages:
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
 
-  - job: merge_reference
-    displayName: 'Merge Postpass reference polygons (insert + replace broken)'
-    dependsOn: export
-    condition: and(succeeded(), eq('${{ parameters.useReferencePolygons }}', true))
-    timeoutInMinutes: 120
-    workspace:
-      clean: all
-    container: osm2parquet
-    strategy:
-      matrix:
-        armenia:
-          REGION: 'armenia'
-          COUNTRY_CODE: 'AM'
-        burkina-faso:
-          REGION: 'burkina-faso'
-          COUNTRY_CODE: 'BF'
-        bhutan:
-          REGION: 'bhutan'
-          COUNTRY_CODE: 'BT'
-        belize:
-          REGION: 'belize'
-          COUNTRY_CODE: 'BZ'
-        china:
-          REGION: 'china'
-          COUNTRY_CODE: 'CN'
-        spain:
-          REGION: 'spain'
-          COUNTRY_CODE: 'ES'
-        canary-islands:
-          REGION: 'canary-islands'
-          COUNTRY_CODE: 'ES'
-        france:
-          REGION: 'france'
-          COUNTRY_CODE: 'FR'
-        great-britain:
-          REGION: 'great-britain'
-          COUNTRY_CODE: 'GB'
-        haiti-and-domrep:
-          REGION: 'haiti-and-domrep'
-          COUNTRY_CODE: 'HT'
-        indonesia:
-          REGION: 'indonesia'
-          COUNTRY_CODE: 'ID'
-        iran:
-          REGION: 'iran'
-          COUNTRY_CODE: 'IR'
-        kyrgyzstan:
-          REGION: 'kyrgyzstan'
-          COUNTRY_CODE: 'KG'
-        north-korea:
-          REGION: 'north-korea'
-          COUNTRY_CODE: 'KP'
-        monaco:
-          REGION: 'monaco'
-          COUNTRY_CODE: 'MC'
-        malaysia-singapore-brunei:
-          REGION: 'malaysia-singapore-brunei'
-          COUNTRY_CODE: 'MY'
-        nigeria:
-          REGION: 'nigeria'
-          COUNTRY_CODE: 'NG'
-        netherlands:
-          REGION: 'netherlands'
-          COUNTRY_CODE: 'NL'
-        norway:
-          REGION: 'norway'
-          COUNTRY_CODE: 'NO'
-        papua-new-guinea:
-          REGION: 'papua-new-guinea'
-          COUNTRY_CODE: 'PG'
-        philippines:
-          REGION: 'philippines'
-          COUNTRY_CODE: 'PH'
-        portugal:
-          REGION: 'portugal'
-          COUNTRY_CODE: 'PT'
-        russia:
-          REGION: 'russia'
-          COUNTRY_CODE: 'RU'
-        suriname:
-          REGION: 'suriname'
-          COUNTRY_CODE: 'SR'
-        taiwan:
-          REGION: 'taiwan'
-          COUNTRY_CODE: 'TW'
-        tanzania:
-          REGION: 'tanzania'
-          COUNTRY_CODE: 'TZ'
-        us:
-          REGION: 'us'
-          COUNTRY_CODE: 'US'
-        vietnam:
-          REGION: 'vietnam'
-          COUNTRY_CODE: 'VN'
-        kosovo:
-          REGION: 'kosovo'
-          COUNTRY_CODE: 'XK'
-
-    steps:
-    - checkout: self
-
-    - ${{ if and(ne(parameters.referenceBuildId, 'auto'), ne(parameters.referenceBuildId, '')) }}:
-      - task: DownloadPipelineArtifact@2
-        displayName: 'Download reference fallback polygons from specific build (${{ parameters.referenceBuildId }})'
-        condition: ${{ eq(parameters.reuseReferenceArtifacts, true) }}
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '9'
-          buildVersionToDownload: 'specific'
-          pipelineId: '${{ parameters.referenceBuildId }}'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-reference/**'
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - ${{ if or(eq(parameters.referenceBuildId, 'auto'), eq(parameters.referenceBuildId, '')) }}:
-      - task: DownloadPipelineArtifact@2
-        displayName: 'Download reference fallback polygons from latest download build'
-        condition: ${{ eq(parameters.reuseReferenceArtifacts, true) }}
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '9'
-          buildVersionToDownload: 'latest'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-reference/**'
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download reference fallback polygons from current build'
-      condition: ${{ eq(parameters.reuseReferenceArtifacts, false) }}
-      inputs:
-        buildType: 'current'
-        itemPattern: 'admin-polygons-reference/**'
-        targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download raw region polygon & validation artifacts'
-      inputs:
-        buildType: 'current'
-        itemPattern: |
-          raw-admin-polygons-$(COUNTRY_CODE)-$(REGION)/**
-          validation-$(COUNTRY_CODE)-$(REGION)/**
-        targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: Bash@3
-      displayName: 'Merge Postpass reference polygons'
-      inputs:
-        targetType: 'inline'
-        script: |
-          set -eux
-          STREAM=$(find "raw-admin-polygons-$(COUNTRY_CODE)-$(REGION)" -name "*.admin-polygons.geojsonseq" | head -n 1)
-          if [ -z "$STREAM" ] || [ ! -s "$STREAM" ]; then
-            echo " ERROR: no raw polygon stream found for '$(COUNTRY_CODE)/$(REGION)'."
-            echo " Cause: export job for this region did not publish a raw-admin-polygons artifact,"
-            echo " or it is empty (0 bytes)."
-            exit 1
-          fi
-          REF_STREAM=$(find "admin-polygons-reference" -name "reference-polygons.geojsonseq" | head -n 1)
-          if [ -z "$REF_STREAM" ] || [ ! -s "$REF_STREAM" ]; then
-            echo " ERROR: reference-polygons.geojsonseq missing or empty."
-            echo " Cause: admin-polygons-reference artifact was not produced."
-            exit 1
-          fi
-          mkdir -p "admin-polygons-$(COUNTRY_CODE)-$(REGION)"
-          TARGET="admin-polygons-$(COUNTRY_CODE)-$(REGION)/$(COUNTRY_CODE)_$(REGION).admin-polygons.geojsonseq"
-          python3 scripts/merge_reference_polygons.py "$STREAM" \
-            --reference "$REF_STREAM" \
-            --candidates scripts/postpass-candidates.json \
-            --country-code $(COUNTRY_CODE) \
-            --out "$TARGET"
-
-    - task: PublishPipelineArtifact@1
-      displayName: 'Store merged polygon artifacts'
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/admin-polygons-$(COUNTRY_CODE)-$(REGION)'
-        artifact: 'admin-polygons-$(COUNTRY_CODE)-$(REGION)'
-        publishLocation: 'pipeline'
 
 
   - job: tag_export
