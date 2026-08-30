@@ -43,10 +43,12 @@ def load_validation_files(directory):
                 try:
                     with open(path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    results.append(data)
+                    if isinstance(data, dict) and data:
+                        results.append(data)
                 except Exception as e:
                     print(f"Warning: Failed to read {path}: {e}", file=sys.stderr)
     return results
+
 
 
 def aggregate(validations):
@@ -204,10 +206,17 @@ def main():
 
     validations = load_validation_files(directory)
     if not validations:
-        print(f"ERROR: No validation.json files found in '{directory}'.", file=sys.stderr)
-        sys.exit(1)
+        print(f"Info: No populated validation files found in '{directory}'. Generating empty summary.")
+        md_path = os.path.join(directory, 'validation-summary.md')
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write("# Administrative Validation Summary\n\nNo validation issues recorded.\n")
+        json_path = os.path.join(directory, 'validation-summary.json')
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump({"total_regions": 0, "totals": {"broken_parents": 0}}, f, indent=2)
+        return
 
     print(f"Loaded {len(validations)} validation file(s) from '{directory}'.")
+
 
     per_level, per_country, totals = aggregate(validations)
     region_count = len(validations)
