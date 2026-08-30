@@ -59,7 +59,7 @@ def inspect_parquet_file(file_path):
             FROM read_parquet('{file_path}') 
             GROUP BY osm_type, osm_id HAVING count(*) > 1
         )) AS dupe_feature_count,
-        list_sort(list(DISTINCT admin_level)) FILTER (WHERE admin_level IS NOT NULL) AS populated_levels
+        (SELECT list_sort(list(DISTINCT admin_level)) FROM (SELECT admin_level FROM read_parquet('{file_path}') WHERE admin_level IS NOT NULL)) AS populated_levels
     FROM read_parquet('{file_path}');
     """
     
