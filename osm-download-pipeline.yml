@@ -578,12 +578,15 @@ jobs:
         SUCCESS=false
         for ATTEMPT in 1 2 3 4 5; do
           if curl --fail --location \
+               --continue-at - \
                --speed-limit 10240 --speed-time 30 \
                --retry 2 --retry-delay 5 --retry-all-errors \
                --output "$(OSM_REGION).osm.pbf" \
                "$(PBF_URL)"; then
             SUCCESS=true
             break
+
+
 
           else
             if [ "$ATTEMPT" -lt 5 ]; then
