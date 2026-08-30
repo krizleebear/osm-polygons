@@ -103,6 +103,9 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - When consolidating multiple regional Geofabrik extracts into a single per-country GeoParquet file (e.g. Spain + Canary Islands), DuckDB consolidation queries must deduplicate shared parent boundaries using `ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level)` for polygons, and `ROW_NUMBER() OVER (PARTITION BY osm_id ORDER BY place_type)` for place nodes.
 30. **Guaranteed Artifact Existence Invariant:**
     - Azure DevOps `PublishPipelineArtifact` tasks fail with runner warnings if the target file does not exist on disk. Export jobs and post-processing steps must ensure all declared artifact targets (such as `validation.json`) exist (touching empty fallback files if necessary) to keep build results 100% clean and green.
+31. **Fast-Fail CI Preflight Invariant:**
+    - Never launch long-running or matrix-heavy pipeline stages without an initial fast (<30s) preflight stage (`stage: preflight`). The preflight stage must validate pipeline YAML parsing (`scripts/validate_azure_yaml.py`) and run the full Python unit test suite (`PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'`). All downstream stages (`export`, `parquet`, `package`) must declare `dependsOn: preflight` to fail immediately on script regressions before runner compute is consumed.
+
 
 
 
