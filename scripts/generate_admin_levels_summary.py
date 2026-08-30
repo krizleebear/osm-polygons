@@ -39,12 +39,14 @@ def analyze_parquet_files(parquet_dir):
     Returns: list of dicts with statistics per country.
     """
     parquet_files = sorted(glob.glob(os.path.join(parquet_dir, "**", "admin-polygons-*.parquet"), recursive=True))
+    country_names = load_country_names()
+    country_stats = []
+
     if not parquet_files:
         print(f"Warning: No admin-polygons-*.parquet files found in {parquet_dir}", file=sys.stderr)
         return []
 
-    country_names = load_country_names()
-    country_stats = []
+
 
     for pq_path in parquet_files:
         base = os.path.basename(pq_path)
