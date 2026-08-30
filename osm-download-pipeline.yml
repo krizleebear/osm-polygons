@@ -566,11 +566,39 @@ jobs:
       targetType: 'inline'
       script: |
         set -euo pipefail
+        # Random jitter at startup (0 to 20s) to desynchronize matrix jobs hitting Geofabrik at once
+        JITTER=$((RANDOM % 21))
+        echo "Applying initial jitter delay of ${JITTER}s for $(OSM_REGION)..."
+        sleep "$JITTER"
+
+
         echo "Downloading $(OSM_REGION) from $(PBF_URL) ..."
-        curl --fail --location --retry 3 --retry-delay 10 \
-          --output "$(OSM_REGION).osm.pbf" \
-          "$(PBF_URL)"
+        
+        # Robust download with exponential backoff + randomized jitter
+        SUCCESS=false
+        for ATTEMPT in 1 2 3 4 5; do
+          if curl --fail --location --silent --show-error \
+               --retry 2 --retry-delay 5 --retry-all-errors \
+               --output "$(OSM_REGION).osm.pbf" \
+               "$(PBF_URL)"; then
+            SUCCESS=true
+            break
+          else
+            if [ "$ATTEMPT" -lt 5 ]; then
+              WAIT_TIME=$(( ATTEMPT * 10 + (RANDOM % 15) ))
+              echo "Download attempt $ATTEMPT failed for $(OSM_REGION). Retrying in ${WAIT_TIME}s (attempt $((ATTEMPT + 1))/5)..."
+              sleep "$WAIT_TIME"
+            fi
+          fi
+        done
+
+        if [ "$SUCCESS" != "true" ]; then
+          echo "ERROR: Failed to download $(OSM_REGION) from $(PBF_URL) after 5 attempts."
+          exit 1
+        fi
+
         echo "Download complete: $(du -h "$(OSM_REGION).osm.pbf" | cut -f1)"
+
 
   - task: PublishPipelineArtifact@1
     enabled: true
