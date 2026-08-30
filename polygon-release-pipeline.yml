@@ -49,8 +49,7 @@ jobs:
       ${{ if or(eq(parameters.specificBuildId, 'latest'), eq(parameters.specificBuildId, 'auto'), eq(parameters.specificBuildId, '')) }}:
         buildVersionToDownload: 'latest'
       itemPattern: |
-        admin-polygons-parquet*/**
-        osm-places-parquet*/**
+        parquet*/**
         validation-summary/**
         admin-polygons-validation/**
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'

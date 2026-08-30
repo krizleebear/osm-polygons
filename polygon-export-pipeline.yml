@@ -1614,7 +1614,6 @@ stages:
             rm -rf temp_places_parquet
           fi
 
-          echo "##vso[task.setvariable variable=HAS_PLACES_PARQUET]$HAS_PLACES"
           echo "=== Per-country GeoParquet files produced ==="
           ls -lh parquet/
 
@@ -1622,16 +1621,7 @@ stages:
       displayName: 'Store per-country GeoParquet artifacts'
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/parquet'
-        artifact: 'admin-polygons-parquet-$(CONTINENT)'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      displayName: 'Store per-country OSM places GeoParquet artifacts'
-      condition: and(succeeded(), eq(variables['HAS_PLACES_PARQUET'], 'true'))
-      continueOnError: true
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet'
-        artifact: 'osm-places-parquet-$(CONTINENT)'
+        artifact: 'parquet-$(CONTINENT)'
         publishLocation: 'pipeline'
 
     - task: Bash@3
@@ -1660,7 +1650,7 @@ stages:
       displayName: 'Download all per-country parquet artifacts for duplicate check'
       inputs:
         buildType: 'current'
-        itemPattern: 'admin-polygons-parquet-*/**'
+        itemPattern: 'parquet-*/**'
         targetPath: '$(System.DefaultWorkingDirectory)/parquet-check'
 
     - task: Bash@3
@@ -1697,7 +1687,7 @@ stages:
           echo "=== Checking admin_level=2 coverage per country ==="
           MISSING_L2=""
           TOTAL=0
-          for pq in parquet-check/admin-polygons-*.parquet; do
+          for pq in parquet-check/**/admin-polygons-*.parquet; do
             [ -f "$pq" ] || continue
             CC=$(basename "$pq" .parquet | sed 's/^admin-polygons-//')
             TOTAL=$((TOTAL + 1))
