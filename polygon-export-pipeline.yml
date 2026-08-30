@@ -1402,13 +1402,14 @@ stages:
               CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
               COPY (
                 SELECT * EXCLUDE (rn) FROM (
-                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY place_type) AS rn
+                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_id ORDER BY place_type) AS rn
                   FROM pcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
                 ORDER BY place_type, lat, lon
               ) TO '${pout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
               "
+
 
               HAS_PLACES=true
             done < /tmp/places_ccs_$(CONTINENT).csv
