@@ -577,14 +577,29 @@ jobs:
         # Robust download with exponential backoff + randomized jitter
         SUCCESS=false
         for ATTEMPT in 1 2 3 4 5; do
-          if curl --fail --location \
+          # Start curl in background and monitor progress cleanly every 15 seconds
+          curl --fail --location \
                --continue-at - \
+               --silent --show-error \
                --speed-limit 10240 --speed-time 30 \
                --retry 2 --retry-delay 5 --retry-all-errors \
                --output "$(OSM_REGION).osm.pbf" \
-               "$(PBF_URL)"; then
+               "$(PBF_URL)" &
+          CURL_PID=$!
+
+          # Monitor loop: print human-readable size every 15s
+          while kill -0 "$CURL_PID" 2>/dev/null; do
+            sleep 15
+            if [ -f "$(OSM_REGION).osm.pbf" ]; then
+              SIZE=$(du -h "$(OSM_REGION).osm.pbf" | cut -f1)
+              echo "[$(OSM_REGION)] Download in progress... current size: $SIZE"
+            fi
+          done
+
+          if wait "$CURL_PID"; then
             SUCCESS=true
             break
+
 
 
 
