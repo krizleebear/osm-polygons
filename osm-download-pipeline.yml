@@ -587,3 +587,27 @@ jobs:
       targetType: 'inline'
       script: |
         rm -f "$(OSM_REGION).osm.pbf"
+
+- job: reference_polygons
+  displayName: 'Pre-fetch intact reference polygons from Postpass'
+  timeoutInMinutes: 15
+  steps:
+  - task: Bash@3
+    displayName: 'Fetch reference polygons from Postpass API'
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+        python3 scripts/fetch_postpass_polygons.py \
+          --candidates scripts/postpass-candidates.json \
+          --out-dir reference-polygons
+        ls -la reference-polygons
+
+  - task: PublishPipelineArtifact@1
+    enabled: true
+    displayName: 'Cache reference polygons artifact'
+    inputs:
+      targetPath: 'reference-polygons'
+      artifact: 'admin-polygons-reference'
+      publishLocation: 'pipeline'
+

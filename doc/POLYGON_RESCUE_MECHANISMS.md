@@ -82,53 +82,20 @@ Filtered Admin PBF
 
 | # | Mechanism | Purpose |
 |---|-----------|---------|
-| 24 | Overture Maps `divisions` theme | Fallback geometry source for missing parent polygons (e.g. US admin_level=2). Query via DuckDB + S3. Match by `wikidata` or `names.primary`. |
+| 24 | Postpass OSM Reference Fallback | Native OSM fallback geometry and tag source for damaged/missing parent and country polygons (e.g. US, France, Spain, Monaco, China, Russia, Alaska, Madeira). Query via Postpass API (`postpass_polygon` table) in `osm-download-pipeline.yml`. See `doc/POSTPASS_REFERENCE_FALLBACK.md`. |
 
-## Known Gaps
+## Handled Gaps
 
-### US admin_level=2 (osm_id 148838)
+### US admin_level=2 (osm_id 148838) and other cross-border relations
 
-The US country boundary relation has **1,710 outer ways** spanning the full North American continent. Many border ways are shared with Canada/Mexico and may be incomplete in the Geofabrik US extract. `osmium export` silently drops the relation when it cannot assemble a valid multipolygon.
-
-**Current state:** The 51 US states (L4) are correctly exported with `parent_osm_id=148838` (via `infer_missing_children()`), but the parent polygon itself is missing from the output.
-
-### Overture Maps Fallback (Potential Fix)
-
-For missing parent geometries, Overture Maps `divisions` theme provides an alternative data source:
-
-**Query pattern (DuckDB):**
-```sql
--- Step 1: Find Overture division ID by wikidata or name
-SET s3_region='us-west-2';
-SET variable division_id = (
-    SELECT id
-    FROM read_parquet('s3://overturemaps-us-west-2/release/2026-08-19.0/theme=divisions/type=division/*')
-    WHERE wikidata = 'Q30'  -- or names.primary = 'United States'
-    AND subtype = 'country'
-    LIMIT 1
-);
-
--- Step 2: Fetch the polygon geometry
-COPY (
-    SELECT id, names.primary as name, subtype, admin_level, geometry
-    FROM read_parquet('s3://overturemaps-us-west-2/release/2026-08-19.0/theme=divisions/type=division_area/*')
-    WHERE division_id = getvariable('division_id')
-) TO 'overture_us_country.geojson' WITH (FORMAT GDAL, DRIVER 'GeoJSON');
-```
-
-**Verified result:** Overture provides a complete MultiPolygon with 29 sub-polygons (continental US + Alaska + Hawaii + territories). The main continental polygon has 73,154 coordinates.
-
-**Matching strategy:** Use `wikidata` tag (e.g. `Q30` for US) or `names.primary` to look up the Overture division, since OSM relation IDs are not directly stored in Overture.
-
-### Other Potential L2 Gaps
-
-Any country boundary relation with extensive cross-border ways may exhibit the same issue. The validation summary (`*-validation.json`) tracks these cases.
+Country boundary relations with extensive cross-border ways (US, Spain, China, Russia, Netherlands, etc.) and island/concelho divisions (Madeira, Alaska, Ceuta) are pre-fetched directly from Postpass into `reference-polygons.geojsonseq` and merged into each region stream via `merge_reference_polygons.py`.
 
 ## Spec Documents
 
 | Spec | Topic |
 |------|-------|
-| `SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md` | Root cause analysis and synthetic parent reconstruction |
+| `POSTPASS_REFERENCE_FALLBACK.md` | Postpass reference boundary fallback architecture |
+| `SPEC_UPSTREAM_OSM_POLYGONS_MISSING_ENTITIES.md` | Root cause analysis and relation validation |
 | `SPEC_OSM_POLYGONS_SUBDIVISIONS.md` | 3-rule extraction filter and admin_level synthesis rules |
 | `SPEC_ADMINISTRATIVE_CENTERS.md` | Admin centre / label coordinate extraction |
 | `SPEC_GEOPARQUET_ADMIN_POLYGONS.md` | Unsimplified GeoParquet export path |

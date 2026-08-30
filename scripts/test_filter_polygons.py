@@ -190,99 +190,34 @@ class TestFilterPolygons(unittest.TestCase):
         }
         self.assertIsNotNone(process_feature(polygon))
 
-    def test_synthetic_funchal_reconstruction(self):
-        # Given child freguesias of Funchal without the parent relation 8421413
-        stream = [
-            feat({"id": 8427682, "admin_level": "8", "name": "Sé", "wikidata": "Q10860292"}),
-            feat({"id": 8427683, "admin_level": "8", "name": "Monte", "wikidata": "Q10860293"}),
-            feat({"id": 8427684, "admin_level": "8", "name": "São Martinho", "wikidata": "Q10860294"}),
-        ]
-        results = list(filter_features(stream))
-        # 3 children + 1 synthesized parent
-        self.assertEqual(len(results), 4)
+    def test_dynamic_synthetic_defs_loading(self):
+        # Verify that dynamic synthetic defs can still be loaded via load_synthetic_defs
+        import tempfile
+        from filter_polygons import load_synthetic_defs, SYNTHETIC_PARENT_DEFINITIONS
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump({
+                "999999": {
+                    "country_code": "XX",
+                    "properties": {"id": 999999, "name": "Custom Parent", "admin_level": "7"},
+                    "child_relation_ids": [101, 102],
+                    "child_admin_level": "8"
+                }
+            }, f)
+            temp_path = f.name
+        try:
+            load_synthetic_defs(temp_path)
+            self.assertIn(999999, SYNTHETIC_PARENT_DEFINITIONS)
+            stream = [
+                feat({"id": 101, "admin_level": "8", "name": "Child 1"}),
+                feat({"id": 102, "admin_level": "8", "name": "Child 2"}),
+            ]
+            results = list(filter_features(stream, country_code="XX"))
+            self.assertEqual(len(results), 3)
+            self.assertEqual(results[-1]["properties"]["name"], "Custom Parent")
+        finally:
+            os.remove(temp_path)
+            SYNTHETIC_PARENT_DEFINITIONS.pop(999999, None)
 
-        funchal = [f for f in results if f["properties"].get("id") == 8421413][0]
-        self.assertEqual(funchal["properties"]["name"], "Funchal")
-        self.assertEqual(funchal["properties"]["admin_level"], "7")
-        self.assertEqual(funchal["properties"]["wikidata"], "Q25444")
-        self.assertEqual(funchal["geometry"]["type"], "MultiPolygon")
-        self.assertEqual(len(funchal["geometry"]["coordinates"]), 3)
-
-    def test_synthetic_funchal_not_duplicated_if_present(self):
-        # When parent relation is already present, no duplicate is created
-        stream = [
-            feat({"id": 8421413, "admin_level": "7", "name": "Funchal", "wikidata": "Q25444"}),
-            feat({"id": 8427682, "admin_level": "8", "name": "Sé", "wikidata": "Q10860292"}),
-        ]
-        results = list(filter_features(stream))
-        funchal_features = [f for f in results if f["properties"].get("id") == 8421413]
-        self.assertEqual(len(funchal_features), 1)
-
-    def test_synthetic_kaohsiung_reconstruction(self):
-        # Given child districts of Kaohsiung without the parent relation 2127079
-        stream = [
-            feat({"admin_level": "7", "name": "三民區", "name:en": "Sanmin District"}),
-            feat({"admin_level": "7", "name": "鼓山區", "name:en": "Gushan District"}),
-            feat({"admin_level": "7", "name": "苓雅區", "name:en": "Lingya District"}),
-        ]
-        results = list(filter_features(stream))
-        self.assertEqual(len(results), 4)
-
-        kaohsiung = [f for f in results if f["properties"].get("id") == 2127079][0]
-        self.assertEqual(kaohsiung["properties"]["name"], "高雄市")
-        self.assertEqual(kaohsiung["properties"]["admin_level"], "4")
-        self.assertEqual(kaohsiung["properties"]["wikidata"], "Q181557")
-        self.assertEqual(kaohsiung["properties"]["ISO3166-2"], "TW-KHH")
-        self.assertEqual(kaohsiung["geometry"]["type"], "MultiPolygon")
-
-    def test_synthetic_parent_alaska(self):
-        stream = [
-            feat({"@type": "relation", "id": 2605259, "admin_level": "6", "name": "Anchorage"}),
-            feat({"@type": "relation", "id": 2605273, "admin_level": "6", "name": "Fairbanks North Star Borough"}),
-            feat({"@type": "relation", "id": 2605281, "admin_level": "6", "name": "Juneau"}),
-        ]
-        results = list(filter_features(stream))
-        self.assertEqual(len(results), 4)
-
-        alaska = [f for f in results if f["properties"].get("id") == 1116270][0]
-        self.assertEqual(alaska["properties"]["name"], "Alaska")
-        self.assertEqual(alaska["properties"]["admin_level"], "4")
-        self.assertEqual(alaska["properties"]["wikidata"], "Q797")
-        self.assertEqual(alaska["properties"]["ISO3166-2"], "US-AK")
-        self.assertEqual(alaska["geometry"]["type"], "MultiPolygon")
-
-    def test_synthetic_papua_new_guinea_l2(self):
-        # relation 307866 "Papua Niugini" is broken (missing_ways) in the
-        # australia-oceania extract; the 4 L3 Regions are complete.
-        stream = [
-            feat({"@type": "relation", "id": 3778610, "admin_level": "3", "name": "Highlands Region", "ISO3166-1": "PG"}),
-            feat({"@type": "relation", "id": 3778611, "admin_level": "3", "name": "Islands Region", "ISO3166-1": "PG"}),
-            feat({"@type": "relation", "id": 3778629, "admin_level": "3", "name": "Momase Region", "ISO3166-1": "PG"}),
-            feat({"@type": "relation", "id": 3778630, "admin_level": "3", "name": "Southern Region", "ISO3166-1": "PG"}),
-        ]
-        results = list(filter_features(stream, country_code="PG"))
-        # 4 L3 children + 1 synthesised L2
-        self.assertEqual(len(results), 5)
-
-        pg_l2 = [f for f in results if f["properties"].get("id") == 307866]
-        self.assertEqual(len(pg_l2), 1, "Synthesised PG L2 must appear exactly once")
-        props = pg_l2[0]["properties"]
-        self.assertEqual(props["name"], "Papua Niugini")
-        self.assertEqual(props["admin_level"], "2")
-        self.assertEqual(props["ISO3166-1"], "PG")
-        self.assertEqual(props["wikidata"], "Q691")
-        self.assertEqual(pg_l2[0]["geometry"]["type"], "MultiPolygon")
-
-    def test_synthetic_papua_new_guinea_not_duplicated_if_present(self):
-        # If the L2 relation is present (not broken), synthesis must be skipped.
-        pg_l2_feature = feat({
-            "@type": "relation", "id": 307866,
-            "admin_level": "2", "name": "Papua Niugini", "ISO3166-1": "PG",
-        })
-        child = feat({"@type": "relation", "id": 3778610, "admin_level": "3", "name": "Highlands Region", "ISO3166-1": "PG"})
-        results = list(filter_features([pg_l2_feature, child], country_code="PG"))
-        pg_l2_results = [f for f in results if f["properties"].get("id") == 307866]
-        self.assertEqual(len(pg_l2_results), 1, "L2 must not be duplicated when already present")
     def test_admin_centre_enrichment(self):
         # Feature with relation @id = 62428 (Munich)
         feature = feat({"@type": "relation", "id": 62428, "admin_level": "6", "name": "München"})
@@ -393,43 +328,8 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(res_q["properties"]["admin_level"], "10")
         self.assertEqual(res_q["properties"]["area_type"], "quarter")
 
-    def test_synthetic_parent_entities(self):
-        # 1. Funchal (relation 8421413, admin_level=7) synthesized from child parishes for Portugal
-        parish1 = feat({"@type": "relation", "id": 8427682, "admin_level": "8", "name": "São Martinho", "ISO3166-1": "PT"})
-        parish2 = feat({"@type": "relation", "id": 8427683, "admin_level": "8", "name": "Santa Maria Maior", "ISO3166-1": "PT"})
-        
-        results = list(filter_features([parish1, parish2], country_code="PT"))
-        self.assertEqual(len(results), 3)
-        funchal = results[-1]
-        self.assertEqual(funchal["properties"]["@id"], 8421413)
-        self.assertEqual(funchal["properties"]["admin_level"], "7")
-        self.assertEqual(funchal["properties"]["name"], "Funchal")
-        self.assertEqual(funchal["properties"]["wikidata"], "Q25444")
-        self.assertEqual(funchal["properties"]["ISO3166-1"], "PT")
-        self.assertEqual(funchal["properties"]["ISO3166-2"], "PT-30")
-        self.assertEqual(funchal["properties"]["area_type"], "municipality")
-        self.assertEqual(funchal["geometry"]["type"], "MultiPolygon")
-
-        # 2. Country Scoping: Parishes with matching names in Spain (ES) must NOT synthesize Funchal
-        spanish_parish = feat({"@type": "relation", "admin_level": "8", "name": "Santa Maria Maior", "ISO3166-1": "ES"})
-        results_es = list(filter_features([spanish_parish], country_code="ES"))
-        self.assertEqual(len(results_es), 1)
-        self.assertEqual(results_es[0]["properties"]["name"], "Santa Maria Maior")
-
-        # 3. If parent was already in stream with valid polygon, no Funchal duplicate
-        #    but Madeira L4 is still synthesized from the lone freguesia
-        parent_funchal = feat({"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal", "ISO3166-1": "PT"})
-        results_with_parent = list(filter_features([parent_funchal, parish1], country_code="PT"))
-        # 3 features: real Funchal + parish1 + synthesized Madeira L4
-        self.assertEqual(len(results_with_parent), 3)
-
-        # 4. If parent in stream had non-polygon or empty geometry (unclosed ring drop), synthesize from children
-        broken_parent = {"type": "Feature", "geometry": None, "properties": {"@type": "relation", "id": 8421413, "admin_level": "7", "name": "Funchal"}}
-        results_broken = list(filter_features([broken_parent, parish1, parish2], country_code="PT"))
-        self.assertEqual(len(results_broken), 3)
-        self.assertEqual(results_broken[-1]["properties"]["name"], "Funchal")
-
     def test_foreign_exclave_exclusion_ceuta(self):
+
         # Ceuta (relation 1154756, ISO3166-2=ES-CE) must be dropped when exporting MA.
         ceuta = feat({
             "@type": "relation", "id": 1154756,

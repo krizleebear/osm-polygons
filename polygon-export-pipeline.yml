@@ -11,8 +11,9 @@ resources:
     #endpoint: docker-krizleebear
   - container: osm2parquet
     # DuckDB spatial converter for unsimplified GeoParquet 1.1 exports;
-    # v1.0.6+ also ships python3 (stdlib) + duckdb httpfs/spatial for Overture fallback (fetch_overture_polygons.py)
+    # v1.0.6+ ships python3 (stdlib) for Postpass reference fallback (fetch_postpass_polygons.py)
     image: ghcr.io/krizleebear/osm2parquet:v1.0.6
+
 
 trigger:
 - none
@@ -29,31 +30,32 @@ parameters:
   displayName: 'Specific Build ID to reuse export artifacts from (default "auto" uses latest export build)'
   type: string
   default: 'auto'
-- name: fetchOverturePolygons
-  displayName: 'Fetch Overture divisions fallback polygons and merge genuinely broken admin relations'
+- name: useReferencePolygons
+  displayName: 'Merge intact Postpass reference polygons for broken admin relations'
+  type: boolean
+  default: true
+- name: reuseReferenceArtifacts
+  displayName: 'Reuse existing admin-polygons-reference artifact from a previous download build'
   type: boolean
   default: false
-- name: reuseOvertureArtifacts
-  displayName: 'Reuse existing overture-polygons artifact from a previous build (skip Overture S3 fetch)'
-  type: boolean
-  default: false
-- name: overtureBuildId
-  displayName: 'Specific Build ID to reuse overture-polygons from (default "auto" uses latest overture build)'
+- name: referenceBuildId
+  displayName: 'Specific Build ID to reuse admin-polygons-reference from (default "auto" uses download pipeline)'
   type: string
   default: 'auto'
 
 
+
 stages:
-- stage: overture
-  displayName: 'Fetch Overture fallback polygons'
+- stage: reference
+  displayName: 'Fetch Postpass reference polygons'
   condition: and(
-    eq('${{ parameters.fetchOverturePolygons }}', true),
-    eq('${{ parameters.reuseOvertureArtifacts }}', false))
+    eq('${{ parameters.useReferencePolygons }}', true),
+    eq('${{ parameters.reuseReferenceArtifacts }}', false))
 
   jobs:
 
-  - job: fetch_overture
-    timeoutInMinutes: 240
+  - job: fetch_reference
+    timeoutInMinutes: 30
     workspace:
       clean: all
     container: osm2parquet
@@ -62,30 +64,31 @@ stages:
     - checkout: self
 
     - task: Bash@3
-      displayName: 'Fetch Overture division fallback geometry'
+      displayName: 'Fetch reference polygons from Postpass API'
       inputs:
         targetType: 'inline'
         script: |
           set -eux
           ls -la
-          python3 scripts/fetch_overture_polygons.py \
-            --candidates scripts/overture-candidates.json \
-            --out-dir overture-polygons
-          ls -la overture-polygons
+          python3 scripts/fetch_postpass_polygons.py \
+            --candidates scripts/postpass-candidates.json \
+            --out-dir reference-polygons
+          ls -la reference-polygons
 
     - task: PublishPipelineArtifact@1
-      displayName: 'Store Overture fallback polygons'
+      displayName: 'Store Postpass reference polygons'
       inputs:
-        targetPath: 'overture-polygons'
-        artifact: 'overture-polygons'
+        targetPath: 'reference-polygons'
+        artifact: 'admin-polygons-reference'
         publishLocation: 'pipeline'
 
 - stage: export
   displayName: 'Export polygons from OSM PBF'
-  dependsOn: overture
+  dependsOn: reference
   condition: and(
     eq('${{ parameters.reuseExportArtifacts }}', false),
-    in(dependencies.overture.result, 'Succeeded', 'Skipped'))
+    in(dependencies.reference.result, 'Succeeded', 'Skipped'))
+
 
   jobs:
 
@@ -968,14 +971,14 @@ stages:
             | python3 scripts/filter_places.py --country-code $(COUNTRY_CODE) > ${PLACES_JSONL}
           rm -f ${PLACES_PBF}
 
-          # Step 6: Determine dynamically if this region has Overture fallback candidates
-          IS_CANDIDATE=$(python3 -c "import json; c=json.load(open('scripts/overture-candidates.json')); print('true' if any(x.get('country')=='$(COUNTRY_CODE)' for x in c.get('candidates', [])) else 'false')")
-          echo "##vso[task.setvariable variable=IS_OVERTURE_CANDIDATE]$IS_CANDIDATE"
+          # Step 6: Determine dynamically if this region has Postpass reference fallback candidates
+          IS_CANDIDATE=$(python3 -c "import json; c=json.load(open('scripts/postpass-candidates.json')); print('true' if any(x.get('country')=='$(COUNTRY_CODE)' for x in c.get('candidates', [])) else 'false')")
+          echo "##vso[task.setvariable variable=IS_REFERENCE_CANDIDATE]$IS_CANDIDATE"
 
     - task: PublishPipelineArtifact@1
       enabled: true
-      displayName: 'Store raw polygon artifacts (for Overture fallback candidate regions)'
-      condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true), eq(variables['IS_OVERTURE_CANDIDATE'], 'true'))
+      displayName: 'Store raw polygon artifacts (for reference candidate regions)'
+      condition: and(succeeded(), eq('${{ parameters.useReferencePolygons }}', true), eq(variables['IS_REFERENCE_CANDIDATE'], 'true'))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'raw-admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
@@ -984,11 +987,12 @@ stages:
     - task: PublishPipelineArtifact@1
       enabled: true
       displayName: 'Store polygon artifacts'
-      condition: and(succeeded(), or(ne('${{ parameters.fetchOverturePolygons }}', true), ne(variables['IS_OVERTURE_CANDIDATE'], 'true')))
+      condition: and(succeeded(), or(ne('${{ parameters.useReferencePolygons }}', true), ne(variables['IS_REFERENCE_CANDIDATE'], 'true')))
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
+
 
     - task: PublishPipelineArtifact@1
       enabled: true
@@ -1015,19 +1019,19 @@ stages:
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
 
-  - job: merge_overture
-    displayName: 'Merge Overture fallback polygons (insert + health-check replace)'
-    # Runs AFTER export in the osm2parquet container: DuckDB spatial powers the
-    # health check that replaces present-but-damaged candidate polygons with the
-    # Overture LAND geometry (see scripts/merge_overture_polygons.py).
+  - job: merge_reference
+    displayName: 'Merge Postpass reference polygons (insert + replace broken)'
     dependsOn: export
-    condition: and(succeeded(), eq('${{ parameters.fetchOverturePolygons }}', true))
+    condition: and(succeeded(), eq('${{ parameters.useReferencePolygons }}', true))
     timeoutInMinutes: 120
     workspace:
       clean: all
     container: osm2parquet
     strategy:
       matrix:
+        armenia:
+          REGION: 'armenia'
+          COUNTRY_CODE: 'AM'
         burkina-faso:
           REGION: 'burkina-faso'
           COUNTRY_CODE: 'BF'
@@ -1061,9 +1065,15 @@ stages:
         iran:
           REGION: 'iran'
           COUNTRY_CODE: 'IR'
+        kyrgyzstan:
+          REGION: 'kyrgyzstan'
+          COUNTRY_CODE: 'KG'
         north-korea:
           REGION: 'north-korea'
           COUNTRY_CODE: 'KP'
+        monaco:
+          REGION: 'monaco'
+          COUNTRY_CODE: 'MC'
         malaysia-singapore-brunei:
           REGION: 'malaysia-singapore-brunei'
           COUNTRY_CODE: 'MY'
@@ -1085,9 +1095,9 @@ stages:
         portugal:
           REGION: 'portugal'
           COUNTRY_CODE: 'PT'
-        sudan:
-          REGION: 'sudan'
-          COUNTRY_CODE: 'SD'
+        russia:
+          REGION: 'russia'
+          COUNTRY_CODE: 'RU'
         suriname:
           REGION: 'suriname'
           COUNTRY_CODE: 'SR'
@@ -1110,41 +1120,41 @@ stages:
     steps:
     - checkout: self
 
-    - ${{ if and(ne(parameters.overtureBuildId, 'auto'), ne(parameters.overtureBuildId, '')) }}:
+    - ${{ if and(ne(parameters.referenceBuildId, 'auto'), ne(parameters.referenceBuildId, '')) }}:
       - task: DownloadPipelineArtifact@2
-        displayName: 'Download Overture fallback polygons from specific build (${{ parameters.overtureBuildId }})'
-        condition: ${{ eq(parameters.reuseOvertureArtifacts, true) }}
+        displayName: 'Download reference fallback polygons from specific build (${{ parameters.referenceBuildId }})'
+        condition: ${{ eq(parameters.reuseReferenceArtifacts, true) }}
         inputs:
           buildType: 'specific'
           project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '4'
+          definition: '9'
           buildVersionToDownload: 'specific'
-          pipelineId: '${{ parameters.overtureBuildId }}'
+          pipelineId: '${{ parameters.referenceBuildId }}'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'overture-polygons/**'
+          itemPattern: 'admin-polygons-reference/**'
           targetPath: '$(System.DefaultWorkingDirectory)'
 
-    - ${{ if or(eq(parameters.overtureBuildId, 'auto'), eq(parameters.overtureBuildId, '')) }}:
+    - ${{ if or(eq(parameters.referenceBuildId, 'auto'), eq(parameters.referenceBuildId, '')) }}:
       - task: DownloadPipelineArtifact@2
-        displayName: 'Download Overture fallback polygons from latest overture build'
-        condition: ${{ eq(parameters.reuseOvertureArtifacts, true) }}
+        displayName: 'Download reference fallback polygons from latest download build'
+        condition: ${{ eq(parameters.reuseReferenceArtifacts, true) }}
         inputs:
           buildType: 'specific'
           project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '4'
+          definition: '9'
           buildVersionToDownload: 'latest'
           allowFailedBuilds: true
           allowPartiallySucceededBuilds: true
-          itemPattern: 'overture-polygons/**'
+          itemPattern: 'admin-polygons-reference/**'
           targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download Overture fallback polygons from current build'
-      condition: ${{ eq(parameters.reuseOvertureArtifacts, false) }}
+      displayName: 'Download reference fallback polygons from current build'
+      condition: ${{ eq(parameters.reuseReferenceArtifacts, false) }}
       inputs:
         buildType: 'current'
-        itemPattern: 'overture-polygons/**'
+        itemPattern: 'admin-polygons-reference/**'
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: DownloadPipelineArtifact@2
@@ -1157,7 +1167,7 @@ stages:
         targetPath: '$(System.DefaultWorkingDirectory)'
 
     - task: Bash@3
-      displayName: 'Merge Overture fallback polygons'
+      displayName: 'Merge Postpass reference polygons'
       inputs:
         targetType: 'inline'
         script: |
@@ -1169,19 +1179,19 @@ stages:
             echo " or it is empty (0 bytes)."
             exit 1
           fi
-          VALIDATION=$(find "validation-$(COUNTRY_CODE)-$(REGION)" -name "validation.json" | head -n 1)
-          if [ -z "$VALIDATION" ]; then
-            echo " ERROR: validation.json missing for '$(COUNTRY_CODE)/$(REGION)'."
-            echo " Cause: the region's validation artifact was not published by the export job."
+          REF_STREAM=$(find "admin-polygons-reference" -name "reference-polygons.geojsonseq" | head -n 1)
+          if [ -z "$REF_STREAM" ] || [ ! -s "$REF_STREAM" ]; then
+            echo " ERROR: reference-polygons.geojsonseq missing or empty."
+            echo " Cause: admin-polygons-reference artifact was not produced."
             exit 1
           fi
           mkdir -p "admin-polygons-$(COUNTRY_CODE)-$(REGION)"
           TARGET="admin-polygons-$(COUNTRY_CODE)-$(REGION)/$(COUNTRY_CODE)_$(REGION).admin-polygons.geojsonseq"
-          python3 scripts/merge_overture_polygons.py "$STREAM" \
-            --validation "$VALIDATION" \
-            --overture overture-polygons/overture.geojsonseq \
-            --candidates scripts/overture-candidates.json \
-            --country-code $(COUNTRY_CODE) > "$TARGET"
+          python3 scripts/merge_reference_polygons.py "$STREAM" \
+            --reference "$REF_STREAM" \
+            --candidates scripts/postpass-candidates.json \
+            --country-code $(COUNTRY_CODE) \
+            --out "$TARGET"
 
     - task: PublishPipelineArtifact@1
       displayName: 'Store merged polygon artifacts'
@@ -1189,6 +1199,7 @@ stages:
         targetPath: '$(System.DefaultWorkingDirectory)/admin-polygons-$(COUNTRY_CODE)-$(REGION)'
         artifact: 'admin-polygons-$(COUNTRY_CODE)-$(REGION)'
         publishLocation: 'pipeline'
+
 
   - job: tag_export
     displayName: 'Tag build with export artifacts & save metadata'
@@ -1705,11 +1716,12 @@ stages:
             echo ""
             echo "WARNING: The following countries have NO admin_level=2 polygon:"
             echo -e "$MISSING_L2"
-            echo "This may indicate a missing Overture fallback, a broken OSM relation,"
+            echo "This may indicate a missing Postpass reference fallback, a broken OSM relation,"
             echo "or a country_code derivation error. Investigate before release."
           else
             echo "OK: All countries have at least one admin_level=2 polygon."
           fi
+
 
     - task: DownloadPipelineArtifact@2
       enabled: true
