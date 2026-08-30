@@ -48,9 +48,15 @@ __pycache__/
 .pytest_cache/
 
 # Scratch / local investigation artifacts
+scratch/
+tmp/
+*.tmp
+
+# Environment & credentials
+.env
+.env.*
 /madeira-latest-parent-mapping.json
 /overture-polygons/
 /reference-polygons/
 /data/
 validation.json
-
