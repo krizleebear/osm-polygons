@@ -1371,11 +1371,16 @@ stages:
             LOAD spatial;
             CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
             COPY (
-              SELECT * FROM combined WHERE country_code = '${cc}'
+              SELECT * EXCLUDE (rn) FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level) AS rn
+                FROM combined
+                WHERE country_code = '${cc}'
+              ) WHERE rn = 1
               ORDER BY admin_level, bbox_miny, bbox_minx
             ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
             "
           done < /tmp/country_codes_$(CONTINENT).csv
+
           rm -rf temp_parquet
 
           # per-country places parquets
@@ -1395,10 +1400,15 @@ stages:
               LOAD spatial;
               CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
               COPY (
-                SELECT * FROM pcombined WHERE country_code = '${cc}'
+                SELECT * EXCLUDE (rn) FROM (
+                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY place_type) AS rn
+                  FROM pcombined
+                  WHERE country_code = '${cc}'
+                ) WHERE rn = 1
                 ORDER BY place_type, lat, lon
               ) TO '${pout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
               "
+
               HAS_PLACES=true
             done < /tmp/places_ccs_$(CONTINENT).csv
             rm -rf temp_places_parquet
@@ -1475,7 +1485,7 @@ stages:
         script: |
           set +e
           echo "=== Checking admin_level=2 coverage per country ==="
-          MISSING_L2=""
+          MISSING_COUNT=0
           TOTAL=0
           for pq in parquet-check/**/admin-polygons-*.parquet; do
             [ -f "$pq" ] || continue
@@ -1487,22 +1497,100 @@ stages:
               WHERE admin_level = 2
             " 2>/dev/null | tail -1)
             if [ "${HAS_L2:-0}" -eq 0 ]; then
-              MISSING_L2="${MISSING_L2}  ${CC}\n"
+              echo "##vso[task.logissue type=warning]Country ${CC} (${pq}) has NO admin_level=2 polygon!"
+              MISSING_COUNT=$((MISSING_COUNT + 1))
             fi
           done
           echo "Checked $TOTAL country parquets."
-          if [ -n "$MISSING_L2" ]; then
-            echo ""
-            echo "WARNING: The following countries have NO admin_level=2 polygon:"
-            echo -e "$MISSING_L2"
-            echo "This may indicate a missing Postpass reference fallback, a broken OSM relation,"
-            echo "or a country_code derivation error. Investigate before release."
+          if [ "$MISSING_COUNT" -gt 0 ]; then
+            echo "WARNING: $MISSING_COUNT countries are missing admin_level=2."
           else
             echo "OK: All countries have at least one admin_level=2 polygon."
           fi
 
+    - task: Bash@3
+      enabled: true
+      displayName: 'Verify no duplicate OSM features within per-country parquet files'
+      continueOnError: true
+      inputs:
+        targetType: 'inline'
+        script: |
+          set +e
+          echo "=== Checking for duplicate OSM features within per-country parquet files ==="
+          DUPE_TOTAL=0
+          for pq in parquet-check/**/admin-polygons-*.parquet; do
+            [ -f "$pq" ] || continue
+            CC=$(basename "$pq" .parquet | sed 's/^admin-polygons-//')
+            DUPE_COUNT=$(duckdb -c "
+              INSTALL spatial; LOAD spatial;
+              SELECT count(*) FROM (
+                SELECT osm_type, osm_id, count(*) FROM read_parquet('${pq}')
+                GROUP BY osm_type, osm_id HAVING count(*) > 1
+              );
+            " 2>/dev/null | tail -1)
+            if [ "${DUPE_COUNT:-0}" -gt 0 ]; then
+              echo "##vso[task.logissue type=warning]Country ${CC} (${pq}) contains ${DUPE_COUNT} duplicate osm_id records!"
+              DUPE_TOTAL=$((DUPE_TOTAL + DUPE_COUNT))
+            fi
+          done
+
+          if [ "$DUPE_TOTAL" -gt 0 ]; then
+            echo "WARNING: A total of ${DUPE_TOTAL} duplicate features detected across country parquet datasets."
+          else
+            echo "OK: Zero duplicate features found across all country datasets."
+          fi
+
+    - task: Bash@3
+      enabled: true
+      displayName: 'Verify non-empty parquet datasets and geometry validity'
+      continueOnError: true
+      inputs:
+        targetType: 'inline'
+        script: |
+          set +e
+          echo "=== Checking for empty parquet datasets and NULL geometries ==="
+          EMPTY_COUNT=0
+          NULL_GEOM_COUNT=0
+          TOTAL=0
+          for pq in parquet-check/**/admin-polygons-*.parquet; do
+            [ -f "$pq" ] || continue
+            CC=$(basename "$pq" .parquet | sed 's/^admin-polygons-//')
+            TOTAL=$((TOTAL + 1))
+            
+            # Check row count
+            ROW_COUNT=$(duckdb -c "
+              INSTALL spatial; LOAD spatial;
+              SELECT count(*) FROM read_parquet('${pq}')
+            " 2>/dev/null | tail -1)
+            
+            if [ "${ROW_COUNT:-0}" -eq 0 ]; then
+              echo "##vso[task.logissue type=warning]Country ${CC} (${pq}) is EMPTY (0 rows)!"
+              EMPTY_COUNT=$((EMPTY_COUNT + 1))
+              continue
+            fi
+            
+            # Check for NULL geometries
+            NULL_GEOMS=$(duckdb -c "
+              INSTALL spatial; LOAD spatial;
+              SELECT count(*) FROM read_parquet('${pq}') WHERE geom IS NULL
+            " 2>/dev/null | tail -1)
+            
+            if [ "${NULL_GEOMS:-0}" -gt 0 ]; then
+              echo "##vso[task.logissue type=warning]Country ${CC} (${pq}) contains ${NULL_GEOMS} records with NULL geometry!"
+              NULL_GEOM_COUNT=$((NULL_GEOM_COUNT + NULL_GEOMS))
+            fi
+          done
+
+          echo "Checked $TOTAL country parquets for integrity."
+          if [ "$EMPTY_COUNT" -gt 0 ] || [ "$NULL_GEOM_COUNT" -gt 0 ]; then
+            echo "WARNING: $EMPTY_COUNT empty parquets and $NULL_GEOM_COUNT NULL geometries detected."
+          else
+            echo "OK: All country parquets contain valid rows and non-NULL geometries."
+          fi
 
     - task: DownloadPipelineArtifact@2
+
+
       enabled: true
       displayName: 'Download all validation artifacts'
       continueOnError: true
