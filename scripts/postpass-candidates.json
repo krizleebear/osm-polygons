@@ -33,6 +33,7 @@
     { "osm_id": 153292, "country": "CN", "admin_level": 4, "name": "Tibet" },
     { "osm_id": 1154756, "country": "ES", "admin_level": 4, "name": "Ceuta" },
     { "osm_id": 269575, "country": "IR", "admin_level": 4, "name": "Bushehr" },
+    { "osm_id": 178018, "country": "UZ", "admin_level": 4, "name": "Fergana" },
     { "osm_id": 1629145, "country": "PT", "admin_level": 4, "name": "Madeira" },
     { "osm_id": 2127079, "country": "TW", "admin_level": 4, "name": "Kaohsiung City" },
     { "osm_id": 8421420, "country": "PT", "admin_level": 7, "name": "Calheta" },
