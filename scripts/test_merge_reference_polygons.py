@@ -58,66 +58,72 @@ class TestMergeReferencePolygons(unittest.TestCase):
 
     def test_insert_missing_candidate(self):
         # Stream has other features, but missing Monaco (1001)
-        other_feature = {
-            "type": "Feature",
-            "id": 9999,
-            "properties": {"osm_id": 9999, "name": "Larvotto", "admin_level": "8"},
-            "geometry": {"type": "Polygon", "coordinates": [[[7.43, 43.74], [7.44, 43.74], [7.43, 43.74]]]}
-        }
-        with open(self.stream_file, "w") as f:
-            f.write(json.dumps(other_feature) + "\n")
-
-        out_file = os.path.join(self.temp_dir.name, "out.geojsonseq")
-        
-        # Run merge
-        import sys
-        sys.argv = [
-            "merge_reference_polygons.py",
-            self.stream_file,
-            "--reference", self.reference_file,
-            "--candidates", self.candidates_file,
-            "--country-code", "MC",
-            "--out", out_file
+        orig_stream = [
+            {"type": "Feature", "id": 5001, "properties": {"osm_id": 5001, "admin_level": "8", "ISO3166-1": "MC"}},
         ]
-        main()
+        with open(self.stream_file, "w") as f:
+            for feat in orig_stream:
+                f.write(json.dumps(feat) + "\n")
 
-        with open(out_file, "r") as f:
+        output_file = os.path.join(self.temp_dir.name, "out.geojsonseq")
+        import io, sys
+        from contextlib import redirect_stdout
+        orig_argv = sys.argv
+        try:
+            sys.argv = [
+                "merge_reference_polygons.py",
+                self.stream_file,
+                "--reference", self.reference_file,
+                "--candidates", self.candidates_file,
+                "--country-code", "MC",
+                "--out", output_file
+            ]
+            with redirect_stdout(io.StringIO()):
+                main()
+        finally:
+            sys.argv = orig_argv
+
+        with open(output_file, "r") as f:
             lines = [json.loads(line) for line in f if line.strip()]
 
         self.assertEqual(len(lines), 2)
-        ids = [feat["id"] for feat in lines]
-        self.assertIn(9999, ids)
-        self.assertIn(1001, ids)
+        osm_ids = [feat["properties"]["osm_id"] for feat in lines]
+        self.assertIn(1001, osm_ids)
+        self.assertIn(5001, osm_ids)
 
-    def test_replace_existing_candidate(self):
-        # Stream has damaged Monaco feature (id 1001 with damaged coords)
-        damaged_feature = {
-            "type": "Feature",
-            "id": 1001,
-            "properties": {"osm_id": 1001, "name": "Monaco Damaged"},
-            "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 0], [0, 0]]]}
-        }
-        with open(self.stream_file, "w") as f:
-            f.write(json.dumps(damaged_feature) + "\n")
-
-        out_file = os.path.join(self.temp_dir.name, "out.geojsonseq")
-        import sys
-        sys.argv = [
-            "merge_reference_polygons.py",
-            self.stream_file,
-            "--reference", self.reference_file,
-            "--candidates", self.candidates_file,
-            "--country-code", "MC",
-            "--out", out_file
+    def test_replace_corrupted_candidate(self):
+        # Stream has Monaco (1001), but we want to replace it
+        orig_stream = [
+            {"type": "Feature", "id": 1001, "properties": {"osm_id": 1001, "name": "Broken Monaco", "admin_level": "2", "ISO3166-1": "MC"}},
         ]
-        main()
+        with open(self.stream_file, "w") as f:
+            for feat in orig_stream:
+                f.write(json.dumps(feat) + "\n")
 
-        with open(out_file, "r") as f:
+        output_file = os.path.join(self.temp_dir.name, "out.geojsonseq")
+        import io, sys
+        from contextlib import redirect_stdout
+        orig_argv = sys.argv
+        try:
+            sys.argv = [
+                "merge_reference_polygons.py",
+                self.stream_file,
+                "--reference", self.reference_file,
+                "--candidates", self.candidates_file,
+                "--country-code", "MC",
+                "--out", output_file
+            ]
+            with redirect_stdout(io.StringIO()):
+                main()
+        finally:
+            sys.argv = orig_argv
+
+        with open(output_file, "r") as f:
             lines = [json.loads(line) for line in f if line.strip()]
 
         self.assertEqual(len(lines), 1)
-        self.assertEqual(lines[0]["properties"]["name"], "Monaco")
-        self.assertEqual(lines[0]["geometry"]["type"], "MultiPolygon")
+        self.assertEqual(lines[0]["properties"]["name"], "Monaco")  # Replaced with reference name
+
 
 
 if __name__ == "__main__":

@@ -65,13 +65,18 @@ class TestValidateParquet(unittest.TestCase):
     def test_validate_parquets_summary(self, mock_inspect, mock_find):
         mock_find.return_value = ["admin-polygons-DE.parquet", "admin-polygons-FR.parquet"]
         mock_inspect.side_effect = [
-            {"country_code": "DE", "path": "admin-polygons-DE.parquet", "error": None, "total_rows": 100, "l2_count": 1, "null_geom_count": 0, "dupe_feature_count": 0},
-            {"country_code": "FR", "path": "admin-polygons-FR.parquet", "error": None, "total_rows": 200, "l2_count": 0, "null_geom_count": 0, "dupe_feature_count": 0},
+            {"country_code": "DE", "path": "admin-polygons-DE.parquet", "error": None, "total_rows": 100, "l2_count": 1, "null_geom_count": 0, "dupe_feature_count": 0, "populated_levels": [2, 4, 6]},
+            {"country_code": "FR", "path": "admin-polygons-FR.parquet", "error": None, "total_rows": 200, "l2_count": 0, "null_geom_count": 0, "dupe_feature_count": 0, "populated_levels": [4, 6]},
         ]
         
-        exit_code = validate_parquets("some/dir", fail_on_error=False)
+        # Suppress stdout during test to prevent Azure DevOps runner from picking up mocked ##vso issue commands
+        import io
+        from contextlib import redirect_stdout
+        with redirect_stdout(io.StringIO()):
+            exit_code = validate_parquets("some/dir", fail_on_error=False)
         self.assertEqual(exit_code, 0)
 
 
 if __name__ == "__main__":
     unittest.main()
+
