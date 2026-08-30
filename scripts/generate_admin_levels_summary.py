@@ -16,7 +16,24 @@ import json
 import argparse
 from collections import defaultdict
 
+import subprocess
+
 LEVEL_COLUMNS = [str(lvl) for lvl in range(2, 12)]
+
+
+def query_duckdb_json(sql):
+    """Execute SQL using python duckdb package if available, else fallback to duckdb CLI."""
+    try:
+        import duckdb
+        con = duckdb.connect(database=":memory:")
+        con.execute("INSTALL spatial; LOAD spatial;")
+        return con.execute(sql).fetchall()
+    except ImportError:
+        cmd = ["duckdb", "-json", "-c", f"INSTALL spatial; LOAD spatial; {sql}"]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            raise RuntimeError(res.stderr.strip())
+        return json.loads(res.stdout) if res.stdout.strip() else []
 
 
 def analyze_parquet_files(parquet_dir):
@@ -29,15 +46,6 @@ def analyze_parquet_files(parquet_dir):
         print(f"Warning: No admin-polygons-*.parquet files found in {parquet_dir}", file=sys.stderr)
         return []
 
-    try:
-        import duckdb
-    except ImportError:
-        print("Error: duckdb Python package is required. Run 'pip install duckdb'.", file=sys.stderr)
-        sys.exit(1)
-
-    con = duckdb.connect(database=":memory:")
-    con.execute("INSTALL spatial; LOAD spatial;")
-
     country_stats = []
 
     for pq_path in parquet_files:
@@ -48,24 +56,32 @@ def analyze_parquet_files(parquet_dir):
             query = f"""
                 SELECT
                     admin_level,
-                    count(*) AS feature_count
+                    count(*) AS feature_count,
+                    COALESCE(
+                        (SELECT name FROM read_parquet('{pq_path}') WHERE admin_level = 2 AND name IS NOT NULL AND name != '' LIMIT 1),
+                        (SELECT name FROM read_parquet('{pq_path}') WHERE name IS NOT NULL AND name != '' LIMIT 1),
+                        '{cc}'
+                    ) AS country_name
                 FROM read_parquet('{pq_path}')
-                GROUP BY admin_level
+                GROUP BY admin_level, country_name
             """
-            rows = con.execute(query).fetchall()
-            level_counts = {str(row[0]): row[1] for row in rows if row[0] is not None}
+            rows = query_duckdb_json(query)
+            level_counts = {}
+            country_name = cc
 
-            name_query = f"""
-                SELECT name FROM read_parquet('{pq_path}')
-                WHERE admin_level = 2 AND name IS NOT NULL AND name != ''
-                LIMIT 1
-            """
-            name_row = con.execute(name_query).fetchone()
-            if name_row and name_row[0]:
-                country_name = name_row[0]
-            else:
-                fallback_name = con.execute(f"SELECT name FROM read_parquet('{pq_path}') WHERE name IS NOT NULL LIMIT 1").fetchone()
-                country_name = fallback_name[0] if fallback_name else cc
+            for r in rows:
+                if isinstance(r, dict):
+                    lvl = str(r.get("admin_level", ""))
+                    cnt = int(r.get("feature_count", 0))
+                    cname = r.get("country_name")
+                else:
+                    lvl = str(r[0]) if r[0] is not None else ""
+                    cnt = int(r[1])
+                    cname = r[2]
+                if lvl and lvl != "None":
+                    level_counts[lvl] = cnt
+                if cname:
+                    country_name = cname
 
             total_features = sum(level_counts.values())
 
@@ -79,6 +95,7 @@ def analyze_parquet_files(parquet_dir):
             print(f"Error reading {pq_path}: {e}", file=sys.stderr)
 
     return sorted(country_stats, key=lambda x: x["country_code"])
+
 
 
 def generate_markdown(stats):
