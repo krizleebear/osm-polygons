@@ -50,6 +50,7 @@ jobs:
         buildVersionToDownload: 'latest'
       itemPattern: |
         parquet*/**
+        admin-levels-summary/**
         validation-summary/**
         admin-polygons-validation/**
       targetPath: '$(System.DefaultWorkingDirectory)/downloads'
@@ -68,13 +69,19 @@ jobs:
         # 2. Per-country OSM Place-Nodes GeoParquet files
         find downloads -name "osm-places-*.parquet" -exec cp {} release-assets/ \;
 
-        # 3. Validation Summary & Archive
+        # 3. Administrative Levels Coverage Summary
+        if [ -d "downloads/admin-levels-summary" ]; then
+          find downloads/admin-levels-summary -name "admin-levels-summary.*" -exec cp {} release-assets/ \;
+        fi
+
+        # 4. Validation Summary & Archive
         if [ -d "downloads/validation-summary" ]; then
           find downloads/validation-summary -name "validation-summary.md" -exec cp {} release-assets/ \;
         fi
         if [ -d "downloads/admin-polygons-validation" ]; then
           find downloads/admin-polygons-validation -name "validation.tar.gz" -exec cp {} release-assets/ \;
         fi
+
 
         # Reclaim runner disk space immediately by removing downloaded temp folders
         rm -rf downloads
@@ -236,8 +243,11 @@ jobs:
       assets: |
         $(System.DefaultWorkingDirectory)/release-assets/*.parquet
         $(System.DefaultWorkingDirectory)/release-assets/index.json
+        $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.md
+        $(System.DefaultWorkingDirectory)/release-assets/admin-levels-summary.json
         $(System.DefaultWorkingDirectory)/release-assets/validation-summary.md
         $(System.DefaultWorkingDirectory)/release-assets/validation.tar.gz
       assetUploadMode: 'delete'
+
       isDraft: ${{ parameters.isDraft }}
       isPreRelease: ${{ parameters.isPreRelease }}
