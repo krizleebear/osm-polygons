@@ -30,64 +30,13 @@ parameters:
   displayName: 'Specific Build ID to reuse export artifacts from (default "auto" uses latest export build)'
   type: string
   default: 'auto'
-- name: useReferencePolygons
-  displayName: 'Merge intact Postpass reference polygons for broken admin relations'
-  type: boolean
-  default: true
-- name: reuseReferenceArtifacts
-  displayName: 'Reuse existing admin-polygons-reference artifact from a previous download build'
-  type: boolean
-  default: false
-- name: referenceBuildId
-  displayName: 'Specific Build ID to reuse admin-polygons-reference from (default "auto" uses download pipeline)'
-  type: string
-  default: 'auto'
-
 
 
 stages:
-- stage: reference
-  displayName: 'Fetch Postpass reference polygons'
-  condition: and(
-    eq('${{ parameters.useReferencePolygons }}', true),
-    eq('${{ parameters.reuseReferenceArtifacts }}', false))
-
-  jobs:
-
-  - job: fetch_reference
-    timeoutInMinutes: 30
-    workspace:
-      clean: all
-    container: osm2parquet
-
-    steps:
-    - checkout: self
-
-    - task: Bash@3
-      displayName: 'Fetch reference polygons from Postpass API'
-      inputs:
-        targetType: 'inline'
-        script: |
-          set -eux
-          ls -la
-          python3 scripts/fetch_postpass_polygons.py \
-            --candidates scripts/postpass-candidates.json \
-            --out-dir reference-polygons
-          ls -la reference-polygons
-
-    - task: PublishPipelineArtifact@1
-      displayName: 'Store Postpass reference polygons'
-      inputs:
-        targetPath: 'reference-polygons'
-        artifact: 'admin-polygons-reference'
-        publishLocation: 'pipeline'
-
 - stage: export
   displayName: 'Export polygons from OSM PBF'
-  dependsOn: reference
-  condition: and(
-    eq('${{ parameters.reuseExportArtifacts }}', false),
-    in(dependencies.reference.result, 'Succeeded', 'Skipped'))
+  condition: eq('${{ parameters.reuseExportArtifacts }}', false)
+
 
 
   jobs:
@@ -856,42 +805,20 @@ stages:
 
     steps:
 
-    - ${{ if and(ne(parameters.referenceBuildId, 'auto'), ne(parameters.referenceBuildId, '')) }}:
-      - task: DownloadPipelineArtifact@2
-        displayName: 'Download reference fallback polygons from specific build (${{ parameters.referenceBuildId }})'
-        condition: and(succeeded(), ${{ eq(parameters.reuseReferenceArtifacts, true) }})
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '9'
-          buildVersionToDownload: 'specific'
-          pipelineId: '${{ parameters.referenceBuildId }}'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-reference/**'
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
-    - ${{ if or(eq(parameters.referenceBuildId, 'auto'), eq(parameters.referenceBuildId, '')) }}:
-      - task: DownloadPipelineArtifact@2
-        displayName: 'Download reference fallback polygons from latest download build'
-        condition: and(succeeded(), ${{ eq(parameters.reuseReferenceArtifacts, true) }})
-        inputs:
-          buildType: 'specific'
-          project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-          definition: '9'
-          buildVersionToDownload: 'latest'
-          allowFailedBuilds: true
-          allowPartiallySucceededBuilds: true
-          itemPattern: 'admin-polygons-reference/**'
-          targetPath: '$(System.DefaultWorkingDirectory)'
-
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download reference fallback polygons from current build'
-      condition: and(succeeded(), ${{ eq(parameters.reuseReferenceArtifacts, false) }})
+      displayName: 'Download reference fallback polygons from download pipeline (definition 9)'
+      enabled: true
+      continueOnError: true
       inputs:
-        buildType: 'current'
+        buildType: 'specific'
+        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+        definition: '9'
+        buildVersionToDownload: 'latest'
+        allowFailedBuilds: true
+        allowPartiallySucceededBuilds: true
         itemPattern: 'admin-polygons-reference/**'
         targetPath: '$(System.DefaultWorkingDirectory)'
+
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download OSM PBF from download pipeline'
@@ -999,9 +926,9 @@ stages:
             | python3 scripts/filter_polygons.py --country-code $(COUNTRY_CODE) --admin-pbf ${ADMIN_PBF} ${PARENT_MAPPING:+--parent-mapping ${PARENT_MAPPING}} > ${POLYGON_JSON}.raw
           rm -f ${ADMIN_PBF}
 
-          # Step 5: Merge Postpass reference polygons inline if candidate region and reference dataset is available
+          # Step 5: Merge Postpass reference polygons inline if reference dataset is available
           REF_STREAM=$(find admin-polygons-reference -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
-          if [ "${{ parameters.useReferencePolygons }}" = "true" ] && [ -n "$REF_STREAM" ] && [ -s "$REF_STREAM" ]; then
+          if [ -n "$REF_STREAM" ] && [ -s "$REF_STREAM" ]; then
             python3 scripts/merge_reference_polygons.py "${POLYGON_JSON}.raw" \
               --reference "$REF_STREAM" \
               --candidates scripts/postpass-candidates.json \
@@ -1011,6 +938,7 @@ stages:
           else
             mv "${POLYGON_JSON}.raw" "${POLYGON_JSON}"
           fi
+
 
           # Step 6: Stream export place nodes directly to stdout and structure with filter_places.py
           osmium export ${PLACES_PBF} --output-format=geojsonseq --overwrite --config=osmium-export-config.json \
