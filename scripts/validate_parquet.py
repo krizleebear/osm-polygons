@@ -158,12 +158,13 @@ def validate_parquets(base_dir, fail_on_error=False):
             print(f"##vso[task.logissue type=warning]Country {cc} ({path}) is EMPTY (0 rows)!")
             empty_files.append((cc, path))
             
-        if metrics["l2_count"] == 0:
-            print(f"##vso[task.logissue type=warning]Country {cc} ({path}) has NO admin_level=2 polygon!")
-            missing_l2.append((cc, path))
-
         # Check against ground truth expected levels from countries.json
         expected_lvls = countries_meta.get(cc, {}).get("levels", [])
+        if metrics["l2_count"] == 0:
+            missing_l2.append((cc, path))
+            # Only warn if 2 is officially declared in countries.json (autonomous territories like HK, NC, MO start at L3/L4)
+            if not expected_lvls or 2 in expected_lvls:
+                print(f"##vso[task.logissue type=warning]Country {cc} ({path}) has NO admin_level=2 polygon!")
         if expected_lvls:
             populated = set(metrics.get("populated_levels", []))
             # Flag if top-level sovereign boundary (2) or major sub-entities are missing
