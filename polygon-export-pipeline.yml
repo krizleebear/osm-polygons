@@ -916,7 +916,10 @@ stages:
           fi
           if [ -f "${VALIDATION_JSON}" ]; then
             cp ${VALIDATION_JSON} ./validation.json
+          else
+            echo "{}" > ./validation.json
           fi
+
 
 
           # Reclaim disk space: Remove heavy raw input PBF immediately after filtering
