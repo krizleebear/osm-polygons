@@ -33,9 +33,33 @@ parameters:
 
 
 stages:
+- stage: preflight
+  displayName: 'Preflight & Unit Tests'
+  jobs:
+  - job: test_and_validate
+    displayName: 'Validate YAML & Run Unit Tests'
+    timeoutInMinutes: 5
+    workspace:
+      clean: all
+    container: osmium-tool
+    steps:
+    - checkout: self
+    - bash: |
+        set -euo pipefail
+        echo "=== 1. Validating Azure Pipelines YAML Syntax ==="
+        python3 scripts/validate_azure_yaml.py polygon-export-pipeline.yml
+        python3 scripts/validate_azure_yaml.py polygon-release-pipeline.yml
+        python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml
+
+        echo "=== 2. Running Python Unit Test Suite ==="
+        PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'
+      displayName: 'Fast-fail preflight: YAML validation & Unit Tests'
+
 - stage: export
   displayName: 'Export polygons from OSM PBF'
-  condition: eq('${{ parameters.reuseExportArtifacts }}', false)
+  dependsOn: preflight
+  condition: and(succeeded('preflight'), eq('${{ parameters.reuseExportArtifacts }}', false))
+
 
 
 
@@ -966,8 +990,11 @@ stages:
 
 - stage: parquet
   displayName: 'Convert to GeoParquet by country'
-  dependsOn: export
-  condition: in(dependencies.export.result, 'Succeeded', 'Skipped')
+  dependsOn:
+  - preflight
+  - export
+  condition: and(succeeded('preflight'), in(dependencies.export.result, 'Succeeded', 'Skipped'))
+
 
   jobs:
   - job: parquet
