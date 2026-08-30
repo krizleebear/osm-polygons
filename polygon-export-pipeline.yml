@@ -903,9 +903,10 @@ stages:
           osmium tags-filter --output ${PLACES_PBF} --overwrite ${INPUT_PBF} \
             n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality
 
-          # Step 3: Validate PBF for broken admin boundary references and record validation/parent mappings
-          python3 scripts/validate_pbf.py ${INPUT_PBF} --country $(COUNTRY_CODE) || true
+          # Step 3: Extract admin boundary parent-child hierarchy mapping (skipping slow check-refs)
+          python3 scripts/validate_pbf.py ${INPUT_PBF} --country $(COUNTRY_CODE) --parent-mapping-only || true
           PARENT_MAPPING=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-parent-mapping.json/')
+
           VALIDATION_JSON=$(echo ${INPUT_PBF} | sed 's/.osm.pbf/-validation.json/')
           if [ -f "${PARENT_MAPPING}" ]; then
             cp ${PARENT_MAPPING} ./parent-mapping.json

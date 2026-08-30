@@ -235,15 +235,29 @@ def generate_parent_mapping(scanner, country_code=None):
     return mapping
 
 
-def validate(pbf_path, country_code=None):
+def validate(pbf_path, country_code=None, parent_mapping_only=False):
     print(f"Scanning {pbf_path} ...")
     if country_code:
         print(f"Filtering for country: {country_code}")
     print()
 
+    if parent_mapping_only:
+        print("Extracting admin boundary parent-child hierarchy metadata ...", flush=True)
+        scanner = AdminBoundaryScanner()
+        scanner.apply_file(pbf_path)
+        scanner.infer_missing_children()
+        parent_mapping = generate_parent_mapping(scanner, country_code)
+        mapping_path = pbf_path.replace(".osm.pbf", "-parent-mapping.json")
+        with open(mapping_path, "w") as f:
+            json.dump(parent_mapping, f, indent=2, ensure_ascii=False)
+        print(f"Parent mapping written to: {mapping_path} ({len(parent_mapping)} child entries)")
+        return 0
+
     # Step 1: osmium check-refs (C++, fast)
     print("Step 1/3: Running osmium check-refs ...", flush=True)
     broken = run_check_refs(pbf_path)
+
+
     print(f"  Found {len(broken)} relations with broken references.")
 
     # Step 2: Scan ALL admin boundary metadata (need membership for child detection)
@@ -390,6 +404,8 @@ if __name__ == "__main__":
     parser.add_argument("pbf", help="Path to .osm.pbf file")
     parser.add_argument("--country", "-c", default=None,
                         help="ISO 3166-1 alpha-2 country code to filter (e.g. PT, ES, FR)")
+    parser.add_argument("--parent-mapping-only", action="store_true", default=False,
+                        help="Extract only parent-child hierarchy mapping, skipping osmium check-refs")
     args = parser.parse_args()
 
     cc = args.country
@@ -398,4 +414,5 @@ if __name__ == "__main__":
         if cc:
             print(f"(Auto-detected country: {cc})")
 
-    sys.exit(validate(args.pbf, cc))
+    sys.exit(validate(args.pbf, cc, parent_mapping_only=args.parent_mapping_only))
+
