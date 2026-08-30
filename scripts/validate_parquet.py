@@ -18,9 +18,11 @@ Usage:
 
 import argparse
 import glob
+import json
 import os
 import subprocess
 import sys
+
 
 
 def find_parquet_files(base_dir):
@@ -56,11 +58,12 @@ def inspect_parquet_file(file_path):
             SELECT osm_type, osm_id, count(*) 
             FROM read_parquet('{file_path}') 
             GROUP BY osm_type, osm_id HAVING count(*) > 1
-        )) AS dupe_feature_count
+        )) AS dupe_feature_count,
+        list_sort(list(DISTINCT admin_level)) FILTER (WHERE admin_level IS NOT NULL) AS populated_levels
     FROM read_parquet('{file_path}');
     """
     
-    cmd = ["duckdb", "-csv", "-c", sql]
+    cmd = ["duckdb", "-json", "-c", sql]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         return {
@@ -71,30 +74,36 @@ def inspect_parquet_file(file_path):
             "l2_count": 0,
             "null_geom_count": 0,
             "dupe_feature_count": 0,
+            "populated_levels": [],
         }
     
-    lines = res.stdout.strip().split("\n")
-    if len(lines) < 2:
+    try:
+        data = json.loads(res.stdout)
+        if not data:
+            raise ValueError("Empty output")
+        row = data[0]
         return {
             "country_code": cc,
             "path": file_path,
-            "error": "Empty duckdb output",
+            "error": None,
+            "total_rows": int(row.get("total_rows", 0)),
+            "l2_count": int(row.get("l2_count", 0)),
+            "null_geom_count": int(row.get("null_geom_count", 0)),
+            "dupe_feature_count": int(row.get("dupe_feature_count", 0)),
+            "populated_levels": [int(x) for x in row.get("populated_levels", []) if x is not None],
+        }
+    except Exception as e:
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": f"JSON parse error: {e}",
             "total_rows": 0,
             "l2_count": 0,
             "null_geom_count": 0,
             "dupe_feature_count": 0,
+            "populated_levels": [],
         }
-    
-    parts = lines[1].split(",")
-    return {
-        "country_code": cc,
-        "path": file_path,
-        "error": None,
-        "total_rows": int(parts[0]) if len(parts) > 0 and parts[0] else 0,
-        "l2_count": int(parts[1]) if len(parts) > 1 and parts[1] else 0,
-        "null_geom_count": int(parts[2]) if len(parts) > 2 and parts[2] else 0,
-        "dupe_feature_count": int(parts[3]) if len(parts) > 3 and parts[3] else 0,
-    }
+
 
 
 def validate_parquets(base_dir, fail_on_error=False):
@@ -118,8 +127,19 @@ def validate_parquets(base_dir, fail_on_error=False):
     else:
         print("[OK] No duplicate country parquet files found across continents.")
 
+    # Load ground truth country metadata
+    countries_meta = {}
+    countries_json_path = os.path.join(os.path.dirname(__file__), "countries.json")
+    if os.path.exists(countries_json_path):
+        try:
+            with open(countries_json_path, "r", encoding="utf-8") as f:
+                countries_meta = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load countries.json: {e}")
+
     # 2. Inspect all files
     missing_l2 = []
+    missing_expected_levels = []
     duplicate_features = []
     empty_files = []
     null_geoms = []
@@ -141,6 +161,17 @@ def validate_parquets(base_dir, fail_on_error=False):
         if metrics["l2_count"] == 0:
             print(f"##vso[task.logissue type=warning]Country {cc} ({path}) has NO admin_level=2 polygon!")
             missing_l2.append((cc, path))
+
+        # Check against ground truth expected levels from countries.json
+        expected_lvls = countries_meta.get(cc, {}).get("levels", [])
+        if expected_lvls:
+            populated = set(metrics.get("populated_levels", []))
+            # Flag if top-level sovereign boundary (2) or major sub-entities are missing
+            missing_for_cc = [lvl for lvl in expected_lvls if lvl in (2, 4, 5, 6) and lvl not in populated]
+            if missing_for_cc:
+                missing_str = ", ".join(f"L{lvl}" for lvl in missing_for_cc)
+                print(f"##vso[task.logissue type=warning]Country {cc} ({path}) is missing expected administrative level(s): {missing_str}")
+                missing_expected_levels.append((cc, path, missing_for_cc))
             
         if metrics["dupe_feature_count"] > 0:
             print(f"##vso[task.logissue type=warning]Country {cc} ({path}) contains {metrics['dupe_feature_count']} duplicate OSM feature(s)!")
@@ -157,11 +188,13 @@ def validate_parquets(base_dir, fail_on_error=False):
     print(f" Total Country Parquets Checked: {len(files)}")
     print(f" Complete with Level 2:          {len(files) - len(missing_l2)} / {len(files)}")
     print(f" Missing Level 2:                {len(missing_l2)}")
+    print(f" Missing Expected Sub-Levels:    {len(missing_expected_levels)}")
     print(f" Duplicate Features Detected:    {len(duplicate_features)}")
     print(f" Empty Files (0 rows):           {len(empty_files)}")
     print(f" NULL Geometries Detected:       {len(null_geoms)}")
     print(f" Extraction Errors:              {len(errors)}")
     print("=" * 60)
+
 
     has_issues = (
         len(duplicate_files) > 0

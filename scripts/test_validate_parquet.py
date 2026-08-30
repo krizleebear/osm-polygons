@@ -32,7 +32,7 @@ class TestValidateParquet(unittest.TestCase):
     def test_inspect_parquet_file_ok(self, mock_run):
         mock_proc = MagicMock()
         mock_proc.returncode = 0
-        mock_proc.stdout = "total_rows,l2_count,null_geom_count,dupe_feature_count\n150,1,0,0\n"
+        mock_proc.stdout = '[{"total_rows": 150, "l2_count": 1, "null_geom_count": 0, "dupe_feature_count": 0, "populated_levels": [2, 4, 6, 8]}]'
         mock_run.return_value = mock_proc
 
         res = inspect_parquet_file("path/to/admin-polygons-DE.parquet")
@@ -41,13 +41,14 @@ class TestValidateParquet(unittest.TestCase):
         self.assertEqual(res["l2_count"], 1)
         self.assertEqual(res["null_geom_count"], 0)
         self.assertEqual(res["dupe_feature_count"], 0)
+        self.assertEqual(res["populated_levels"], [2, 4, 6, 8])
         self.assertIsNone(res["error"])
 
     @patch("subprocess.run")
     def test_inspect_parquet_file_with_issues(self, mock_run):
         mock_proc = MagicMock()
         mock_proc.returncode = 0
-        mock_proc.stdout = "total_rows,l2_count,null_geom_count,dupe_feature_count\n50,0,2,3\n"
+        mock_proc.stdout = '[{"total_rows": 50, "l2_count": 0, "null_geom_count": 2, "dupe_feature_count": 3, "populated_levels": [4, 6]}]'
         mock_run.return_value = mock_proc
 
         res = inspect_parquet_file("path/to/admin-polygons-US.parquet")
@@ -56,6 +57,8 @@ class TestValidateParquet(unittest.TestCase):
         self.assertEqual(res["l2_count"], 0)
         self.assertEqual(res["null_geom_count"], 2)
         self.assertEqual(res["dupe_feature_count"], 3)
+        self.assertEqual(res["populated_levels"], [4, 6])
+
 
     @patch("validate_parquet.find_parquet_files")
     @patch("validate_parquet.inspect_parquet_file")

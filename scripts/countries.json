@@ -1,184 +1,2391 @@
 {
-  "AD": { "continent": "europe",           "name": "Andorra" },
-  "AE": { "continent": "asia",             "name": "United Arab Emirates" },
-  "AF": { "continent": "asia",             "name": "Afghanistan" },
-  "AL": { "continent": "europe",           "name": "Albania" },
-  "AM": { "continent": "asia",             "name": "Armenia" },
-  "AO": { "continent": "africa",           "name": "Angola" },
-  "AR": { "continent": "south-america",    "name": "Argentina" },
-  "AT": { "continent": "europe",           "name": "Austria" },
-  "AU": { "continent": "australia-oceania","name": "Australia" },
-  "AZ": { "continent": "asia",             "name": "Azerbaijan" },
-  "BA": { "continent": "europe",           "name": "Bosnia and Herzegovina" },
-  "BD": { "continent": "asia",             "name": "Bangladesh" },
-  "BE": { "continent": "europe",           "name": "Belgium" },
-  "BF": { "continent": "africa",           "name": "Burkina Faso" },
-  "BG": { "continent": "europe",           "name": "Bulgaria" },
-  "BH": { "continent": "asia",             "name": "Bahrain" },
-  "BI": { "continent": "africa",           "name": "Burundi" },
-  "BJ": { "continent": "africa",           "name": "Benin" },
-  "BN": { "continent": "asia",             "name": "Brunei" },
-  "BO": { "continent": "south-america",    "name": "Bolivia" },
-  "BR": { "continent": "south-america",    "name": "Brazil" },
-  "BS": { "continent": "central-america",  "name": "Bahamas" },
-  "BT": { "continent": "asia",             "name": "Bhutan" },
-  "BW": { "continent": "africa",           "name": "Botswana" },
-  "BY": { "continent": "europe",           "name": "Belarus" },
-  "BZ": { "continent": "central-america",  "name": "Belize" },
-  "CA": { "continent": "canada",           "name": "Canada" },
-  "CD": { "continent": "africa",           "name": "Democratic Republic of the Congo" },
-  "CF": { "continent": "africa",           "name": "Central African Republic" },
-  "CG": { "continent": "africa",           "name": "Republic of the Congo" },
-  "CH": { "continent": "europe",           "name": "Switzerland" },
-  "CI": { "continent": "africa",           "name": "Ivory Coast" },
-  "CL": { "continent": "south-america",    "name": "Chile" },
-  "CM": { "continent": "africa",           "name": "Cameroon" },
-  "CN": { "continent": "asia",             "name": "China" },
-  "CO": { "continent": "south-america",    "name": "Colombia" },
-  "CU": { "continent": "central-america",  "name": "Cuba" },
-  "CV": { "continent": "africa",           "name": "Cape Verde" },
-  "CY": { "continent": "europe",           "name": "Cyprus" },
-  "CZ": { "continent": "europe",           "name": "Czech Republic" },
-  "DE": { "continent": "europe",           "name": "Germany" },
-  "DJ": { "continent": "africa",           "name": "Djibouti" },
-  "DK": { "continent": "europe",           "name": "Denmark" },
-  "DO": { "continent": "central-america",  "name": "Dominican Republic" },
-  "DZ": { "continent": "africa",           "name": "Algeria" },
-  "EC": { "continent": "south-america",    "name": "Ecuador" },
-  "EE": { "continent": "europe",           "name": "Estonia" },
-  "EG": { "continent": "africa",           "name": "Egypt" },
-  "ER": { "continent": "africa",           "name": "Eritrea" },
-  "ES": { "continent": "europe",           "name": "Spain" },
-  "ET": { "continent": "africa",           "name": "Ethiopia" },
-  "FI": { "continent": "europe",           "name": "Finland" },
-  "FJ": { "continent": "australia-oceania","name": "Fiji" },
-  "FO": { "continent": "europe",           "name": "Faroe Islands" },
-  "FR": { "continent": "europe",           "name": "France" },
-  "GA": { "continent": "africa",           "name": "Gabon" },
-  "GB": { "continent": "europe",           "name": "United Kingdom" },
-  "GE": { "continent": "europe",           "name": "Georgia" },
-  "GF": { "continent": "europe",           "name": "French Guiana" },
-  "GH": { "continent": "africa",           "name": "Ghana" },
-  "GL": { "continent": "north-america",    "name": "Greenland" },
-  "GM": { "continent": "africa",           "name": "Gambia" },
-  "GN": { "continent": "africa",           "name": "Guinea" },
-  "GP": { "continent": "europe",           "name": "Guadeloupe" },
-  "GQ": { "continent": "africa",           "name": "Equatorial Guinea" },
-  "GR": { "continent": "europe",           "name": "Greece" },
-  "GT": { "continent": "central-america",  "name": "Guatemala" },
-  "GW": { "continent": "africa",           "name": "Guinea-Bissau" },
-  "GY": { "continent": "south-america",    "name": "Guyana" },
-  "HR": { "continent": "europe",           "name": "Croatia" },
-  "HT": { "continent": "central-america",  "name": "Haiti" },
-  "HU": { "continent": "europe",           "name": "Hungary" },
-  "ID": { "continent": "asia",             "name": "Indonesia" },
-  "IE": { "continent": "europe",           "name": "Ireland" },
-  "IL": { "continent": "asia",             "name": "Israel" },
-  "IM": { "continent": "europe",           "name": "Isle of Man" },
-  "IN": { "continent": "asia",             "name": "India" },
-  "IQ": { "continent": "asia",             "name": "Iraq" },
-  "IR": { "continent": "asia",             "name": "Iran" },
-  "IS": { "continent": "europe",           "name": "Iceland" },
-  "IT": { "continent": "europe",           "name": "Italy" },
-  "JM": { "continent": "central-america",  "name": "Jamaica" },
-  "JO": { "continent": "asia",             "name": "Jordan" },
-  "JP": { "continent": "asia",             "name": "Japan" },
-  "KE": { "continent": "africa",           "name": "Kenya" },
-  "KG": { "continent": "asia",             "name": "Kyrgyzstan" },
-  "KH": { "continent": "asia",             "name": "Cambodia" },
-  "KM": { "continent": "africa",           "name": "Comoros" },
-  "KP": { "continent": "asia",             "name": "North Korea" },
-  "KR": { "continent": "asia",             "name": "South Korea" },
-  "KW": { "continent": "asia",             "name": "Kuwait" },
-  "KZ": { "continent": "asia",             "name": "Kazakhstan" },
-  "LA": { "continent": "asia",             "name": "Laos" },
-  "LB": { "continent": "asia",             "name": "Lebanon" },
-  "LI": { "continent": "europe",           "name": "Liechtenstein" },
-  "LK": { "continent": "asia",             "name": "Sri Lanka" },
-  "LR": { "continent": "africa",           "name": "Liberia" },
-  "LS": { "continent": "africa",           "name": "Lesotho" },
-  "LT": { "continent": "europe",           "name": "Lithuania" },
-  "LU": { "continent": "europe",           "name": "Luxembourg" },
-  "LV": { "continent": "europe",           "name": "Latvia" },
-  "LY": { "continent": "africa",           "name": "Libya" },
-  "MA": { "continent": "africa",           "name": "Morocco" },
-  "MC": { "continent": "europe",           "name": "Monaco" },
-  "MD": { "continent": "europe",           "name": "Moldova" },
-  "ME": { "continent": "europe",           "name": "Montenegro" },
-  "MG": { "continent": "africa",           "name": "Madagascar" },
-  "MK": { "continent": "europe",           "name": "North Macedonia" },
-  "ML": { "continent": "africa",           "name": "Mali" },
-  "MM": { "continent": "asia",             "name": "Myanmar" },
-  "MN": { "continent": "asia",             "name": "Mongolia" },
-  "MQ": { "continent": "europe",           "name": "Martinique" },
-  "MR": { "continent": "africa",           "name": "Mauritania" },
-  "MT": { "continent": "europe",           "name": "Malta" },
-  "MU": { "continent": "africa",           "name": "Mauritius" },
-  "MV": { "continent": "asia",             "name": "Maldives" },
-  "MW": { "continent": "africa",           "name": "Malawi" },
-  "MX": { "continent": "north-america",    "name": "Mexico" },
-  "MY": { "continent": "asia",             "name": "Malaysia" },
-  "MZ": { "continent": "africa",           "name": "Mozambique" },
-  "NA": { "continent": "africa",           "name": "Namibia" },
-  "NC": { "continent": "australia-oceania","name": "New Caledonia" },
-  "NE": { "continent": "africa",           "name": "Niger" },
-  "NG": { "continent": "africa",           "name": "Nigeria" },
-  "NI": { "continent": "central-america",  "name": "Nicaragua" },
-  "NL": { "continent": "europe",           "name": "Netherlands" },
-  "NO": { "continent": "europe",           "name": "Norway" },
-  "NP": { "continent": "asia",             "name": "Nepal" },
-  "NZ": { "continent": "australia-oceania","name": "New Zealand" },
-  "OM": { "continent": "asia",             "name": "Oman" },
-  "PE": { "continent": "south-america",    "name": "Peru" },
-  "PG": { "continent": "australia-oceania","name": "Papua New Guinea" },
-  "PH": { "continent": "asia",             "name": "Philippines" },
-  "PK": { "continent": "asia",             "name": "Pakistan" },
-  "PL": { "continent": "europe",           "name": "Poland" },
-  "PS": { "continent": "asia",             "name": "Palestine" },
-  "PT": { "continent": "europe",           "name": "Portugal" },
-  "PY": { "continent": "south-america",    "name": "Paraguay" },
-  "QA": { "continent": "asia",             "name": "Qatar" },
-  "RE": { "continent": "europe",           "name": "Reunion" },
-  "RO": { "continent": "europe",           "name": "Romania" },
-  "RS": { "continent": "europe",           "name": "Serbia" },
-  "RU": { "continent": "russia",           "name": "Russia" },
-  "RW": { "continent": "africa",           "name": "Rwanda" },
-  "SA": { "continent": "asia",             "name": "Saudi Arabia" },
-  "SC": { "continent": "africa",           "name": "Seychelles" },
-  "SD": { "continent": "africa",           "name": "Sudan" },
-  "SE": { "continent": "europe",           "name": "Sweden" },
-  "SG": { "continent": "asia",             "name": "Singapore" },
-  "SH": { "continent": "africa",           "name": "Saint Helena" },
-  "SI": { "continent": "europe",           "name": "Slovenia" },
-  "SK": { "continent": "europe",           "name": "Slovakia" },
-  "SL": { "continent": "africa",           "name": "Sierra Leone" },
-  "SN": { "continent": "africa",           "name": "Senegal" },
-  "SO": { "continent": "africa",           "name": "Somalia" },
-  "SR": { "continent": "south-america",    "name": "Suriname" },
-  "SS": { "continent": "africa",           "name": "South Sudan" },
-  "ST": { "continent": "africa",           "name": "Sao Tome and Principe" },
-  "SY": { "continent": "asia",             "name": "Syria" },
-  "SZ": { "continent": "africa",           "name": "Eswatini" },
-  "TD": { "continent": "africa",           "name": "Chad" },
-  "TG": { "continent": "africa",           "name": "Togo" },
-  "TH": { "continent": "asia",             "name": "Thailand" },
-  "TJ": { "continent": "asia",             "name": "Tajikistan" },
-  "TM": { "continent": "asia",             "name": "Turkmenistan" },
-  "TN": { "continent": "africa",           "name": "Tunisia" },
-  "TR": { "continent": "europe",           "name": "Turkey" },
-  "TW": { "continent": "asia",             "name": "Taiwan" },
-  "TZ": { "continent": "africa",           "name": "Tanzania" },
-  "UA": { "continent": "europe",           "name": "Ukraine" },
-  "UG": { "continent": "africa",           "name": "Uganda" },
-  "US": { "continent": "us",              "name": "United States" },
-  "UY": { "continent": "south-america",    "name": "Uruguay" },
-  "UZ": { "continent": "asia",             "name": "Uzbekistan" },
-  "VE": { "continent": "south-america",    "name": "Venezuela" },
-  "VN": { "continent": "asia",             "name": "Vietnam" },
-  "XK": { "continent": "europe",           "name": "Kosovo" },
-  "YE": { "continent": "asia",             "name": "Yemen" },
-  "YT": { "continent": "europe",           "name": "Mayotte" },
-  "ZA": { "continent": "africa",           "name": "South Africa" },
-  "ZM": { "continent": "africa",           "name": "Zambia" },
-  "ZW": { "continent": "africa",           "name": "Zimbabwe" }
+  "AD": {
+    "continent": "europe",
+    "name": "Andorra",
+    "levels": [
+      2,
+      7,
+      8,
+      10
+    ]
+  },
+  "AE": {
+    "continent": "asia",
+    "name": "United Arab Emirates",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AF": {
+    "continent": "asia",
+    "name": "Afghanistan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AL": {
+    "continent": "europe",
+    "name": "Albania",
+    "levels": [
+      2,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AM": {
+    "continent": "asia",
+    "name": "Armenia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AO": {
+    "continent": "africa",
+    "name": "Angola",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AR": {
+    "continent": "south-america",
+    "name": "Argentina",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AT": {
+    "continent": "europe",
+    "name": "Austria",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AU": {
+    "continent": "australia-oceania",
+    "name": "Australia",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "AZ": {
+    "continent": "asia",
+    "name": "Azerbaijan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BA": {
+    "continent": "europe",
+    "name": "Bosnia and Herzegovina",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BD": {
+    "continent": "asia",
+    "name": "Bangladesh",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BE": {
+    "continent": "europe",
+    "name": "Belgium",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BF": {
+    "continent": "africa",
+    "name": "Burkina Faso",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BG": {
+    "continent": "europe",
+    "name": "Bulgaria",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BH": {
+    "continent": "asia",
+    "name": "Bahrain",
+    "levels": [
+      2
+    ]
+  },
+  "BI": {
+    "continent": "africa",
+    "name": "Burundi",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9
+    ]
+  },
+  "BJ": {
+    "continent": "africa",
+    "name": "Benin",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      10,
+      11
+    ]
+  },
+  "BN": {
+    "continent": "asia",
+    "name": "Brunei",
+    "levels": [
+      2
+    ]
+  },
+  "BO": {
+    "continent": "south-america",
+    "name": "Bolivia",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BR": {
+    "continent": "south-america",
+    "name": "Brazil",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BS": {
+    "continent": "central-america",
+    "name": "Bahamas",
+    "levels": [
+      2,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BT": {
+    "continent": "asia",
+    "name": "Bhutan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BW": {
+    "continent": "africa",
+    "name": "Botswana",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      10,
+      11
+    ]
+  },
+  "BY": {
+    "continent": "europe",
+    "name": "Belarus",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "BZ": {
+    "continent": "central-america",
+    "name": "Belize",
+    "levels": [
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CA": {
+    "continent": "canada",
+    "name": "Canada",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CD": {
+    "continent": "africa",
+    "name": "Democratic Republic of the Congo",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CF": {
+    "continent": "africa",
+    "name": "Central African Republic",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "CG": {
+    "continent": "africa",
+    "name": "Republic of the Congo",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
+  },
+  "CH": {
+    "continent": "europe",
+    "name": "Switzerland",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CI": {
+    "continent": "africa",
+    "name": "Ivory Coast",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CL": {
+    "continent": "south-america",
+    "name": "Chile",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CM": {
+    "continent": "africa",
+    "name": "Cameroon",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CN": {
+    "continent": "asia",
+    "name": "China",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CO": {
+    "continent": "south-america",
+    "name": "Colombia",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CU": {
+    "continent": "central-america",
+    "name": "Cuba",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CV": {
+    "continent": "africa",
+    "name": "Cape Verde",
+    "levels": [
+      2,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CY": {
+    "continent": "europe",
+    "name": "Cyprus",
+    "levels": [
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "CZ": {
+    "continent": "europe",
+    "name": "Czech Republic",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "DE": {
+    "continent": "europe",
+    "name": "Germany",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "DJ": {
+    "continent": "africa",
+    "name": "Djibouti",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "DK": {
+    "continent": "europe",
+    "name": "Denmark",
+    "levels": [
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "DO": {
+    "continent": "central-america",
+    "name": "Dominican Republic",
+    "levels": [
+      2
+    ]
+  },
+  "DZ": {
+    "continent": "africa",
+    "name": "Algeria",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "EC": {
+    "continent": "south-america",
+    "name": "Ecuador",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "EE": {
+    "continent": "europe",
+    "name": "Estonia",
+    "levels": [
+      2,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "EG": {
+    "continent": "africa",
+    "name": "Egypt",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ER": {
+    "continent": "africa",
+    "name": "Eritrea",
+    "levels": [
+      2,
+      4,
+      8,
+      9
+    ]
+  },
+  "ES": {
+    "continent": "europe",
+    "name": "Spain",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ET": {
+    "continent": "africa",
+    "name": "Ethiopia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "FI": {
+    "continent": "europe",
+    "name": "Finland",
+    "levels": [
+      2,
+      3,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "FJ": {
+    "continent": "australia-oceania",
+    "name": "Fiji",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      10,
+      11
+    ]
+  },
+  "FO": {
+    "continent": "europe",
+    "name": "Faroe Islands",
+    "levels": [
+      2,
+      6,
+      7,
+      9,
+      10
+    ]
+  },
+  "FR": {
+    "continent": "europe",
+    "name": "France",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "GA": {
+    "continent": "africa",
+    "name": "Gabon",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "GB": {
+    "continent": "europe",
+    "name": "United Kingdom",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "GE": {
+    "continent": "europe",
+    "name": "Georgia",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "GF": {
+    "continent": "europe",
+    "name": "French Guiana"
+  },
+  "GH": {
+    "continent": "africa",
+    "name": "Ghana",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "GL": {
+    "continent": "north-america",
+    "name": "Greenland",
+    "levels": [
+      2,
+      4,
+      5,
+      8,
+      10,
+      11
+    ]
+  },
+  "GM": {
+    "continent": "africa",
+    "name": "Gambia",
+    "levels": [
+      2
+    ]
+  },
+  "GN": {
+    "continent": "africa",
+    "name": "Guinea",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      10,
+      11
+    ]
+  },
+  "GP": {
+    "continent": "europe",
+    "name": "Guadeloupe"
+  },
+  "GQ": {
+    "continent": "africa",
+    "name": "Equatorial Guinea",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8
+    ]
+  },
+  "GR": {
+    "continent": "europe",
+    "name": "Greece",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "GT": {
+    "continent": "central-america",
+    "name": "Guatemala",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "GW": {
+    "continent": "africa",
+    "name": "Guinea-Bissau",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      8,
+      10,
+      11
+    ]
+  },
+  "GY": {
+    "continent": "south-america",
+    "name": "Guyana",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "HR": {
+    "continent": "europe",
+    "name": "Croatia",
+    "levels": [
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "HT": {
+    "continent": "central-america",
+    "name": "Haiti",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "HU": {
+    "continent": "europe",
+    "name": "Hungary",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ID": {
+    "continent": "asia",
+    "name": "Indonesia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IE": {
+    "continent": "europe",
+    "name": "Ireland",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IL": {
+    "continent": "asia",
+    "name": "Israel",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IM": {
+    "continent": "europe",
+    "name": "Isle of Man",
+    "levels": [
+      2,
+      6,
+      8,
+      10,
+      11
+    ]
+  },
+  "IN": {
+    "continent": "asia",
+    "name": "India",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IQ": {
+    "continent": "asia",
+    "name": "Iraq",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IR": {
+    "continent": "asia",
+    "name": "Iran",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IS": {
+    "continent": "europe",
+    "name": "Iceland",
+    "levels": [
+      2,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "IT": {
+    "continent": "europe",
+    "name": "Italy",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "JM": {
+    "continent": "central-america",
+    "name": "Jamaica",
+    "levels": [
+      2,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "JO": {
+    "continent": "asia",
+    "name": "Jordan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "JP": {
+    "continent": "asia",
+    "name": "Japan",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "KE": {
+    "continent": "africa",
+    "name": "Kenya",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "KG": {
+    "continent": "asia",
+    "name": "Kyrgyzstan",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "KH": {
+    "continent": "asia",
+    "name": "Cambodia",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "KM": {
+    "continent": "africa",
+    "name": "Comoros",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "KP": {
+    "continent": "asia",
+    "name": "North Korea",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      10
+    ]
+  },
+  "KR": {
+    "continent": "asia",
+    "name": "South Korea",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "KW": {
+    "continent": "asia",
+    "name": "Kuwait",
+    "levels": [
+      2
+    ]
+  },
+  "KZ": {
+    "continent": "asia",
+    "name": "Kazakhstan",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "LA": {
+    "continent": "asia",
+    "name": "Laos",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      10,
+      11
+    ]
+  },
+  "LB": {
+    "continent": "asia",
+    "name": "Lebanon",
+    "levels": [
+      2,
+      4,
+      5,
+      7,
+      8,
+      10,
+      11
+    ]
+  },
+  "LI": {
+    "continent": "europe",
+    "name": "Liechtenstein",
+    "levels": [
+      2,
+      6,
+      8
+    ]
+  },
+  "LK": {
+    "continent": "asia",
+    "name": "Sri Lanka",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "LR": {
+    "continent": "africa",
+    "name": "Liberia",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "LS": {
+    "continent": "africa",
+    "name": "Lesotho",
+    "levels": [
+      2,
+      5,
+      6,
+      8,
+      10,
+      11
+    ]
+  },
+  "LT": {
+    "continent": "europe",
+    "name": "Lithuania",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "LU": {
+    "continent": "europe",
+    "name": "Luxembourg",
+    "levels": [
+      2,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "LV": {
+    "continent": "europe",
+    "name": "Latvia",
+    "levels": [
+      2,
+      5,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "LY": {
+    "continent": "africa",
+    "name": "Libya",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MA": {
+    "continent": "africa",
+    "name": "Morocco",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MC": {
+    "continent": "europe",
+    "name": "Monaco",
+    "levels": [
+      2,
+      8,
+      10,
+      11
+    ]
+  },
+  "MD": {
+    "continent": "europe",
+    "name": "Moldova",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ME": {
+    "continent": "europe",
+    "name": "Montenegro",
+    "levels": [
+      2,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MG": {
+    "continent": "africa",
+    "name": "Madagascar",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MK": {
+    "continent": "europe",
+    "name": "North Macedonia",
+    "levels": [
+      2,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ML": {
+    "continent": "africa",
+    "name": "Mali",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MM": {
+    "continent": "asia",
+    "name": "Myanmar",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MN": {
+    "continent": "asia",
+    "name": "Mongolia",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MQ": {
+    "continent": "europe",
+    "name": "Martinique"
+  },
+  "MR": {
+    "continent": "africa",
+    "name": "Mauritania",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      10,
+      11
+    ]
+  },
+  "MT": {
+    "continent": "europe",
+    "name": "Malta",
+    "levels": [
+      2,
+      7,
+      8,
+      10,
+      11
+    ]
+  },
+  "MU": {
+    "continent": "africa",
+    "name": "Mauritius",
+    "levels": [
+      2,
+      3,
+      4,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MV": {
+    "continent": "asia",
+    "name": "Maldives",
+    "levels": [
+      2,
+      4,
+      8,
+      9,
+      10
+    ]
+  },
+  "MW": {
+    "continent": "africa",
+    "name": "Malawi",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      8,
+      10
+    ]
+  },
+  "MX": {
+    "continent": "north-america",
+    "name": "Mexico",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MY": {
+    "continent": "asia",
+    "name": "Malaysia",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "MZ": {
+    "continent": "africa",
+    "name": "Mozambique",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NA": {
+    "continent": "africa",
+    "name": "Namibia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NC": {
+    "continent": "australia-oceania",
+    "name": "New Caledonia",
+    "levels": [
+      2,
+      3,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NE": {
+    "continent": "africa",
+    "name": "Niger",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      11
+    ]
+  },
+  "NG": {
+    "continent": "africa",
+    "name": "Nigeria",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NI": {
+    "continent": "central-america",
+    "name": "Nicaragua",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NL": {
+    "continent": "europe",
+    "name": "Netherlands",
+    "levels": [
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NO": {
+    "continent": "europe",
+    "name": "Norway",
+    "levels": [
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NP": {
+    "continent": "asia",
+    "name": "Nepal",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "NZ": {
+    "continent": "australia-oceania",
+    "name": "New Zealand",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "OM": {
+    "continent": "asia",
+    "name": "Oman",
+    "levels": [
+      2
+    ]
+  },
+  "PE": {
+    "continent": "south-america",
+    "name": "Peru",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "PG": {
+    "continent": "australia-oceania",
+    "name": "Papua New Guinea",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "PH": {
+    "continent": "asia",
+    "name": "Philippines",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "PK": {
+    "continent": "asia",
+    "name": "Pakistan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "PL": {
+    "continent": "europe",
+    "name": "Poland",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "PS": {
+    "continent": "asia",
+    "name": "Palestine"
+  },
+  "PT": {
+    "continent": "europe",
+    "name": "Portugal",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "PY": {
+    "continent": "south-america",
+    "name": "Paraguay",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "QA": {
+    "continent": "asia",
+    "name": "Qatar",
+    "levels": [
+      2
+    ]
+  },
+  "RE": {
+    "continent": "europe",
+    "name": "Reunion"
+  },
+  "RO": {
+    "continent": "europe",
+    "name": "Romania",
+    "levels": [
+      2,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "RS": {
+    "continent": "europe",
+    "name": "Serbia",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "RU": {
+    "continent": "russia",
+    "name": "Russia",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "RW": {
+    "continent": "africa",
+    "name": "Rwanda",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "SA": {
+    "continent": "asia",
+    "name": "Saudi Arabia",
+    "levels": [
+      2
+    ]
+  },
+  "SC": {
+    "continent": "africa",
+    "name": "Seychelles",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "SD": {
+    "continent": "africa",
+    "name": "Sudan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SE": {
+    "continent": "europe",
+    "name": "Sweden",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SG": {
+    "continent": "asia",
+    "name": "Singapore",
+    "levels": [
+      2
+    ]
+  },
+  "SH": {
+    "continent": "africa",
+    "name": "Saint Helena",
+    "levels": [
+      2,
+      3,
+      4,
+      10
+    ]
+  },
+  "SI": {
+    "continent": "europe",
+    "name": "Slovenia",
+    "levels": [
+      2,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SK": {
+    "continent": "europe",
+    "name": "Slovakia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SL": {
+    "continent": "africa",
+    "name": "Sierra Leone",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SN": {
+    "continent": "africa",
+    "name": "Senegal",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SO": {
+    "continent": "africa",
+    "name": "Somalia",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SR": {
+    "continent": "south-america",
+    "name": "Suriname",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "SS": {
+    "continent": "africa",
+    "name": "South Sudan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ST": {
+    "continent": "africa",
+    "name": "Sao Tome and Principe",
+    "levels": [
+      2,
+      4,
+      6,
+      7
+    ]
+  },
+  "SY": {
+    "continent": "asia",
+    "name": "Syria",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "SZ": {
+    "continent": "africa",
+    "name": "Eswatini",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "TD": {
+    "continent": "africa",
+    "name": "Chad",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TG": {
+    "continent": "africa",
+    "name": "Togo",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10
+    ]
+  },
+  "TH": {
+    "continent": "asia",
+    "name": "Thailand",
+    "levels": [
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TJ": {
+    "continent": "asia",
+    "name": "Tajikistan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TM": {
+    "continent": "asia",
+    "name": "Turkmenistan",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TN": {
+    "continent": "africa",
+    "name": "Tunisia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TR": {
+    "continent": "europe",
+    "name": "Turkey",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TW": {
+    "continent": "asia",
+    "name": "Taiwan",
+    "levels": [
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "TZ": {
+    "continent": "africa",
+    "name": "Tanzania",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "UA": {
+    "continent": "europe",
+    "name": "Ukraine",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "UG": {
+    "continent": "africa",
+    "name": "Uganda",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "US": {
+    "continent": "us",
+    "name": "United States",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "UY": {
+    "continent": "south-america",
+    "name": "Uruguay",
+    "levels": [
+      2,
+      4,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "UZ": {
+    "continent": "asia",
+    "name": "Uzbekistan",
+    "levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "VE": {
+    "continent": "south-america",
+    "name": "Venezuela",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "VN": {
+    "continent": "asia",
+    "name": "Vietnam",
+    "levels": [
+      2,
+      3,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "XK": {
+    "continent": "europe",
+    "name": "Kosovo",
+    "levels": [
+      2,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "YE": {
+    "continent": "asia",
+    "name": "Yemen",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "YT": {
+    "continent": "europe",
+    "name": "Mayotte"
+  },
+  "ZA": {
+    "continent": "africa",
+    "name": "South Africa",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ZM": {
+    "continent": "africa",
+    "name": "Zambia",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "ZW": {
+    "continent": "africa",
+    "name": "Zimbabwe",
+    "levels": [
+      2,
+      4,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
+  }
 }
