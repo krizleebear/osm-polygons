@@ -1293,7 +1293,7 @@ stages:
               echo "Processing polygons $file -> $parquet_out ..."
               # continent and country_code are derived inside convert_to_parquet.sh from features + countries.json
               ./scripts/convert_to_parquet.sh "$matrix_cc" "$file" "$parquet_out"
-              rm -rf "$(dirname "$file")"
+              rm -f "$file"
             done < <(find . -type f \( -name "*_${region}.admin-polygons.geojsonseq" -o -name "${region}.admin-polygons.geojsonseq" \) -not -path "*/raw-admin-polygons-*/*")
 
             while IFS= read -r file; do
@@ -1304,7 +1304,7 @@ stages:
               places_out="temp_places_parquet/${filename%.jsonl}.parquet"
               echo "Processing places $file -> $places_out ..."
               ./scripts/convert_places_to_parquet.sh "$matrix_cc" "$file" "$places_out"
-              rm -rf "$(dirname "$file")"
+              rm -f "$file"
             done < <(find . -type f \( -name "*_${region}.places.jsonl" -o -name "${region}.places.jsonl" \))
 
             while IFS= read -r file; do
@@ -1315,8 +1315,11 @@ stages:
               facilities_out="temp_facilities_parquet/${filename%.jsonl}.parquet"
               echo "Processing facilities $file -> $facilities_out ..."
               ./scripts/convert_facilities_to_parquet.sh "$matrix_cc" "$file" "$facilities_out"
-              rm -rf "$(dirname "$file")"
+              rm -f "$file"
             done < <(find . -type f \( -name "*_${region}.facilities.jsonl" -o -name "${region}.facilities.jsonl" \))
+
+            # Clean up region directory after all stream types are processed
+            find . -maxdepth 2 -type d \( -name "export-*-${region}" -o -name "export-${region}" -o -name "admin-polygons-*-${region}" -o -name "places-*-${region}" -o -name "facilities-*-${region}" \) -exec rm -rf {} + 2>/dev/null || true
           done
 
           TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
