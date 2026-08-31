@@ -1480,9 +1480,6 @@ stages:
           python3 scripts/validate_parquet.py parquet-check/
 
     - task: DownloadPipelineArtifact@2
-
-
-
       enabled: true
       displayName: 'Download all validation artifacts'
       continueOnError: true
@@ -1490,7 +1487,7 @@ stages:
         buildType: 'current'
         buildVersionToDownload: 'latest'
         itemPattern: |
-          export-*/**
+          export-*/**/validation.json
           validation-*/**
         targetPath: '$(System.DefaultWorkingDirectory)/validation-artifacts'
 

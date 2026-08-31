@@ -114,6 +114,8 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
 33. **Stream File Format Conventions (`.geojsonseq` vs `.jsonl`):**
     - `*.admin-polygons.geojsonseq`: Strictly adheres to RFC 8142 (GeoJSON Text Sequences) where each line is a full standard GeoJSON Feature object (`{"type": "Feature", "geometry": {...}, "properties": {...}}`). Designed for direct consumption by spatial tools (GDAL/OGR, QGIS, `CoverageSimplifier`).
     - `*.places.jsonl` and `*.facilities.jsonl`: Formatted as newline-delimited flattened tabular records (`{"osm_id": ..., "country_code": ..., "name": ..., "geom_json": "...", "tags": "..."}`). Designed as high-throughput, columnar-ready ETL streams for direct vectorized ingestion via DuckDB `read_json(columns={...})`. Tabular JSONL streams must retain `.jsonl` and never be misnamed `.geojsonseq` as they lack GeoJSON Feature envelope wrappers.
+34. **Explanation Preceding Git Actions Invariant (Explain First, Commit Second):**
+    - The agent must always first present a clear, comprehensive explanation of the diagnosis, the rationale, and the exact changes in the visible response text before requesting permission or attempting to execute `git commit`, `git push`, or pipeline triggers. Never trigger permission prompts for Git actions without the user having seen the complete explanatory context first.
 
 
 
