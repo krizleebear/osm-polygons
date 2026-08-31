@@ -69,12 +69,15 @@ jobs:
         # 2. Per-country OSM Place-Nodes GeoParquet files
         find downloads -name "osm-places-*.parquet" -exec cp {} release-assets/ \;
 
-        # 3. Administrative Levels Coverage Summary
+        # 3. Per-country OSM Facilities GeoParquet files
+        find downloads -name "osm-facilities-*.parquet" -exec cp {} release-assets/ \;
+
+        # 4. Administrative Levels Coverage Summary
         if [ -d "downloads/admin-levels-summary" ]; then
           find downloads/admin-levels-summary -name "admin-levels-summary.*" -exec cp {} release-assets/ \;
         fi
 
-        # 4. Validation Summary & Archive
+        # 5. Validation Summary & Archive
         if [ -d "downloads/validation-summary" ]; then
           find downloads/validation-summary -name "validation-summary.md" -exec cp {} release-assets/ \;
         fi
@@ -150,7 +153,7 @@ jobs:
         cat <<EOF > release-notes.md
         ## OSM Administrative Polygons GeoParquet Release (${{ parameters.releaseTag }})
 
-        Per-country OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons and companion place nodes extracted directly from OpenStreetMap.
+        Per-country OGC GeoParquet 1.1 datasets containing unsimplified, topologically consistent administrative boundary polygons and companion place nodes and facility datasets extracted directly from OpenStreetMap.
 
         ### Key Highlights
         - **Per-country files:** One \`admin-polygons-{CC}.parquet\` per country — no more 2 GiB continental aggregates.
@@ -158,6 +161,7 @@ jobs:
         - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts.
         - **OGC GeoParquet 1.1 Specification:** Native WGS84 (\`OGC:CRS84\`) geometry with ZSTD compression and spatial bounding-box indexing.
         - **OSM Place-Nodes Companion Dataset (\`osm-places-{CC}.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
+        - **OSM Facilities Companion Dataset (\`osm-facilities-{CC}.parquet\`):** Critical infrastructure and facility footprints (motorways with strict heading node order, junctions, service areas, airports, shopping malls, universities, hospitals, stadiums).
         - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
         ### Querying Multiple Countries with DuckDB

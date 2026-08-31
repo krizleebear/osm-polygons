@@ -916,6 +916,7 @@ stages:
 
           POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
           PLACES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl
+          FACILITIES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl
 
           python3 scripts/extract_region.py \
             --input-pbf "${INPUT_PBF}" \
@@ -923,6 +924,7 @@ stages:
             --region "$(OSM_REGION)" \
             --polygon-out "${POLYGON_JSON}" \
             --places-out "${PLACES_JSONL}" \
+            --facilities-out "${FACILITIES_JSONL}" \
             ${REF_ARG}
 
 
@@ -950,6 +952,14 @@ stages:
       inputs:
         targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl'
         artifact: 'places-$(COUNTRY_CODE)-$(OSM_REGION)'
+        publishLocation: 'pipeline'
+
+    - task: PublishPipelineArtifact@1
+      enabled: true
+      displayName: 'Store facilities artifacts'
+      inputs:
+        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl'
+        artifact: 'facilities-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
 
     - task: Bash@3
@@ -1272,7 +1282,7 @@ stages:
           find . -maxdepth 2 -type d -name "admin-polygons-*" || true
 
           # Prune export directories belonging to other continents to conserve runner disk space
-          for dir in admin-polygons-* places-*; do
+          for dir in admin-polygons-* places-* facilities-*; do
             [ -d "$dir" ] || continue
             keep=false
             for region in $(REGIONS); do
@@ -1287,10 +1297,10 @@ stages:
           done
 
           echo "=== Retained region directories for continent '$(CONTINENT)' ==="
-          find . -maxdepth 2 -type d \( -name "admin-polygons-*" -o -name "places-*" \) || true
+          find . -maxdepth 2 -type d \( -name "admin-polygons-*" -o -name "places-*" -o -name "facilities-*" \) || true
 
-          chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh
-          mkdir -p temp_parquet temp_places_parquet parquet
+          chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh scripts/convert_facilities_to_parquet.sh
+          mkdir -p temp_parquet temp_places_parquet temp_facilities_parquet parquet
 
           for region in $(REGIONS); do
             while IFS= read -r file; do
@@ -1316,6 +1326,17 @@ stages:
               ./scripts/convert_places_to_parquet.sh "$matrix_cc" "$file" "$places_out"
               rm -rf "$(dirname "$file")"
             done < <(find . -type f \( -name "*_${region}.places.jsonl" -o -name "${region}.places.jsonl" \))
+
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              [ -s "$file" ] || continue
+              filename=$(basename "$file")
+              matrix_cc=$(echo "$filename" | cut -d'_' -f1)
+              facilities_out="temp_facilities_parquet/${filename%.jsonl}.parquet"
+              echo "Processing facilities $file -> $facilities_out ..."
+              ./scripts/convert_facilities_to_parquet.sh "$matrix_cc" "$file" "$facilities_out"
+              rm -rf "$(dirname "$file")"
+            done < <(find . -type f \( -name "*_${region}.facilities.jsonl" -o -name "${region}.facilities.jsonl" \))
           done
 
           TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
@@ -1398,6 +1419,36 @@ stages:
               HAS_PLACES=true
             done < /tmp/places_ccs_$(CONTINENT).csv
             rm -rf temp_places_parquet
+          fi
+
+          # per-country facilities parquets
+          HAS_FACILITIES=false
+          FACILITIES_TEMP_COUNT=$(find temp_facilities_parquet -name "*.parquet" 2>/dev/null | wc -l)
+          if [ "$FACILITIES_TEMP_COUNT" -gt 0 ]; then
+            duckdb -c "
+            LOAD spatial;
+            CREATE TABLE fcombined AS SELECT * FROM read_parquet('temp_facilities_parquet/*.parquet');
+            COPY (SELECT DISTINCT country_code AS cc FROM fcombined ORDER BY cc) TO '/tmp/facilities_ccs_$(CONTINENT).csv' (HEADER false);
+            "
+            while IFS= read -r cc; do
+              [ -n "$cc" ] || continue
+              fout="parquet/osm-facilities-${cc}.parquet"
+              echo "Writing $fout ..."
+              duckdb -c "
+              LOAD spatial;
+              CREATE TABLE fcombined AS SELECT * FROM read_parquet('temp_facilities_parquet/*.parquet');
+              COPY (
+                SELECT * EXCLUDE (rn) FROM (
+                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY feature_class) AS rn
+                  FROM fcombined
+                  WHERE country_code = '${cc}'
+                ) WHERE rn = 1
+                ORDER BY feature_class, osm_type, osm_id
+              ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+              "
+              HAS_FACILITIES=true
+            done < /tmp/facilities_ccs_$(CONTINENT).csv
+            rm -rf temp_facilities_parquet
           fi
 
           echo "=== Per-country GeoParquet files produced ==="
