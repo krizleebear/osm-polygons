@@ -50,6 +50,7 @@ jobs:
         buildVersionToDownload: 'latest'
       itemPattern: |
         parquet*/**
+        metadata/**
         admin-levels-summary/**
         validation-summary/**
         admin-polygons-validation/**

@@ -1553,54 +1553,26 @@ stages:
           EOF
           cat export-info.json
 
+          # Assemble unified metadata artifact folder
+          mkdir -p metadata
+          mv admin-levels-summary.md metadata/ 2>/dev/null || true
+          mv admin-levels-summary.json metadata/ 2>/dev/null || true
+          mv export-info.json metadata/ 2>/dev/null || true
+          if [ -f "validation.tar.gz" ]; then
+            mv validation.tar.gz metadata/
+          fi
+          if [ -f "validation/validation-summary.md" ]; then
+            cp validation/validation-summary.md metadata/validation-summary.md
+          fi
+
     - task: PublishPipelineArtifact@1
       enabled: true
-      displayName: 'Store admin levels summary artifact'
+      displayName: 'Store build metadata & validation reports'
       condition: succeeded()
       continueOnError: true
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/admin-levels-summary.md'
-        artifact: 'admin-levels-summary'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store admin levels summary JSON artifact'
-      condition: succeeded()
-      continueOnError: true
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/admin-levels-summary.json'
-        artifact: 'admin-levels-summary-json'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store validation archive artifact'
-      condition: and(succeeded(), eq(variables['HAS_VALIDATION'], 'true'))
-      continueOnError: true
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/validation.tar.gz'
-        artifact: 'admin-polygons-validation'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store validation summary artifact'
-      condition: and(succeeded(), eq(variables['HAS_VALIDATION'], 'true'))
-      continueOnError: true
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/validation/validation-summary.md'
-        artifact: 'validation-summary'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store export metadata artifact'
-      condition: succeeded()
-      continueOnError: true
-      inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/export-info.json'
-        artifact: 'export-info'
+        targetPath: '$(System.DefaultWorkingDirectory)/metadata'
+        artifact: 'metadata'
         publishLocation: 'pipeline'
 
 
