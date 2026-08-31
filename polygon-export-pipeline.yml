@@ -914,9 +914,12 @@ stages:
             REF_ARG="--reference-polygons ${REF_STREAM}"
           fi
 
-          POLYGON_JSON=$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq
-          PLACES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl
-          FACILITIES_JSONL=$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl
+          EXPORT_DIR="export-$(COUNTRY_CODE)-$(OSM_REGION)"
+          mkdir -p "${EXPORT_DIR}"
+
+          POLYGON_JSON="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq"
+          PLACES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl"
+          FACILITIES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl"
 
           python3 scripts/extract_region.py \
             --input-pbf "${INPUT_PBF}" \
@@ -927,39 +930,16 @@ stages:
             --facilities-out "${FACILITIES_JSONL}" \
             ${REF_ARG}
 
-
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store polygon artifacts'
-      inputs:
-        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).admin-polygons.geojsonseq'
-        artifact: 'admin-polygons-$(COUNTRY_CODE)-$(OSM_REGION)'
-        publishLocation: 'pipeline'
+          if [ -f "validation.json" ]; then
+            cp validation.json "${EXPORT_DIR}/validation.json"
+          fi
 
     - task: PublishPipelineArtifact@1
       enabled: true
-      displayName: 'Store validation artifacts'
-      continueOnError: true
+      displayName: 'Store region export artifacts'
       inputs:
-        targetPath: 'validation.json'
-        artifact: 'validation-$(COUNTRY_CODE)-$(OSM_REGION)'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store place nodes artifacts'
-      inputs:
-        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl'
-        artifact: 'places-$(COUNTRY_CODE)-$(OSM_REGION)'
-        publishLocation: 'pipeline'
-
-    - task: PublishPipelineArtifact@1
-      enabled: true
-      displayName: 'Store facilities artifacts'
-      inputs:
-        targetPath: '$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl'
-        artifact: 'facilities-$(COUNTRY_CODE)-$(OSM_REGION)'
+        targetPath: 'export-$(COUNTRY_CODE)-$(OSM_REGION)'
+        artifact: 'export-$(COUNTRY_CODE)-$(OSM_REGION)'
         publishLocation: 'pipeline'
 
     - task: Bash@3
@@ -1279,10 +1259,10 @@ stages:
           mkdir -p temp_parquet parquet
 
           echo "=== Downloaded region directories ==="
-          find . -maxdepth 2 -type d -name "admin-polygons-*" || true
+          find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" \) || true
 
           # Prune export directories belonging to other continents to conserve runner disk space
-          for dir in admin-polygons-* places-* facilities-*; do
+          for dir in export-* admin-polygons-* places-* facilities-*; do
             [ -d "$dir" ] || continue
             keep=false
             for region in $(REGIONS); do
@@ -1297,7 +1277,7 @@ stages:
           done
 
           echo "=== Retained region directories for continent '$(CONTINENT)' ==="
-          find . -maxdepth 2 -type d \( -name "admin-polygons-*" -o -name "places-*" -o -name "facilities-*" \) || true
+          find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" -o -name "places-*" -o -name "facilities-*" \) || true
 
           chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh scripts/convert_facilities_to_parquet.sh
           mkdir -p temp_parquet temp_places_parquet temp_facilities_parquet parquet
@@ -1509,7 +1489,9 @@ stages:
       inputs:
         buildType: 'current'
         buildVersionToDownload: 'latest'
-        itemPattern: 'validation-*/**'
+        itemPattern: |
+          export-*/**
+          validation-*/**
         targetPath: '$(System.DefaultWorkingDirectory)/validation-artifacts'
 
     - task: Bash@3
@@ -1523,11 +1505,10 @@ stages:
           # Collect all validation.json files into a single directory and archive
           mkdir -p validation
           if [ -d "validation-artifacts" ]; then
-            for vdir in validation-artifacts/validation-*/; do
-              if [ -f "${vdir}validation.json" ]; then
-                ARTIFACT_NAME=$(basename "$vdir")
-                cp "${vdir}validation.json" "validation/${ARTIFACT_NAME}-validation.json" || true
-              fi
+            find validation-artifacts -type f -name "validation.json" | while IFS= read -r vfile; do
+              [ -s "$vfile" ] || continue
+              vdir=$(basename "$(dirname "$vfile")")
+              cp "$vfile" "validation/${vdir}-validation.json" || true
             done
           fi
           VALIDATION_COUNT=$(find validation -name "*.json" 2>/dev/null | wc -l)
