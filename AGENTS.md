@@ -105,6 +105,12 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - Azure DevOps `PublishPipelineArtifact` tasks fail with runner warnings if the target file does not exist on disk. Export jobs and post-processing steps must ensure all declared artifact targets (such as `validation.json`) exist (touching empty fallback files if necessary) to keep build results 100% clean and green.
 31. **Fast-Fail CI Preflight Invariant:**
     - Never launch long-running or matrix-heavy pipeline stages without an initial fast (<30s) preflight stage (`stage: preflight`). The preflight stage must validate pipeline YAML parsing (`scripts/validate_azure_yaml.py`) and run the full Python unit test suite (`PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'`). All downstream stages (`export`, `parquet`, `package`) must declare `dependsOn: preflight` to fail immediately on script regressions before runner compute is consumed.
+32. **Azure DevOps Pipeline CLI Automation (`scripts/azure_pipeline.py`):**
+    - Use `scripts/azure_pipeline.py` to trigger, inspect, and manage Azure DevOps pipeline builds:
+      - Queue new build: `python3 scripts/azure_pipeline.py run --branch <branch_name> [--reuse-export] [--build-id <ID>]`
+      - Check build status & timeline: `python3 scripts/azure_pipeline.py status <build_id>`
+      - Cancel running build: `python3 scripts/azure_pipeline.py cancel <build_id>`
+    - Authentication is automatically read from `AZURE_DEVOPS_PAT` in `.env` or environment variables.
 
 
 
