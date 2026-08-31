@@ -111,6 +111,10 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
       - Check build status & timeline: `python3 scripts/azure_pipeline.py status <build_id>`
       - Cancel running build: `python3 scripts/azure_pipeline.py cancel <build_id>`
     - Authentication is automatically read from `AZURE_DEVOPS_PAT` in `.env` or environment variables.
+33. **Stream File Format Conventions (`.geojsonseq` vs `.jsonl`):**
+    - `*.admin-polygons.geojsonseq`: Strictly adheres to RFC 8142 (GeoJSON Text Sequences) where each line is a full standard GeoJSON Feature object (`{"type": "Feature", "geometry": {...}, "properties": {...}}`). Designed for direct consumption by spatial tools (GDAL/OGR, QGIS, `CoverageSimplifier`).
+    - `*.places.jsonl` and `*.facilities.jsonl`: Formatted as newline-delimited flattened tabular records (`{"osm_id": ..., "country_code": ..., "name": ..., "geom_json": "...", "tags": "..."}`). Designed as high-throughput, columnar-ready ETL streams for direct vectorized ingestion via DuckDB `read_json(columns={...})`. Tabular JSONL streams must retain `.jsonl` and never be misnamed `.geojsonseq` as they lack GeoJSON Feature envelope wrappers.
+
 
 
 
