@@ -37,12 +37,19 @@ Es sollen ausschließlich OSM-Objekte exportiert werden, die in eine der folgend
 | **`university`** | `amenity = 'university'` | `Polygon` |
 | **`hospital`** | `amenity = 'hospital'` | `Polygon` |
 | **`stadium`** | `leisure = 'stadium'` | `Polygon` |
+| **`train_station`**| `railway = 'station'`, `building = 'train_station'` *(ausgenommen reine U-Bahn-Haltestellen & unterirdische Tunnel)* | `Point`, `Polygon` |
+| **`exhibition_centre`**| `amenity IN ('exhibition_centre', 'conference_centre', 'events_venue')`, `tourism = 'exhibition_centre'`, `building = 'exhibition_centre'` | `Polygon`, `Point` |
+| **`theme_park`** | `tourism IN ('theme_park', 'water_park')`, `leisure IN ('water_park', 'amusement_park')` | `Polygon`, `Point` |
+| **`zoo`** | `tourism IN ('zoo', 'aquarium')`, `amenity = 'aquarium'` | `Polygon`, `Point` |
+| **`ferry_terminal`**| `amenity = 'ferry_terminal'`, `building = 'ferry_terminal'`, `public_transport = 'station'` + `ferry = 'yes'` | `Point`, `Polygon` |
 
 ### Wichtige geometrische Vorgaben:
 1. **Linienrichtung bei Fahrbahnen (`motorway`):** 
    Die Knotenreihenfolge (Node Order) der extrahierten `LineString`-Geometrien darf beim Export **unter keinen Umständen verändert, vereinfacht oder umgekehrt werden**. Downstream-Anwendungen verlassen sich auf das implizite `oneway`-Verhalten von OSM-Autobahnen, um aus dem Linienvektor die exakte Fahrtrichtung (Heading in Grad) zu berechnen.
 2. **Polygone statt Umrisse:** 
    Geschlossene Ways oder Relationen für Flächen (z. B. Universitäten, Raststätten) müssen als echtes (Multi-)Polygon in das GeoParquet geschrieben werden, nicht als LineString-Ring.
+3. **Bahnhofs-Geometrien & Untergrund-Schutz (`train_station`):**
+   Um zu verhindern, dass weitläufige unterirdische Passagen/Tunnel im 2D-Raum bahnhofsfremde Oberflächen-POIs schneiden, werden Bahnhöfe primär als Punkt (`n/railway=station`) oder als oberirdisches Empfangsgebäude (`building=train_station`) exportiert. Flächen mit `tunnel=yes` oder `location=underground` werden verworfen.
 
 ---
 

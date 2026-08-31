@@ -50,6 +50,41 @@ FACILITIES_FILTER_RULES = [
     "r/amenity=university,hospital",
     "w/leisure=stadium",
     "r/leisure=stadium",
+    # Train stations (mainline & railway stations / station buildings)
+    "n/railway=station",
+    "w/railway=station",
+    "r/railway=station",
+    "w/building=train_station",
+    "r/building=train_station",
+    # Exhibition & conference centres
+    "n/amenity=exhibition_centre,conference_centre,events_venue",
+    "w/amenity=exhibition_centre,conference_centre,events_venue",
+    "r/amenity=exhibition_centre,conference_centre,events_venue",
+    "n/tourism=exhibition_centre",
+    "w/tourism=exhibition_centre",
+    "r/tourism=exhibition_centre",
+    "w/building=exhibition_centre",
+    "r/building=exhibition_centre",
+    # Theme parks & water parks
+    "n/tourism=theme_park,water_park",
+    "w/tourism=theme_park,water_park",
+    "r/tourism=theme_park,water_park",
+    "n/leisure=water_park,amusement_park",
+    "w/leisure=water_park,amusement_park",
+    "r/leisure=water_park,amusement_park",
+    # Zoos, animal parks & aquariums
+    "n/tourism=zoo,aquarium",
+    "w/tourism=zoo,aquarium",
+    "r/tourism=zoo,aquarium",
+    "n/amenity=aquarium",
+    "w/amenity=aquarium",
+    "r/amenity=aquarium",
+    # Ferry & cruise terminals
+    "n/amenity=ferry_terminal",
+    "w/amenity=ferry_terminal",
+    "r/amenity=ferry_terminal",
+    "w/building=ferry_terminal",
+    "r/building=ferry_terminal",
 ]
 
 

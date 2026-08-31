@@ -186,6 +186,150 @@ class TestFilterFacilities(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(res["feature_class"], "stadium")
 
+    def test_train_station_point(self):
+        feat = make_feature({
+            "@type": "node",
+            "@id": 10001,
+            "railway": "station",
+            "name": "München Hauptbahnhof",
+            "uic_ref": "8000261"
+        }, geom_type="Point")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "train_station")
+        self.assertEqual(res["osm_type"], "N")
+
+    def test_train_station_building_polygon(self):
+        feat = make_feature({
+            "@type": "way",
+            "@id": 10002,
+            "building": "train_station",
+            "name": "Empfangsgebäude"
+        }, geom_type="Polygon")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "train_station")
+        self.assertEqual(res["osm_type"], "W")
+
+    def test_train_station_rejects_underground_and_tunnel_polygons(self):
+        # Undergound tunnel polygon should be rejected to prevent POI bleeding
+        feat_tunnel = make_feature({
+            "@type": "relation",
+            "@id": 10003,
+            "railway": "station",
+            "tunnel": "yes"
+        }, geom_type="Polygon")
+        self.assertIsNone(process_facility_feature(feat_tunnel))
+
+        feat_underground = make_feature({
+            "@type": "way",
+            "@id": 10004,
+            "railway": "station",
+            "location": "underground"
+        }, geom_type="Polygon")
+        self.assertIsNone(process_facility_feature(feat_underground))
+
+        feat_tracks = make_feature({
+            "@type": "relation",
+            "@id": 10005,
+            "railway": "station",
+            "landuse": "railway"
+        }, geom_type="Polygon")
+        self.assertIsNone(process_facility_feature(feat_tracks))
+
+    def test_train_station_rejects_pure_subway_halts(self):
+        feat_subway = make_feature({
+            "@type": "node",
+            "@id": 10006,
+            "railway": "station",
+            "station": "subway"
+        }, geom_type="Point")
+        self.assertIsNone(process_facility_feature(feat_subway))
+
+    def test_exhibition_centre(self):
+        feat = make_feature({
+            "@type": "relation",
+            "@id": 11001,
+            "amenity": "exhibition_centre",
+            "name": "Messe München"
+        }, geom_type="MultiPolygon")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "exhibition_centre")
+
+        feat_conf = make_feature({
+            "@type": "way",
+            "@id": 11002,
+            "amenity": "conference_centre",
+            "name": "ICM – Internationales Congress Center München"
+        }, geom_type="Polygon")
+        res2 = process_facility_feature(feat_conf)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "exhibition_centre")
+
+    def test_theme_park(self):
+        feat = make_feature({
+            "@type": "relation",
+            "@id": 12001,
+            "tourism": "theme_park",
+            "name": "Europa-Park"
+        }, geom_type="Polygon")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "theme_park")
+
+        feat_water = make_feature({
+            "@type": "way",
+            "@id": 12002,
+            "leisure": "water_park",
+            "name": "Therme Erding"
+        }, geom_type="Polygon")
+        res2 = process_facility_feature(feat_water)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "theme_park")
+
+    def test_zoo_and_aquarium(self):
+        feat_zoo = make_feature({
+            "@type": "relation",
+            "@id": 13001,
+            "tourism": "zoo",
+            "name": "Tierpark Hellabrunn"
+        }, geom_type="Polygon")
+        res = process_facility_feature(feat_zoo)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "zoo")
+
+        feat_aqua = make_feature({
+            "@type": "way",
+            "@id": 13002,
+            "tourism": "aquarium",
+            "name": "Sea Life München"
+        }, geom_type="Polygon")
+        res2 = process_facility_feature(feat_aqua)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "zoo")
+
+    def test_ferry_terminal(self):
+        feat_point = make_feature({
+            "@type": "node",
+            "@id": 14001,
+            "amenity": "ferry_terminal",
+            "name": "Fährhafen Puttgarden"
+        }, geom_type="Point")
+        res = process_facility_feature(feat_point)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "ferry_terminal")
+
+        feat_poly = make_feature({
+            "@type": "way",
+            "@id": 14002,
+            "building": "ferry_terminal",
+            "name": "Terminalgebäude"
+        }, geom_type="Polygon")
+        res2 = process_facility_feature(feat_poly)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "ferry_terminal")
+
     def test_osm_type_normalization(self):
         self.assertEqual(normalize_osm_type("node"), "N")
         self.assertEqual(normalize_osm_type("NODE"), "N")

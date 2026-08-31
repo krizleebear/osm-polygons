@@ -36,6 +36,12 @@ MOTORWAY_VALUES = {"motorway", "trunk", "motorway_link", "trunk_link"}
 SERVICE_AREA_VALUES = {"services", "rest_area"}
 
 
+EXHIBITION_CENTRE_AMENITIES = {"exhibition_centre", "conference_centre", "events_venue"}
+THEME_PARK_TOURISMS = {"theme_park", "water_park"}
+THEME_PARK_LEISURES = {"water_park", "amusement_park"}
+ZOO_TOURISMS = {"zoo", "aquarium"}
+
+
 def clean_tags(props):
     """Prune metadata tags and internal osmium attributes from properties dict."""
     cleaned = {}
@@ -67,7 +73,7 @@ def normalize_osm_type(raw_type):
 
 def classify_facility(props, geom_type):
     """
-    Classify OSM feature into one of the 8 target feature_classes based on tags and geometry.
+    Classify OSM feature into one of the 13 target feature_classes based on tags and geometry.
     Returns (feature_class, is_valid_geometry) or (None, False).
     """
     if not props or not geom_type:
@@ -78,6 +84,16 @@ def classify_facility(props, geom_type):
     shop = str(props.get("shop", "")).strip().lower()
     amenity = str(props.get("amenity", "")).strip().lower()
     leisure = str(props.get("leisure", "")).strip().lower()
+    railway = str(props.get("railway", "")).strip().lower()
+    tourism = str(props.get("tourism", "")).strip().lower()
+    building = str(props.get("building", "")).strip().lower()
+    station = str(props.get("station", "")).strip().lower()
+    subway = str(props.get("subway", "")).strip().lower()
+    tunnel = str(props.get("tunnel", "")).strip().lower()
+    location = str(props.get("location", "")).strip().lower()
+    landuse = str(props.get("landuse", "")).strip().lower()
+    public_transport = str(props.get("public_transport", "")).strip().lower()
+    ferry = str(props.get("ferry", "")).strip().lower()
 
     # 1. motorway: LineString / MultiLineString
     if highway in MOTORWAY_VALUES:
@@ -126,6 +142,46 @@ def classify_facility(props, geom_type):
         if geom_type in ("Polygon", "MultiPolygon"):
             return "stadium", True
         return "stadium", False
+
+    # 9. train_station: Point / Polygon / MultiPolygon
+    # Protect against underground tunnel networks & pure subway halts
+    if railway == "station" or building == "train_station":
+        if station in ("subway", "light_rail", "monorail") or subway == "yes":
+            # Exclude pure subway/light rail halts unless explicitly tagged as mainline train station
+            train_tag = str(props.get("train", "")).strip().lower()
+            if train_tag != "yes":
+                return None, False
+        if geom_type in ("Polygon", "MultiPolygon"):
+            if tunnel == "yes" or location == "underground" or landuse == "railway":
+                return None, False
+            return "train_station", True
+        elif geom_type == "Point":
+            return "train_station", True
+        return "train_station", False
+
+    # 10. exhibition_centre: Polygon / MultiPolygon / Point
+    if amenity in EXHIBITION_CENTRE_AMENITIES or tourism == "exhibition_centre" or building == "exhibition_centre":
+        if geom_type in ("Polygon", "MultiPolygon", "Point"):
+            return "exhibition_centre", True
+        return "exhibition_centre", False
+
+    # 11. theme_park: Polygon / MultiPolygon / Point
+    if tourism in THEME_PARK_TOURISMS or leisure in THEME_PARK_LEISURES:
+        if geom_type in ("Polygon", "MultiPolygon", "Point"):
+            return "theme_park", True
+        return "theme_park", False
+
+    # 12. zoo: Polygon / MultiPolygon / Point
+    if tourism in ZOO_TOURISMS or amenity == "aquarium":
+        if geom_type in ("Polygon", "MultiPolygon", "Point"):
+            return "zoo", True
+        return "zoo", False
+
+    # 13. ferry_terminal: Point / Polygon / MultiPolygon
+    if amenity == "ferry_terminal" or building == "ferry_terminal" or (public_transport == "station" and ferry == "yes"):
+        if geom_type in ("Point", "Polygon", "MultiPolygon"):
+            return "ferry_terminal", True
+        return "ferry_terminal", False
 
     return None, False
 
