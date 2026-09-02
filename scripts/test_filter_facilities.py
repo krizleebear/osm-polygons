@@ -348,6 +348,177 @@ class TestFilterFacilities(unittest.TestCase):
         feat = make_feature({"amenity": "restaurant", "name": "Pizzeria"}, geom_type="Point")
         self.assertIsNone(process_facility_feature(feat))
 
+    def test_entrance_main_and_typed(self):
+        for ent in ["main", "emergency", "service", "delivery", "staircase", "shop", "office", "garage", "yes"]:
+            feat = make_feature({
+                "@type": "node",
+                "@id": 50001,
+                "entrance": ent,
+                "ref": "A",
+                "name": "Haupteingang"
+            }, geom_type="Point")
+            res = process_facility_feature(feat, continent="europe", country_code="DE")
+            self.assertIsNotNone(res, f"Failed for entrance={ent}")
+            self.assertEqual(res["feature_class"], "entrance")
+            self.assertEqual(res["osm_type"], "N")
+            tags = json.loads(res["tags"])
+            self.assertEqual(tags.get("entrance"), ent)
+            self.assertEqual(tags.get("ref"), "A")
+
+    def test_entrance_rejects_closed_and_no(self):
+        for ent in ["no", "closed"]:
+            feat = make_feature({"entrance": ent}, geom_type="Point")
+            self.assertIsNone(process_facility_feature(feat))
+
+    def test_entrance_and_gate_access_no_handling(self):
+        # access=no without name/ref/emergency/goods is pruned
+        feat_no_access = make_feature({"entrance": "yes", "access": "no"}, geom_type="Point")
+        self.assertIsNone(process_facility_feature(feat_no_access))
+
+        feat_gate_no_access = make_feature({"barrier": "gate", "access": "no"}, geom_type="Point")
+        self.assertIsNone(process_facility_feature(feat_gate_no_access))
+
+        # access=no WITH name or ref is kept (e.g. factory gate "Tor 3")
+        feat_gate_with_ref = make_feature({
+            "@type": "node",
+            "@id": 50002,
+            "barrier": "gate",
+            "access": "no",
+            "ref": "Tor 3"
+        }, geom_type="Point")
+        res = process_facility_feature(feat_gate_with_ref)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "gate")
+
+        # access=no with emergency permission is kept
+        feat_with_emergency = make_feature({
+            "@type": "node",
+            "@id": 50003,
+            "entrance": "service",
+            "access": "no",
+            "emergency": "yes"
+        }, geom_type="Point")
+        res2 = process_facility_feature(feat_with_emergency)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "entrance")
+
+    def test_gate_barriers(self):
+        barriers = [
+            "gate", "lift_gate", "toll_booth", "sliding_gate",
+            "swing_gate", "stile", "turnstile", "cycle_barrier"
+        ]
+        for b in barriers:
+            feat = make_feature({
+                "@type": "node",
+                "@id": 51000,
+                "barrier": b,
+                "name": "Schranke Nord"
+            }, geom_type="Point")
+            res = process_facility_feature(feat)
+            self.assertIsNotNone(res, f"Failed for barrier={b}")
+            self.assertEqual(res["feature_class"], "gate")
+
+    def test_gate_as_way(self):
+        # Sliding gates or barriers mapped as ways
+        feat = make_feature({
+            "@type": "way",
+            "@id": 51001,
+            "barrier": "sliding_gate",
+            "ref": "Tor 1"
+        }, geom_type="LineString")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "gate")
+        self.assertEqual(res["osm_type"], "W")
+
+    def test_parking_entrance(self):
+        # Standard amenity=parking_entrance
+        feat = make_feature({
+            "@type": "node",
+            "@id": 52001,
+            "amenity": "parking_entrance",
+            "parking": "underground",
+            "maxheight": "2.10"
+        }, geom_type="Point")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "parking_entrance")
+
+        # parking=underground + entrance=yes
+        feat2 = make_feature({
+            "@type": "node",
+            "@id": 52002,
+            "parking": "underground",
+            "entrance": "yes"
+        }, geom_type="Point")
+        res2 = process_facility_feature(feat2)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "parking_entrance")
+
+        # parking=multi-storey + entrance=yes
+        feat3 = make_feature({
+            "@type": "node",
+            "@id": 52003,
+            "parking": "multi-storey",
+            "entrance": "main"
+        }, geom_type="Point")
+        res3 = process_facility_feature(feat3)
+        self.assertIsNotNone(res3)
+        self.assertEqual(res3["feature_class"], "parking_entrance")
+
+    def test_emergency_entrance(self):
+        feat = make_feature({
+            "@type": "node",
+            "@id": 53001,
+            "emergency": "emergency_ward_entrance",
+            "name": "Zentrale Notaufnahme (ZNA)",
+            "access": "emergency"
+        }, geom_type="Point")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "emergency_entrance")
+
+        feat2 = make_feature({
+            "@type": "node",
+            "@id": 53002,
+            "emergency": "ambulance_station"
+        }, geom_type="Point")
+        res2 = process_facility_feature(feat2)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2["feature_class"], "emergency_entrance")
+
+    def test_access_point_tag_whitelist_projection(self):
+        feat = make_feature({
+            "@type": "node",
+            "@id": 54001,
+            "entrance": "main",
+            "name": "Haupteingang",
+            "name:en": "Main Entrance",
+            "ref": "Gate 1",
+            "wheelchair": "yes",
+            "level": "0",
+            "maxheight": "3.5",
+            # Metadata & unlisted tags should be pruned:
+            "source": "survey",
+            "fixme": "verify height",
+            "color": "blue",
+            "artist_name": "Leonardo"
+        }, geom_type="Point")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        tags = json.loads(res["tags"])
+        self.assertEqual(tags.get("entrance"), "main")
+        self.assertEqual(tags.get("name"), "Haupteingang")
+        self.assertEqual(tags.get("name:en"), "Main Entrance")
+        self.assertEqual(tags.get("ref"), "Gate 1")
+        self.assertEqual(tags.get("wheelchair"), "yes")
+        self.assertEqual(tags.get("level"), "0")
+        self.assertEqual(tags.get("maxheight"), "3.5")
+        self.assertNotIn("source", tags)
+        self.assertNotIn("fixme", tags)
+        self.assertNotIn("color", tags)
+        self.assertNotIn("artist_name", tags)
+
 
 if __name__ == "__main__":
     unittest.main()

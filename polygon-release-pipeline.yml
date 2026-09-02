@@ -163,7 +163,7 @@ jobs:
         - **100% Topologically Consistent (0% Border-Bleeding):** Exact boundaries without simplification artifacts.
         - **OGC GeoParquet 1.1 Specification:** Native WGS84 (\`OGC:CRS84\`) geometry with ZSTD compression and spatial bounding-box indexing.
         - **OSM Place-Nodes Companion Dataset (\`osm-places-{CC}.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
-        - **OSM Facilities Companion Dataset (\`osm-facilities-{CC}.parquet\`):** Critical infrastructure and facility footprints (motorways with heading order, junctions, service areas, airports, shopping malls, universities, hospitals, stadiums, train stations, exhibition centres, theme parks, zoos, and ferry terminals).
+        - **OSM Facilities Companion Dataset (\`osm-facilities-{CC}.parquet\`):** Critical infrastructure, facility footprints, and navigational access points (motorways with heading order, junctions, service areas, airports, shopping malls, universities, hospitals, stadiums, train stations, exhibition centres, theme parks, zoos, ferry terminals, building entrances, gates, barriers, parking entrances, and emergency ward entrances).
         - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
         ### Querying Multiple Countries with DuckDB

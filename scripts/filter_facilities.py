@@ -11,9 +11,18 @@ Classifies features into normalized feature classes:
   - university (Polygon, MultiPolygon)
   - hospital (Polygon, MultiPolygon)
   - stadium (Polygon, MultiPolygon)
+  - train_station (Point, Polygon, MultiPolygon)
+  - exhibition_centre (Point, Polygon, MultiPolygon)
+  - theme_park (Point, Polygon, MultiPolygon)
+  - zoo (Point, Polygon, MultiPolygon)
+  - ferry_terminal (Point, Polygon, MultiPolygon)
+  - entrance (Point, LineString, Polygon -> Centroid Point)
+  - gate (Point, LineString, Polygon -> Centroid Point)
+  - parking_entrance (Point, LineString, Polygon -> Centroid Point)
+  - emergency_entrance (Point, LineString, Polygon -> Centroid Point)
 
 Filters tags to prune metadata (source, created_by, note, fixme, etc.) and retains
-domain tags, multilingual names, and references.
+domain tags, multilingual names, and references (projected to whitelist for access points).
 """
 
 import argparse
@@ -41,6 +50,22 @@ THEME_PARK_TOURISMS = {"theme_park", "water_park"}
 THEME_PARK_LEISURES = {"water_park", "amusement_park"}
 ZOO_TOURISMS = {"zoo", "aquarium"}
 
+GATE_BARRIER_VALUES = {
+    "gate", "lift_gate", "toll_booth", "sliding_gate", "swing_gate",
+    "stile", "turnstile", "cycle_barrier"
+}
+PARKING_ENTRANCE_PARKINGS = {"underground", "multi-storey"}
+EMERGENCY_ENTRANCE_VALUES = {"emergency_ward_entrance", "ambulance_station"}
+
+ACCESS_POINT_CLASSES = {"entrance", "gate", "parking_entrance", "emergency_entrance"}
+
+ACCESS_POINT_WHITELIST_TAGS = {
+    "name", "ref", "description", "entrance", "barrier", "amenity",
+    "emergency", "access", "motor_vehicle", "motorcar", "goods", "hgv",
+    "foot", "bicycle", "maxheight", "maxwidth", "maxweight", "level",
+    "direction", "wheelchair", "operator", "fee", "parking"
+}
+
 
 def clean_tags(props):
     """Prune metadata tags and internal osmium attributes from properties dict."""
@@ -55,6 +80,44 @@ def clean_tags(props):
             continue
         cleaned[k] = v
     return cleaned
+
+
+def clean_access_point_tags(props):
+    """Prune metadata and project tags onto whitelist for access point features."""
+    cleaned = {}
+    for k, v in props.items():
+        if k.startswith("@"):
+            continue
+        k_lower = k.lower()
+        if k_lower in EXCLUDED_TAG_KEYS:
+            continue
+        if any(k_lower.startswith(prefix) for prefix in EXCLUDED_TAG_PREFIXES):
+            continue
+        if k_lower in ACCESS_POINT_WHITELIST_TAGS or k_lower.startswith("name:"):
+            cleaned[k] = v
+    return cleaned
+
+
+def is_negatively_restricted_access(props):
+    """
+    Check if feature has access=no without any special authorization or identifier.
+    Returns True if the feature should be pruned according to section 5.4.
+    """
+    access = str(props.get("access", "")).strip().lower()
+    if access != "no":
+        return False
+    emergency = str(props.get("emergency", "")).strip().lower()
+    if emergency in ("yes", "emergency_ward_entrance", "ambulance_station"):
+        return False
+    if str(props.get("goods", "")).strip().lower() in ("yes", "designated"):
+        return False
+    if str(props.get("hgv", "")).strip().lower() in ("yes", "designated"):
+        return False
+    if str(props.get("motorcar", "")).strip().lower() in ("yes", "designated"):
+        return False
+    if props.get("name") or props.get("ref"):
+        return False
+    return True
 
 
 def normalize_osm_type(raw_type):
@@ -94,6 +157,39 @@ def classify_facility(props, geom_type):
     landuse = str(props.get("landuse", "")).strip().lower()
     public_transport = str(props.get("public_transport", "")).strip().lower()
     ferry = str(props.get("ferry", "")).strip().lower()
+    barrier = str(props.get("barrier", "")).strip().lower()
+    entrance = str(props.get("entrance", "")).strip().lower()
+    parking = str(props.get("parking", "")).strip().lower()
+    emergency = str(props.get("emergency", "")).strip().lower()
+
+    # Navigational Access Points & Entrances (Point, LineString, Polygon)
+    # A. emergency_entrance: Emergency ward & ambulance station entrances
+    if emergency in EMERGENCY_ENTRANCE_VALUES:
+        if geom_type in ("Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"):
+            return "emergency_entrance", True
+        return "emergency_entrance", False
+
+    # B. parking_entrance: Parking garages & underground parking entrances
+    if amenity == "parking_entrance" or (parking in PARKING_ENTRANCE_PARKINGS and entrance and entrance not in ("no", "closed")):
+        if geom_type in ("Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"):
+            return "parking_entrance", True
+        return "parking_entrance", False
+
+    # C. gate: Gates, barriers, toll booths, turnstiles
+    if barrier in GATE_BARRIER_VALUES:
+        if is_negatively_restricted_access(props):
+            return None, False
+        if geom_type in ("Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"):
+            return "gate", True
+        return "gate", False
+
+    # D. entrance: Building and compound entrances
+    if entrance and entrance not in ("no", "closed"):
+        if is_negatively_restricted_access(props):
+            return None, False
+        if geom_type in ("Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"):
+            return "entrance", True
+        return "entrance", False
 
     # 1. motorway: LineString / MultiLineString
     if highway in MOTORWAY_VALUES:
@@ -232,7 +328,10 @@ def process_facility_feature(data, continent="", country_code=""):
         else:
             osm_type = "W"
 
-    cleaned_tags = clean_tags(props)
+    if feature_class in ACCESS_POINT_CLASSES:
+        cleaned_tags = clean_access_point_tags(props)
+    else:
+        cleaned_tags = clean_tags(props)
 
     return {
         "continent": continent,

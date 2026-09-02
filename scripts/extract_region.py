@@ -85,6 +85,11 @@ FACILITIES_FILTER_RULES = [
     "r/amenity=ferry_terminal",
     "w/building=ferry_terminal",
     "r/building=ferry_terminal",
+    # Navigational access points, entrances, gates & barriers
+    "entrance",
+    "barrier=gate,lift_gate,toll_booth,sliding_gate,swing_gate,stile,turnstile,cycle_barrier",
+    "amenity=parking_entrance",
+    "emergency=emergency_ward_entrance,ambulance_station",
 ]
 
 
