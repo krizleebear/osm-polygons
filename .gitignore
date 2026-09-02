@@ -28,6 +28,7 @@ hs_err_pid*
 /*.pbf
 /*.parquet
 /*.places.jsonl
+/*.facilities.jsonl
 *-validation.json
 *-synthetic-defs.json
 validation-summary.json
