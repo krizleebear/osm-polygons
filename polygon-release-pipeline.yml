@@ -73,7 +73,10 @@ jobs:
         # 3. Per-country OSM Facilities GeoParquet files
         find downloads -name "osm-facilities-*.parquet" -exec cp {} release-assets/ \;
 
-        # 4. Unified Metadata & Validation Artifacts
+        # 4. Per-country OSM Landuse GeoParquet files
+        find downloads -name "osm-landuse-*.parquet" -exec cp {} release-assets/ \;
+
+        # 5. Unified Metadata & Validation Artifacts
         if [ -d "downloads/metadata" ]; then
           find downloads/metadata -type f -exec cp {} release-assets/ \;
         fi
@@ -164,6 +167,7 @@ jobs:
         - **OGC GeoParquet 1.1 Specification:** Native WGS84 (\`OGC:CRS84\`) geometry with ZSTD compression and spatial bounding-box indexing.
         - **OSM Place-Nodes Companion Dataset (\`osm-places-{CC}.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
         - **OSM Facilities Companion Dataset (\`osm-facilities-{CC}.parquet\`):** Critical infrastructure, facility footprints, and navigational access points (motorways with heading order, junctions, service areas, airports, shopping malls, universities, hospitals, stadiums, train stations, exhibition centres, theme parks, zoos, ferry terminals, building entrances, gates, barriers, parking entrances, and emergency ward entrances).
+        - **OSM Landuse Companion Dataset (\`osm-landuse-{CC}.parquet\`):** Built-up residential, commercial, and retail landuse polygons for settlement synthesis and fine-grained spatial coverage.
         - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
         ### Querying Multiple Countries with DuckDB

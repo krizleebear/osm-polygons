@@ -92,6 +92,11 @@ FACILITIES_FILTER_RULES = [
     "emergency=emergency_ward_entrance,ambulance_station",
 ]
 
+LANDUSE_FILTER_RULES = [
+    "w/landuse=residential,commercial,retail",
+    "r/landuse=residential,commercial,retail",
+]
+
 
 def run_command(cmd, desc, stdin=None, stdout=None):
     """Execute an external command and raise RuntimeError on failure with diagnostic output."""
@@ -113,6 +118,7 @@ def extract_region(
     polygon_out,
     places_out,
     facilities_out=None,
+    landuse_out=None,
     reference_polygons=None,
     postpass_candidates="scripts/postpass-candidates.json",
     keep_input_pbf=False,
@@ -130,12 +136,18 @@ def extract_region(
     admins_pbf = f"{region}.admins.pbf"
     places_pbf = f"{region}.places.pbf"
     facilities_pbf = f"{region}.facilities.pbf" if facilities_out else None
+    landuse_pbf = f"{region}.landuse.pbf" if landuse_out else None
     parent_mapping_json = "./parent-mapping.json"
     raw_polygon_out = f"{polygon_out}.raw"
 
     try:
         # Step 1: 1-Pass combined filter over the raw input PBF
-        combined_rules = ADMIN_FILTER_RULES + PLACES_FILTER_RULES + (FACILITIES_FILTER_RULES if facilities_out else [])
+        combined_rules = (
+            ADMIN_FILTER_RULES
+            + PLACES_FILTER_RULES
+            + (FACILITIES_FILTER_RULES if facilities_out else [])
+            + (LANDUSE_FILTER_RULES if landuse_out else [])
+        )
         cmd_combined = [
             "osmium", "tags-filter",
             "--output", combined_pbf,
@@ -179,6 +191,15 @@ def extract_region(
                 combined_pbf,
             ] + FACILITIES_FILTER_RULES
             run_command(cmd_split_facilities, f"Split facilities from combined PBF")
+
+        if landuse_out and landuse_pbf:
+            cmd_split_landuse = [
+                "osmium", "tags-filter",
+                "--output", landuse_pbf,
+                "--overwrite",
+                combined_pbf,
+            ] + LANDUSE_FILTER_RULES
+            run_command(cmd_split_landuse, f"Split landuse from combined PBF")
 
         if os.path.exists(combined_pbf):
             os.remove(combined_pbf)
@@ -268,9 +289,26 @@ def extract_region(
             if os.path.exists(facilities_pbf):
                 os.remove(facilities_pbf)
 
+        # Step 9: Export landuse via streaming pipe (if requested)
+        if landuse_out and landuse_pbf:
+            t_landuse = time.time()
+            print(f"[EXTRACT] Starting: Stream export landuse -> {landuse_out} ...", flush=True)
+            landuse_pipe_cmd = (
+                f"osmium export {landuse_pbf} --output-format=geojsonseq --overwrite --config=osmium-export-config.json "
+                f"| python3 scripts/filter_landuse.py --country-code {country_code} "
+                f"> {landuse_out}"
+            )
+            res_landuse = subprocess.run(["bash", "-c", landuse_pipe_cmd], text=True)
+            if res_landuse.returncode != 0:
+                raise RuntimeError(f"Landuse streaming export pipeline failed with exit code {res_landuse.returncode}")
+            print(f"[EXTRACT] Finished: Landuse export ({time.time() - t_landuse:.2f}s)", flush=True)
+
+            if os.path.exists(landuse_pbf):
+                os.remove(landuse_pbf)
+
     finally:
         # Cleanup any leftover intermediate files
-        for tmp in (combined_pbf, admins_pbf, places_pbf, facilities_pbf, raw_polygon_out):
+        for tmp in (combined_pbf, admins_pbf, places_pbf, facilities_pbf, landuse_pbf, raw_polygon_out):
             if tmp and os.path.exists(tmp):
                 try:
                     os.remove(tmp)
@@ -284,6 +322,8 @@ def extract_region(
     print(f"  - Places Output:     {places_out} ({os.path.getsize(places_out) / (1024*1024):.2f} MB)")
     if facilities_out and os.path.exists(facilities_out):
         print(f"  - Facilities Output: {facilities_out} ({os.path.getsize(facilities_out) / (1024*1024):.2f} MB)")
+    if landuse_out and os.path.exists(landuse_out):
+        print(f"  - Landuse Output:    {landuse_out} ({os.path.getsize(landuse_out) / (1024*1024):.2f} MB)")
     print("=" * 60)
 
 
@@ -295,6 +335,7 @@ if __name__ == "__main__":
     parser.add_argument("--polygon-out", required=True, help="Output .admin-polygons.geojsonseq file")
     parser.add_argument("--places-out", required=True, help="Output .places.jsonl file")
     parser.add_argument("--facilities-out", default=None, help="Optional output .facilities.jsonl file")
+    parser.add_argument("--landuse-out", default=None, help="Optional output .landuse.jsonl file")
     parser.add_argument("--reference-polygons", default=None, help="Optional path to reference-polygons.geojsonseq")
     parser.add_argument("--postpass-candidates", default="scripts/postpass-candidates.json", help="Path to candidates JSON")
     parser.add_argument("--keep-input-pbf", action="store_true", default=False, help="Do not delete input PBF")
@@ -308,6 +349,7 @@ if __name__ == "__main__":
         polygon_out=args.polygon_out,
         places_out=args.places_out,
         facilities_out=args.facilities_out,
+        landuse_out=args.landuse_out,
         reference_polygons=args.reference_polygons,
         postpass_candidates=args.postpass_candidates,
         keep_input_pbf=args.keep_input_pbf,
