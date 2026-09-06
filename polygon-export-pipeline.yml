@@ -828,6 +828,23 @@ stages:
   # Distinct country tags (ISO3166-1 / ISO3166-2) within OSM features remain preserved in the exported dataset.
 
     steps:
+    - task: Bash@3
+      target: host
+      displayName: 'Reclaim runner host disk space'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "[INFO] Disk space before cleanup:"
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache \
+            2>/dev/null || true
+          echo "[INFO] Disk space after cleanup:"
+          df -h /
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download reference fallback polygons from download pipeline (definition 9)'
@@ -1208,6 +1225,24 @@ stages:
             *-ukraine/**
 
     steps:
+    - task: Bash@3
+      target: host
+      displayName: 'Reclaim runner host disk space'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "[INFO] Disk space before cleanup:"
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache \
+            2>/dev/null || true
+          echo "[INFO] Disk space after cleanup:"
+          df -h /
+
     - checkout: self
 
     - ${{ if and(ne(parameters.exportBuildId, 'auto'), ne(parameters.exportBuildId, '')) }}:
