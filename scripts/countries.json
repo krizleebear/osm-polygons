@@ -785,7 +785,8 @@
   },
   "GF": {
     "continent": "europe",
-    "name": "French Guiana"
+    "name": "French Guiana",
+    "levels": [2, 4, 8]
   },
   "GH": {
     "continent": "africa",
@@ -835,7 +836,8 @@
   },
   "GP": {
     "continent": "europe",
-    "name": "Guadeloupe"
+    "name": "Guadeloupe",
+    "levels": [2, 4, 8]
   },
   "GQ": {
     "continent": "africa",
@@ -1475,7 +1477,8 @@
   },
   "MQ": {
     "continent": "europe",
-    "name": "Martinique"
+    "name": "Martinique",
+    "levels": [2, 4, 8]
   },
   "MR": {
     "continent": "africa",
@@ -1828,7 +1831,8 @@
   },
   "RE": {
     "continent": "europe",
-    "name": "Reunion"
+    "name": "Reunion",
+    "levels": [2, 4, 8]
   },
   "RO": {
     "continent": "europe",
@@ -2345,7 +2349,8 @@
   },
   "YT": {
     "continent": "europe",
-    "name": "Mayotte"
+    "name": "Mayotte",
+    "levels": [2, 4, 8]
   },
   "ZA": {
     "continent": "africa",

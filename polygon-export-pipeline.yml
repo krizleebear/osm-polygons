@@ -1173,7 +1173,7 @@ stages:
             *-venezuela/**
         europe:
           CONTINENT: 'europe'
-          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria canary-islands croatia cyprus czech-republic denmark estonia faroe-islands finland france georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland ukraine'
+          REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria canary-islands croatia cyprus czech-republic denmark estonia faroe-islands finland france guadeloupe martinique guyane reunion mayotte georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland ukraine'
           ARTIFACT_PATTERNS: |
             *-albania/**
             *-andorra/**
@@ -1192,6 +1192,11 @@ stages:
             *-faroe-islands/**
             *-finland/**
             *-france/**
+            *-guadeloupe/**
+            *-martinique/**
+            *-guyane/**
+            *-reunion/**
+            *-mayotte/**
             *-georgia/**
             *-germany/**
             *-great-britain/**
