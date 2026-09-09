@@ -314,6 +314,9 @@ jobs:
       papua-new-guinea:
         OSM_REGION: 'papua-new-guinea'
         PBF_URL: 'https://download.geofabrik.de/australia-oceania/papua-new-guinea-latest.osm.pbf'
+      polynesie-francaise:
+        OSM_REGION: 'polynesie-francaise'
+        PBF_URL: 'https://download.geofabrik.de/australia-oceania/polynesie-francaise-latest.osm.pbf'
 
       # ── Central America & Caribbean ───────────────────────────────────────────
       bahamas:
