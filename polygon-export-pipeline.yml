@@ -511,6 +511,10 @@ stages:
           OSM_REGION: 'papua-new-guinea'
           PBF_URL: 'https://download.geofabrik.de/australia-oceania/papua-new-guinea-latest.osm.pbf'
           COUNTRY_CODE: 'PG'
+        polynesie-francaise:
+          OSM_REGION: 'polynesie-francaise'
+          PBF_URL: 'https://download.geofabrik.de/australia-oceania/polynesie-francaise-latest.osm.pbf'
+          COUNTRY_CODE: 'PF'
         bahamas:
           OSM_REGION: 'bahamas'
           PBF_URL: 'https://download.geofabrik.de/central-america/bahamas-latest.osm.pbf'
@@ -1119,13 +1123,14 @@ stages:
             *-yemen/**
         australia_oceania:
           CONTINENT: 'australia-oceania'
-          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea'
+          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea polynesie-francaise'
           ARTIFACT_PATTERNS: |
             *-australia/**
             *-fiji/**
             *-new-caledonia/**
             *-new-zealand/**
             *-papua-new-guinea/**
+            *-polynesie-francaise/**
         central_america:
           CONTINENT: 'central-america'
           REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
