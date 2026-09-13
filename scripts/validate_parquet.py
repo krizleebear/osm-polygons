@@ -59,7 +59,8 @@ def inspect_parquet_file(file_path):
             FROM read_parquet('{file_path}') 
             GROUP BY osm_type, osm_id HAVING count(*) > 1
         )) AS dupe_feature_count,
-        (SELECT list_sort(list(DISTINCT admin_level)) FROM (SELECT admin_level FROM read_parquet('{file_path}') WHERE admin_level IS NOT NULL)) AS populated_levels
+        (SELECT list_sort(list(DISTINCT admin_level)) FROM (SELECT admin_level FROM read_parquet('{file_path}') WHERE admin_level IS NOT NULL)) AS populated_levels,
+        (SELECT list(k) FROM (SELECT key::VARCHAR AS k FROM parquet_kv_metadata('{file_path}'))) AS meta_keys
     FROM read_parquet('{file_path}');
     """
     
@@ -75,6 +76,7 @@ def inspect_parquet_file(file_path):
             "null_geom_count": 0,
             "dupe_feature_count": 0,
             "populated_levels": [],
+            "meta_keys": [],
         }
     
     try:
@@ -91,6 +93,7 @@ def inspect_parquet_file(file_path):
             "null_geom_count": int(row.get("null_geom_count", 0)),
             "dupe_feature_count": int(row.get("dupe_feature_count", 0)),
             "populated_levels": [int(x) for x in row.get("populated_levels", []) if x is not None],
+            "meta_keys": [str(x) for x in row.get("meta_keys", []) if x is not None],
         }
     except Exception as e:
         return {
@@ -102,6 +105,7 @@ def inspect_parquet_file(file_path):
             "null_geom_count": 0,
             "dupe_feature_count": 0,
             "populated_levels": [],
+            "meta_keys": [],
         }
 
 
@@ -143,6 +147,7 @@ def validate_parquets(base_dir, fail_on_error=False):
     duplicate_features = []
     empty_files = []
     null_geoms = []
+    missing_metadata = []
     errors = []
     
     for path in files:
@@ -182,6 +187,15 @@ def validate_parquets(base_dir, fail_on_error=False):
             print(f"##vso[task.logissue type=warning]Country {cc} ({path}) contains {metrics['null_geom_count']} record(s) with NULL geometry!")
             null_geoms.append((cc, path, metrics["null_geom_count"]))
 
+        # Check required Parquet metadata keys
+        required_meta = {"source", "license", "attribution", "country_code", "exported_at"}
+        present_meta = set(metrics.get("meta_keys", []))
+        missing_meta = required_meta - present_meta
+        if missing_meta:
+            missing_str = ", ".join(sorted(missing_meta))
+            print(f"##vso[task.logissue type=warning]Country {cc} ({path}) is missing required metadata key(s): {missing_str}")
+            missing_metadata.append((cc, path, missing_str))
+
     # Summary table
     print("\n" + "=" * 60)
     print(" === GEOPARQUET QUALITY & INTEGRITY SUMMARY ===")
@@ -193,6 +207,7 @@ def validate_parquets(base_dir, fail_on_error=False):
     print(f" Duplicate Features Detected:    {len(duplicate_features)}")
     print(f" Empty Files (0 rows):           {len(empty_files)}")
     print(f" NULL Geometries Detected:       {len(null_geoms)}")
+    print(f" Missing Metadata Headers:       {len(missing_metadata)}")
     print(f" Extraction Errors:              {len(errors)}")
     print("=" * 60)
 
@@ -203,6 +218,7 @@ def validate_parquets(base_dir, fail_on_error=False):
         or len(duplicate_features) > 0
         or len(empty_files) > 0
         or len(null_geoms) > 0
+        or len(missing_metadata) > 0
         or len(errors) > 0
     )
 

@@ -68,5 +68,21 @@ COPY (
 ) TO '__OUTPUT_PARQUET__' (
     FORMAT PARQUET,
     COMPRESSION ZSTD,
-    ROW_GROUP_SIZE 5000
+    ROW_GROUP_SIZE 5000,
+    KV_METADATA {
+        'source': 'OpenStreetMap',
+        'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+        'dataset': 'OpenStreetMap Facilities',
+        'attribution': '© OpenStreetMap contributors',
+        'attribution_url': 'https://www.openstreetmap.org/copyright',
+        'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+        'license_url': 'https://opendatacommons.org/licenses/odbl/',
+        'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+        'schema': 'https://github.com/krizleebear/osm-polygons',
+        'schema_url': 'https://github.com/krizleebear/osm-polygons',
+        'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+        'country_code': '__COUNTRY_CODE__',
+        'exported_at': '__EXPORTED_AT__'
+    }
 );
+

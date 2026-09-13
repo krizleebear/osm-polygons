@@ -49,10 +49,13 @@ echo "============================================================"
 TMP_SQL="$(mktemp /tmp/export_parquet_XXXXXX.sql)"
 trap 'rm -f "$TMP_SQL"' EXIT
 
+EXPORTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
 sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
     -e "s|__INPUT_GEOJSONSEQ__|${INPUT_GEOJSONSEQ}|g" \
     -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
     -e "s|__COUNTRIES_JSON__|${COUNTRIES_JSON}|g" \
+    -e "s|__EXPORTED_AT__|${EXPORTED_AT}|g" \
     "$SQL_TEMPLATE" > "$TMP_SQL"
 
 duckdb < "$TMP_SQL"
@@ -85,7 +88,26 @@ if [ -n "$CC_REMAP" ]; then
       CASE WHEN country_code = '${OLD_CC}' THEN '${NEW_CC}' ELSE country_code END AS country_code
     )
     FROM t
-  ) TO '${OUTPUT_PARQUET}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+  ) TO '${OUTPUT_PARQUET}' (
+    FORMAT PARQUET,
+    COMPRESSION ZSTD,
+    ROW_GROUP_SIZE 5000,
+    KV_METADATA {
+        'source': 'OpenStreetMap',
+        'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+        'dataset': 'OpenStreetMap Administrative Polygons',
+        'attribution': '© OpenStreetMap contributors',
+        'attribution_url': 'https://www.openstreetmap.org/copyright',
+        'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+        'license_url': 'https://opendatacommons.org/licenses/odbl/',
+        'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+        'schema': 'https://github.com/krizleebear/osm-polygons',
+        'schema_url': 'https://github.com/krizleebear/osm-polygons',
+        'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+        'country_code': '${NEW_CC}',
+        'exported_at': '${EXPORTED_AT}'
+    }
+  );
   "
   echo "Remapped country_code '${OLD_CC}' -> '${NEW_CC}' in ${OUTPUT_PARQUET}"
 fi

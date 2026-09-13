@@ -49,10 +49,13 @@ echo "============================================================"
 TMP_SQL="$(mktemp /tmp/export_facilities_XXXXXX.sql)"
 trap 'rm -f "$TMP_SQL"' EXIT
 
+EXPORTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
 sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
     -e "s|__INPUT_JSONL__|${INPUT_STREAM}|g" \
     -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
     -e "s|__COUNTRIES_JSON__|${COUNTRIES_JSON}|g" \
+    -e "s|__EXPORTED_AT__|${EXPORTED_AT}|g" \
     "$SQL_TEMPLATE" > "$TMP_SQL"
 
 duckdb < "$TMP_SQL"

@@ -116,6 +116,24 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - `*.places.jsonl` and `*.facilities.jsonl`: Formatted as newline-delimited flattened tabular records (`{"osm_id": ..., "country_code": ..., "name": ..., "geom_json": "...", "tags": "..."}`). Designed as high-throughput, columnar-ready ETL streams for direct vectorized ingestion via DuckDB `read_json(columns={...})`. Tabular JSONL streams must retain `.jsonl` and never be misnamed `.geojsonseq` as they lack GeoJSON Feature envelope wrappers.
 34. **Explanation Preceding Git Actions Invariant (Explain First, Commit Second):**
     - The agent must always first present a clear, comprehensive explanation of the diagnosis, the rationale, and the exact changes in the visible response text before requesting permission or attempting to execute `git commit`, `git push`, or pipeline triggers. Never trigger permission prompts for Git actions without the user having seen the complete explanatory context first.
+35. **Parquet Provenance & License Metadata Invariant:**
+    - All GeoParquet files produced by export pipelines (`export_parquet.sql`, `export_places.sql`, `export_facilities.sql`) MUST embed standard provenance, copyright, and licensing metadata in the Parquet file footer via DuckDB's `KV_METADATA` option.
+    - Required metadata keys:
+      - `source`: `OpenStreetMap`
+      - `origin`: `OpenStreetMap (https://www.openstreetmap.org)`
+      - `dataset`: Canonical dataset title (e.g. `OpenStreetMap Administrative Polygons`, `OpenStreetMap Places`, `OpenStreetMap Facilities`)
+      - `attribution`: `© OpenStreetMap contributors`
+      - `attribution_url`: `https://www.openstreetmap.org/copyright`
+      - `license`: `ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)`
+      - `license_url`: `https://opendatacommons.org/licenses/odbl/`
+      - `copyright`: `Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)`
+      - `schema`: Canonical schema URL or repo reference
+      - `schema_url`: URL to schema documentation
+      - `compiler`: Generator project reference (e.g. `osm-polygons (https://github.com/krizleebear/osm-polygons)`)
+      - `country_code`: 2-letter ISO code or territory identifier (e.g. `DE`, `US`)
+      - `exported_at`: ISO-8601 UTC timestamp (e.g. `YYYY-MM-DDTHH:MM:SSZ`)
+    - Any intermediate or post-processing re-write of Parquet files (such as country_code remapping) must preserve these metadata keys.
+
 
 
 
