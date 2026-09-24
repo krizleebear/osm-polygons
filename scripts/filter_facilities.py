@@ -16,6 +16,7 @@ Classifies features into normalized feature classes:
   - theme_park (Point, Polygon, MultiPolygon)
   - zoo (Point, Polygon, MultiPolygon)
   - ferry_terminal (Point, Polygon, MultiPolygon)
+  - parking (Polygon, MultiPolygon)
   - entrance (Point, LineString, Polygon -> Centroid Point)
   - gate (Point, LineString, Polygon -> Centroid Point)
   - parking_entrance (Point, LineString, Polygon -> Centroid Point)
@@ -63,7 +64,7 @@ ACCESS_POINT_WHITELIST_TAGS = {
     "name", "ref", "description", "entrance", "barrier", "amenity",
     "emergency", "access", "motor_vehicle", "motorcar", "goods", "hgv",
     "foot", "bicycle", "maxheight", "maxwidth", "maxweight", "level",
-    "direction", "wheelchair", "operator", "fee", "parking"
+    "direction", "wheelchair", "operator", "fee", "parking", "service"
 }
 
 
@@ -191,6 +192,19 @@ def classify_facility(props, geom_type):
             return "entrance", True
         return "entrance", False
 
+    # E. delivery entrance: Delivery service ways (highway=service with service/access=delivery)
+    service = str(props.get("service", "")).strip().lower()
+    access = str(props.get("access", "")).strip().lower()
+    hgv = str(props.get("hgv", "")).strip().lower()
+    if highway == "service" and (
+        service == "delivery"
+        or access == "delivery"
+        or (hgv in ("designated", "yes") and access in ("private", "delivery", "no"))
+    ):
+        if geom_type in ("Point", "LineString", "MultiLineString"):
+            return "entrance", True
+        return "entrance", False
+
     # 1. motorway: LineString / MultiLineString
     if highway in MOTORWAY_VALUES:
         if geom_type in ("LineString", "MultiLineString"):
@@ -279,6 +293,12 @@ def classify_facility(props, geom_type):
             return "ferry_terminal", True
         return "ferry_terminal", False
 
+    # 14. parking: Polygon / MultiPolygon
+    if amenity == "parking":
+        if geom_type in ("Polygon", "MultiPolygon"):
+            return "parking", True
+        return "parking", False
+
     return None, False
 
 
@@ -328,8 +348,31 @@ def process_facility_feature(data, continent="", country_code=""):
         else:
             osm_type = "W"
 
+    highway = str(props.get("highway", "")).strip().lower()
+    is_delivery_way = (
+        feature_class == "entrance"
+        and highway == "service"
+        and geom_type in ("LineString", "MultiLineString")
+    )
+    if is_delivery_way:
+        coords = geom.get("coordinates")
+        if not coords:
+            return None
+        if geom_type == "LineString":
+            pt_coords = coords[0]
+        else:  # MultiLineString
+            if not coords[0]:
+                return None
+            pt_coords = coords[0][0]
+        geom = {"type": "Point", "coordinates": pt_coords}
+        geom_type = "Point"
+        osm_type = "W"
+
     if feature_class in ACCESS_POINT_CLASSES:
         cleaned_tags = clean_access_point_tags(props)
+        if is_delivery_way:
+            cleaned_tags.setdefault("entrance", "delivery")
+            cleaned_tags.setdefault("service", "delivery")
     else:
         cleaned_tags = clean_tags(props)
 

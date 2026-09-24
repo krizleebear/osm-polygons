@@ -90,6 +90,12 @@ FACILITIES_FILTER_RULES = [
     "barrier=gate,lift_gate,toll_booth,sliding_gate,swing_gate,stile,turnstile,cycle_barrier",
     "amenity=parking_entrance",
     "emergency=emergency_ward_entrance,ambulance_station",
+    # Parking areas
+    "w/amenity=parking",
+    "r/amenity=parking",
+    # Delivery access ways
+    "w/service=delivery",
+    "w/access=delivery",
 ]
 
 LANDUSE_FILTER_RULES = [

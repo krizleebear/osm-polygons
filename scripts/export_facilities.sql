@@ -50,22 +50,118 @@ COPY (
         WHERE f.osm_id IS NOT NULL
           AND f.feature_class IS NOT NULL
           AND f.geom_json IS NOT NULL
-    )
-    SELECT
-        continent,
-        country_code,
-        osm_id,
-        osm_type,
-        feature_class,
-        geom,
-        tags
-    FROM raw_facilities
-    WHERE rn = 1
-      AND geom IS NOT NULL
-      AND ST_X(ST_Centroid(geom)) >= -180.0 AND ST_X(ST_Centroid(geom)) <= 180.0
-      AND ST_Y(ST_Centroid(geom)) >= -90.0 AND ST_Y(ST_Centroid(geom)) <= 90.0
-    ORDER BY continent, country_code, feature_class, osm_type, osm_id
-) TO '__OUTPUT_PARQUET__' (
+    ),
+    deduped_facilities AS (
+            SELECT
+                continent,
+                country_code,
+                osm_id,
+                osm_type,
+                feature_class,
+                geom,
+                tags
+            FROM raw_facilities
+            WHERE rn = 1
+              AND geom IS NOT NULL
+              AND ST_X(ST_Centroid(geom)) >= -180.0 AND ST_X(ST_Centroid(geom)) <= 180.0
+              AND ST_Y(ST_Centroid(geom)) >= -90.0 AND ST_Y(ST_Centroid(geom)) <= 90.0
+        ),
+        target_facilities AS (
+            SELECT * FROM deduped_facilities
+            WHERE feature_class IN (
+                'shopping_mall', 'hospital', 'stadium', 'university',
+                'train_station', 'exhibition_centre', 'theme_park',
+                'zoo', 'airport', 'service_area'
+            )
+              AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')
+        ),
+        candidate_parking AS (
+            SELECT * FROM deduped_facilities
+            WHERE feature_class = 'parking'
+              AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')
+        ),
+        facility_parking_pairs AS (
+            SELECT
+                f.osm_id AS facility_osm_id,
+                f.osm_type AS facility_osm_type,
+                p.osm_id AS parking_osm_id,
+                p.osm_type AS parking_osm_type,
+                ROW_NUMBER() OVER (
+                    PARTITION BY p.osm_type, p.osm_id
+                    ORDER BY ST_Distance(f.geom, p.geom)
+                ) AS p_rn
+            FROM target_facilities f
+            JOIN candidate_parking p
+              ON ST_DWithin(f.geom, p.geom, 0.0005)
+        ),
+        merged_facilities AS (
+            SELECT
+                parts.continent,
+                parts.country_code,
+                parts.osm_id,
+                parts.osm_type,
+                parts.feature_class,
+                ST_Union_Agg(parts.geom_part) AS geom,
+                parts.tags
+            FROM (
+                SELECT f.continent, f.country_code, f.osm_id, f.osm_type, f.feature_class, f.tags, f.geom AS geom_part
+                FROM target_facilities f
+                UNION ALL
+                SELECT f.continent, f.country_code, f.osm_id, f.osm_type, f.feature_class, f.tags, p.geom AS geom_part
+                FROM facility_parking_pairs m
+                JOIN target_facilities f ON f.osm_id = m.facility_osm_id AND f.osm_type = m.facility_osm_type
+                JOIN candidate_parking p ON p.osm_id = m.parking_osm_id AND p.osm_type = m.parking_osm_type
+                WHERE m.p_rn = 1
+            ) parts
+            GROUP BY parts.continent, parts.country_code, parts.osm_id, parts.osm_type, parts.feature_class, parts.tags
+        ),
+        standalone_parking AS (
+            SELECT p.continent, p.country_code, p.osm_id, p.osm_type, p.feature_class, p.geom, p.tags
+            FROM candidate_parking p
+            LEFT JOIN (SELECT parking_osm_id, parking_osm_type FROM facility_parking_pairs WHERE p_rn = 1) m
+              ON p.osm_id = m.parking_osm_id AND p.osm_type = m.parking_osm_type
+            WHERE m.parking_osm_id IS NULL
+              AND (
+                  json_extract_string(p.tags, '$.name') IS NOT NULL
+                  OR json_extract_string(p.tags, '$.access') IN ('customers', 'permissive')
+                  OR json_extract_string(p.tags, '$.parking') IN ('multi-storey', 'underground')
+              )
+        ),
+        other_features AS (
+            SELECT r.continent, r.country_code, r.osm_id, r.osm_type, r.feature_class, r.geom, r.tags
+            FROM deduped_facilities r
+            WHERE r.feature_class NOT IN (
+                'shopping_mall', 'hospital', 'stadium', 'university',
+                'train_station', 'exhibition_centre', 'theme_park',
+                'zoo', 'airport', 'service_area', 'parking'
+            )
+               OR (
+                   r.feature_class IN (
+                       'shopping_mall', 'hospital', 'stadium', 'university',
+                       'train_station', 'exhibition_centre', 'theme_park',
+                       'zoo', 'airport', 'service_area'
+                   )
+                   AND ST_GeometryType(r.geom) NOT IN ('POLYGON', 'MULTIPOLYGON')
+               )
+        ),
+        final_facilities AS (
+            SELECT * FROM merged_facilities
+            UNION ALL
+            SELECT * FROM standalone_parking
+            UNION ALL
+            SELECT * FROM other_features
+        )
+        SELECT
+            continent,
+            country_code,
+            osm_id,
+            osm_type,
+            feature_class,
+            geom,
+            tags
+        FROM final_facilities
+        ORDER BY continent, country_code, feature_class, osm_type, osm_id
+    ) TO '__OUTPUT_PARQUET__' (
     FORMAT PARQUET,
     COMPRESSION ZSTD,
     ROW_GROUP_SIZE 5000,

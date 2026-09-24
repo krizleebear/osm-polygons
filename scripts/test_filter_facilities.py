@@ -519,6 +519,170 @@ class TestFilterFacilities(unittest.TestCase):
         self.assertNotIn("color", tags)
         self.assertNotIn("artist_name", tags)
 
+    def test_parking_polygon_and_multipolygon(self):
+        coords_poly = [[[11.41, 48.7], [11.42, 48.7], [11.42, 48.71], [11.41, 48.71], [11.41, 48.7]]]
+        feat_poly = make_feature({
+            "@type": "way",
+            "@id": 60001,
+            "amenity": "parking",
+            "name": "P1 Besucherparkplatz",
+            "access": "customers",
+            "parking": "surface",
+            "capacity": "250",
+            "fee": "no"
+        }, geom_type="Polygon", coordinates=coords_poly)
+
+        res = process_facility_feature(feat_poly, continent="europe", country_code="DE")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "parking")
+        self.assertEqual(res["osm_type"], "W")
+        self.assertEqual(res["osm_id"], 60001)
+        tags = json.loads(res["tags"])
+        self.assertEqual(tags.get("amenity"), "parking")
+        self.assertEqual(tags.get("name"), "P1 Besucherparkplatz")
+        self.assertEqual(tags.get("access"), "customers")
+        self.assertEqual(tags.get("capacity"), "250")
+
+        # MultiPolygon support
+        feat_mp = make_feature({
+            "@type": "relation",
+            "@id": 60002,
+            "amenity": "parking",
+            "parking": "multi-storey"
+        }, geom_type="MultiPolygon")
+        res_mp = process_facility_feature(feat_mp)
+        self.assertIsNotNone(res_mp)
+        self.assertEqual(res_mp["feature_class"], "parking")
+        self.assertEqual(res_mp["osm_type"], "R")
+
+    def test_parking_rejects_point_or_linestring(self):
+        feat_pt = make_feature({"@id": 60003, "amenity": "parking"}, geom_type="Point")
+        self.assertIsNone(process_facility_feature(feat_pt))
+
+        feat_line = make_feature({"@id": 60004, "amenity": "parking"}, geom_type="LineString")
+        self.assertIsNone(process_facility_feature(feat_line))
+
+    def test_delivery_service_way_converts_to_entrance_point(self):
+        line_coords = [[11.4160, 48.7050], [11.4150, 48.7045], [11.4140, 48.7040]]
+        feat = make_feature({
+            "@type": "way",
+            "@id": 70001,
+            "highway": "service",
+            "service": "delivery",
+            "access": "delivery",
+            "hgv": "yes",
+            "maxheight": "4.2",
+            "name": "Warenannahme"
+        }, geom_type="LineString", coordinates=line_coords)
+
+        res = process_facility_feature(feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "entrance")
+        self.assertEqual(res["osm_type"], "W")
+        self.assertEqual(res["osm_id"], 70001)
+
+        # Geometry must be Point at start node coords[0]
+        geom = json.loads(res["geom_json"])
+        self.assertEqual(geom["type"], "Point")
+        self.assertEqual(geom["coordinates"], [11.4160, 48.7050])
+
+        tags = json.loads(res["tags"])
+        self.assertEqual(tags.get("entrance"), "delivery")
+        self.assertEqual(tags.get("service"), "delivery")
+        self.assertEqual(tags.get("access"), "delivery")
+        self.assertEqual(tags.get("hgv"), "yes")
+        self.assertEqual(tags.get("maxheight"), "4.2")
+        self.assertEqual(tags.get("name"), "Warenannahme")
+
+    def test_westpark_ingolstadt_reference_case(self):
+        """
+        Validate all 6 reference objects from Section 5 of
+        UPSTREAM_CONTRACT_FACILITY_PARKING_AND_DELIVERY.md (Westpark Ingolstadt).
+        """
+        # 1. Mall main building: osm:way/28013665 -> shopping_mall, Polygon
+        mall_coords = [[[11.397, 48.775], [11.401, 48.775], [11.401, 48.778], [11.397, 48.778], [11.397, 48.775]]]
+        mall_feat = make_feature({
+            "@type": "way",
+            "@id": 28013665,
+            "shop": "mall",
+            "name": "Westpark"
+        }, geom_type="Polygon", coordinates=mall_coords)
+        res_mall = process_facility_feature(mall_feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res_mall)
+        self.assertEqual(res_mall["feature_class"], "shopping_mall")
+        self.assertEqual(res_mall["osm_type"], "W")
+        self.assertEqual(res_mall["osm_id"], 28013665)
+
+        # 2. Customer parking South/West: osm:way/28013712 -> parking, Polygon
+        p_south_feat = make_feature({
+            "@type": "way",
+            "@id": 28013712,
+            "amenity": "parking",
+            "name": "Westpark",
+            "access": "customers"
+        }, geom_type="Polygon")
+        res_p_south = process_facility_feature(p_south_feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res_p_south)
+        self.assertEqual(res_p_south["feature_class"], "parking")
+        self.assertEqual(res_p_south["osm_id"], 28013712)
+
+        # 3. Customer parking North: osm:way/158179324 -> parking, Polygon
+        p_north_feat = make_feature({
+            "@type": "way",
+            "@id": 158179324,
+            "amenity": "parking",
+            "name": "Westpark"
+        }, geom_type="Polygon")
+        res_p_north = process_facility_feature(p_north_feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res_p_north)
+        self.assertEqual(res_p_north["feature_class"], "parking")
+        self.assertEqual(res_p_north["osm_id"], 158179324)
+
+        # 4. Parking barrier (lift gate West): osm:node/13648179665 -> gate, Point
+        gate_feat = make_feature({
+            "@type": "node",
+            "@id": 13648179665,
+            "barrier": "lift_gate"
+        }, geom_type="Point")
+        res_gate = process_facility_feature(gate_feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res_gate)
+        self.assertEqual(res_gate["feature_class"], "gate")
+        self.assertEqual(res_gate["osm_type"], "N")
+        self.assertEqual(res_gate["osm_id"], 13648179665)
+
+        # 5. Parking garage entrance: osm:node/14023680245 -> parking_entrance, Point
+        pe_feat = make_feature({
+            "@type": "node",
+            "@id": 14023680245,
+            "amenity": "parking_entrance"
+        }, geom_type="Point")
+        res_pe = process_facility_feature(pe_feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res_pe)
+        self.assertEqual(res_pe["feature_class"], "parking_entrance")
+        self.assertEqual(res_pe["osm_type"], "N")
+        self.assertEqual(res_pe["osm_id"], 14023680245)
+
+        # 6. Delivery truck access (East): way/213233765 branching off Richard-Wagner-Str. -> entrance, Point
+        del_coords = [[11.4020, 48.7760], [11.4010, 48.7762], [11.4005, 48.7763]]
+        delivery_feat = make_feature({
+            "@type": "way",
+            "@id": 213233765,
+            "highway": "service",
+            "service": "delivery",
+            "hgv": "yes"
+        }, geom_type="LineString", coordinates=del_coords)
+        res_del = process_facility_feature(delivery_feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res_del)
+        self.assertEqual(res_del["feature_class"], "entrance")
+        self.assertEqual(res_del["osm_type"], "W")
+        self.assertEqual(res_del["osm_id"], 213233765)
+        del_geom = json.loads(res_del["geom_json"])
+        self.assertEqual(del_geom["type"], "Point")
+        self.assertEqual(del_geom["coordinates"], [11.4020, 48.7760])
+        del_tags = json.loads(res_del["tags"])
+        self.assertEqual(del_tags.get("entrance"), "delivery")
+        self.assertEqual(del_tags.get("hgv"), "yes")
+
 
 if __name__ == "__main__":
     unittest.main()
