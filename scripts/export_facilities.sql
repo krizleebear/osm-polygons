@@ -127,14 +127,42 @@ COPY (
                   OR json_extract_string(p.tags, '$.parking') IN ('multi-storey', 'underground')
               )
         ),
+        facility_and_parking_polygons AS (
+            SELECT geom FROM merged_facilities
+            UNION ALL
+            SELECT geom FROM standalone_parking
+        ),
+        candidate_access_points AS (
+            SELECT r.continent, r.country_code, r.osm_id, r.osm_type, r.feature_class, r.geom, r.tags
+            FROM deduped_facilities r
+            WHERE r.feature_class IN ('entrance', 'gate', 'parking_entrance', 'emergency_entrance')
+              AND NOT (
+                  r.feature_class = 'entrance' AND json_extract_string(r.tags, '$.entrance') IN ('home', 'staircase', 'garage', 'room', 'basement', 'cellar', 'shed', 'no', 'closed')
+              )
+              AND NOT (
+                  r.feature_class = 'gate' AND json_extract_string(r.tags, '$.barrier') IN ('cycle_barrier', 'stile', 'kissing_gate', 'hampshire_gate', 'turnstile')
+              )
+              AND NOT (
+                  r.feature_class = 'entrance' AND json_extract_string(r.tags, '$.entrance') = 'yes'
+                  AND json_extract_string(r.tags, '$.name') IS NULL
+                  AND json_extract_string(r.tags, '$.ref') IS NULL
+                  AND json_extract_string(r.tags, '$.access') IS NULL
+                  AND json_extract_string(r.tags, '$.service') IS NULL
+              )
+        ),
+        gated_access_points AS (
+            SELECT ap.continent, ap.country_code, ap.osm_id, ap.osm_type, ap.feature_class, ap.geom, ap.tags
+            FROM candidate_access_points ap
+            WHERE EXISTS (
+                SELECT 1 FROM facility_and_parking_polygons poly
+                WHERE ST_DWithin(ap.geom, poly.geom, 0.001)
+            )
+            OR (ap.feature_class = 'gate' AND json_extract_string(ap.tags, '$.barrier') = 'toll_booth')
+        ),
         other_features AS (
             SELECT r.continent, r.country_code, r.osm_id, r.osm_type, r.feature_class, r.geom, r.tags
             FROM deduped_facilities r
-            WHERE r.feature_class NOT IN (
-                'shopping_mall', 'hospital', 'stadium', 'university',
-                'train_station', 'exhibition_centre', 'theme_park',
-                'zoo', 'airport', 'service_area', 'parking'
-            )
+            WHERE r.feature_class IN ('motorway', 'junction')
                OR (
                    r.feature_class IN (
                        'shopping_mall', 'hospital', 'stadium', 'university',
@@ -148,6 +176,8 @@ COPY (
             SELECT * FROM merged_facilities
             UNION ALL
             SELECT * FROM standalone_parking
+            UNION ALL
+            SELECT * FROM gated_access_points
             UNION ALL
             SELECT * FROM other_features
         )

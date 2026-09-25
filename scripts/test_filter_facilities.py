@@ -349,7 +349,7 @@ class TestFilterFacilities(unittest.TestCase):
         self.assertIsNone(process_facility_feature(feat))
 
     def test_entrance_main_and_typed(self):
-        for ent in ["main", "emergency", "service", "delivery", "staircase", "shop", "office", "garage", "yes"]:
+        for ent in ["main", "emergency", "service", "delivery", "shop", "office", "yes"]:
             feat = make_feature({
                 "@type": "node",
                 "@id": 50001,
@@ -365,10 +365,10 @@ class TestFilterFacilities(unittest.TestCase):
             self.assertEqual(tags.get("entrance"), ent)
             self.assertEqual(tags.get("ref"), "A")
 
-    def test_entrance_rejects_closed_and_no(self):
-        for ent in ["no", "closed"]:
+    def test_entrance_rejects_domestic_and_closed(self):
+        for ent in ["home", "staircase", "garage", "room", "basement", "cellar", "shed", "no", "closed"]:
             feat = make_feature({"entrance": ent}, geom_type="Point")
-            self.assertIsNone(process_facility_feature(feat))
+            self.assertIsNone(process_facility_feature(feat), f"Should reject entrance={ent}")
 
     def test_entrance_and_gate_access_no_handling(self):
         # access=no without name/ref/emergency/goods is pruned
@@ -404,8 +404,7 @@ class TestFilterFacilities(unittest.TestCase):
 
     def test_gate_barriers(self):
         barriers = [
-            "gate", "lift_gate", "toll_booth", "sliding_gate",
-            "swing_gate", "stile", "turnstile", "cycle_barrier"
+            "gate", "lift_gate", "toll_booth", "sliding_gate", "swing_gate"
         ]
         for b in barriers:
             feat = make_feature({
@@ -417,6 +416,11 @@ class TestFilterFacilities(unittest.TestCase):
             res = process_facility_feature(feat)
             self.assertIsNotNone(res, f"Failed for barrier={b}")
             self.assertEqual(res["feature_class"], "gate")
+
+    def test_gate_rejects_leisure_and_cycle_barriers(self):
+        for b in ["cycle_barrier", "stile", "turnstile", "kissing_gate", "hampshire_gate"]:
+            feat = make_feature({"barrier": b}, geom_type="Point")
+            self.assertIsNone(process_facility_feature(feat), f"Should reject barrier={b}")
 
     def test_gate_as_way(self):
         # Sliding gates or barriers mapped as ways

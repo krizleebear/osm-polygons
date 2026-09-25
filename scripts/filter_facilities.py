@@ -52,8 +52,10 @@ THEME_PARK_LEISURES = {"water_park", "amusement_park"}
 ZOO_TOURISMS = {"zoo", "aquarium"}
 
 GATE_BARRIER_VALUES = {
-    "gate", "lift_gate", "toll_booth", "sliding_gate", "swing_gate",
-    "stile", "turnstile", "cycle_barrier"
+    "gate", "lift_gate", "toll_booth", "sliding_gate", "swing_gate"
+}
+EXCLUDED_ENTRANCE_VALUES = {
+    "home", "staircase", "garage", "room", "basement", "cellar", "shed", "no", "closed"
 }
 PARKING_ENTRANCE_PARKINGS = {"underground", "multi-storey"}
 EMERGENCY_ENTRANCE_VALUES = {"emergency_ward_entrance", "ambulance_station"}
@@ -185,7 +187,7 @@ def classify_facility(props, geom_type):
         return "gate", False
 
     # D. entrance: Building and compound entrances
-    if entrance and entrance not in ("no", "closed"):
+    if entrance and entrance not in EXCLUDED_ENTRANCE_VALUES:
         if is_negatively_restricted_access(props):
             return None, False
         if geom_type in ("Point", "LineString", "MultiLineString", "Polygon", "MultiPolygon"):
