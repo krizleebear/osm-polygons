@@ -22,9 +22,9 @@ Main tasks:
 import os
 import sys
 import json
+import re
 import argparse
 import subprocess
-import urllib.parse
 
 # National mainland relations that must be preserved as admin_level=2
 MAINLAND_RELATION_IDS = {
@@ -117,11 +117,40 @@ def load_parent_mapping(path):
     sys.stderr.write(f"Loaded parent mapping: {len(PARENT_MAPPING)} child entries\n")
 
 
+# OPL string escaping (https://osmcode.org/opl-file-format/): characters with a
+# special meaning in OPL (space, newline, ',', '=', '@', '%') and non-printing /
+# non-listed code points are written as '%' + hexadecimal Unicode code point + '%'
+# (e.g. 'ロ' -> '%30ed%', '%' -> '%25%'). This is NOT URL percent-encoding of the
+# UTF-8 bytes, so urllib.parse.unquote() must not be used on OPL payloads.
+OPL_ESCAPE_RE = re.compile(r'%([0-9a-fA-F]{1,6})%')
+
+
+def unquote_opl(value):
+    """Decode an osmium OPL escaped string into its original Unicode text."""
+    if not value or '%' not in value:
+        return value
+
+    def _replace(match):
+        codepoint = int(match.group(1), 16)
+        if codepoint > 0x10FFFF:
+            return match.group(0)
+        if 0xD800 <= codepoint <= 0xDFFF:
+            return "\ufffd"
+        return chr(codepoint)
+
+    return OPL_ESCAPE_RE.sub(_replace, value)
+
+
 def extract_relation_centres(admin_pbf_path):
     """
-    Extracts admin_centre and label member coordinates from an OSM admin PBF extract.
-    Uses 'osmium cat -f opl' to parse relation members and node coordinates efficiently.
-    Returns a dict: { rel_id (int): { 'admin_centre': (lon, lat), 'label': (lon, lat) } }
+    Extracts admin_centre and label member metadata (coordinates, names, wikidata)
+    from an OSM admin PBF extract.
+    Uses 'osmium cat -f opl' to parse relation members and node tags/coordinates
+    efficiently; OPL string escapes are decoded with unquote_opl().
+    Returns a dict:
+      { rel_id (int): { 'admin_centre': {...}, 'label': {...} } }
+    where each centre entry holds lon/lat, osm_type, osm_id, source_id, name,
+    names_json (all name:* tags) and wikidata.
     """
     if not admin_pbf_path or not os.path.exists(admin_pbf_path):
         return {}
@@ -213,7 +242,7 @@ def extract_relation_centres(admin_pbf_path):
                             for tag_pair in raw_tags.split(','):
                                 if '=' in tag_pair:
                                     k, v = tag_pair.split('=', 1)
-                                    tags[urllib.parse.unquote(k)] = urllib.parse.unquote(v)
+                                    tags[unquote_opl(k)] = unquote_opl(v)
                 if lon is not None and lat is not None:
                     # Canonical name with fallback
                     name = tags.get("name")

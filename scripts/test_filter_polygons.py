@@ -5,7 +5,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-from filter_polygons import process_feature, filter_features, extract_relation_centres
+from filter_polygons import process_feature, filter_features, extract_relation_centres, unquote_opl
 
 # Minimal valid polygon geometry shared by most fixtures (real osmium export always emits geometry).
 POLY_GEOM = {"type": "Polygon", "coordinates": [[[11.0, 48.0], [11.1, 48.0], [11.1, 48.1], [11.0, 48.0]]]}
@@ -317,6 +317,63 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(names["name:en"], "London")
         self.assertEqual(names["name:fr"], "Londres")
         self.assertEqual(names["name:de"], "London")
+
+    def test_unquote_opl_decoding(self):
+        # OPL escapes the *code point* as '%' + hex + '%', not URL-encoded UTF-8 bytes.
+        # Regression: urllib.parse.unquote() turned '%30ed%' into '0ed%'.
+        self.assertEqual(unquote_opl("%30ed%%30f3%%30c9%%30f3%"), "ロンドン")
+        self.assertEqual(unquote_opl("%4f26%%6566%;%502b%%6566%"), "伦敦;倫敦")
+        self.assertEqual(unquote_opl("%0644%%0646%%062f%%0646%"), "لندن")
+        self.assertEqual(unquote_opl("%1f600%"), "\U0001F600")
+        self.assertEqual(unquote_opl("%a0%nbsp"), "\u00a0nbsp")
+        self.assertEqual(unquote_opl("%2c%"), ",")
+        self.assertEqual(unquote_opl("%3d%"), "=")
+        self.assertEqual(unquote_opl("%20%"), " ")
+        # '%' itself is escaped, so literal percent sequences stay untouched.
+        self.assertEqual(unquote_opl("%25%"), "%")
+        self.assertEqual(unquote_opl("%25%20%25%"), "%20%")
+        self.assertEqual(unquote_opl("100%25%"), "100%")
+        # Plain ASCII passes through unchanged (fast path, no '%').
+        self.assertEqual(unquote_opl("London"), "London")
+        self.assertEqual(unquote_opl(None), None)
+        # Incomplete / unknown escapes are returned verbatim instead of raising.
+        self.assertEqual(unquote_opl("100%"), "100%")
+        self.assertEqual(unquote_opl("%zz%"), "%zz%")
+
+    def test_extract_relation_centres_opl_escaped_names(self):
+        from unittest.mock import patch, MagicMock
+
+        # Realistic osmium OPL output for node 107775 (London): name:* values are
+        # OPL-escaped as '%' + code point hex + '%'.
+        opl_relations = "r175342 v1 dV c1 t1 i1 u1 Tboundary=administrative Mn107775@admin_centre\n"
+        opl_nodes = (
+            "n107775 v1 dV c1 t1 i1 u1 "
+            "Tname=London,name:ja=%30ed%%30f3%%30c9%%30f3%,"
+            "name:zh=%4f26%%6566%;%502b%%6566%,name:de=Berlin%2c%%20%Hauptstadt,"
+            "wikidata=Q84 x-0.1276 y51.5074\n"
+        )
+
+        def mock_popen(cmd, *args, **kwargs):
+            proc = MagicMock()
+            if "relation" in cmd:
+                proc.stdout = opl_relations.splitlines(keepends=True)
+            elif "node" in cmd:
+                proc.stdout = opl_nodes.splitlines(keepends=True)
+            else:
+                proc.stdout = []
+            proc.wait.return_value = 0
+            return proc
+
+        with patch("os.path.exists", return_value=True):
+            with patch("subprocess.Popen", side_effect=mock_popen):
+                centres = extract_relation_centres("/fake/admin.pbf")
+
+        ac = centres[175342]["admin_centre"]
+        self.assertEqual(ac["name"], "London")
+        names = json.loads(ac["names_json"])
+        self.assertEqual(names["name:ja"], "ロンドン")
+        self.assertEqual(names["name:zh"], "伦敦;倫敦")
+        self.assertEqual(names["name:de"], "Berlin, Hauptstadt")
 
     def test_label_fallback_when_no_admin_centre(self):
         # Feature with only label coordinate
