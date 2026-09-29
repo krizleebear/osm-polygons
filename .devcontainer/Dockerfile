@@ -79,6 +79,13 @@ RUN set -eux; \
     duckdb -c "INSTALL spatial; LOAD spatial;" && \
     cp -r /root/.duckdb /tmp/.duckdb-ext-cache
 
+# 2c. Whitelist the bind-mounted repository for git inside the devcontainer.
+#     /app is mounted from the host and git intermittently reports
+#     "detected dubious ownership in repository at '/app'", which aborts commits.
+#     The host ~/.gitconfig is mounted read-only, so the whitelist lives in /etc/gitconfig
+#     (safe.directory is intentionally ignored in repository-local .git/config).
+RUN git config --system --add safe.directory /app
+
 # 3. Install AI Agent CLIs (opencode & agy)
 RUN curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path && \
     mv /root/.opencode/bin/opencode /usr/local/bin/opencode && \

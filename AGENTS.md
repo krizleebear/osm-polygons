@@ -133,6 +133,10 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
       - `country_code`: 2-letter ISO code or territory identifier (e.g. `DE`, `US`)
       - `exported_at`: ISO-8601 UTC timestamp (e.g. `YYYY-MM-DDTHH:MM:SSZ`)
     - Any intermediate or post-processing re-write of Parquet files (such as country_code remapping) must preserve these metadata keys.
+36. **Devcontainer Git `safe.directory` Whitelist:**
+    - The devcontainer bind-mounts the repository at `/app` and mounts the host `~/.gitconfig` **read-only**. Git can therefore abort with `fatal: detected dubious ownership in repository at '/app'`; `git config --global` cannot fix this (read-only host file) and `safe.directory` is intentionally ignored in the repository-local `.git/config`.
+    - The whitelist is baked into the devcontainer image via `.devcontainer/Dockerfile` (`git config --system --add safe.directory /app`), effective after the next image rebuild. For sessions running an older image, use a per-invocation override (`git -c safe.directory=/app <command>`) or export `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/app` for the current shell session.
+    - Never edit the host-mounted `~/.gitconfig` and never escalate to root (`sudo git config`) to silence this warning (see rule 7).
 
 
 
