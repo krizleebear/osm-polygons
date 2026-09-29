@@ -1305,6 +1305,10 @@ stages:
           set -e
           mkdir -p temp_parquet parquet
 
+          # Single provenance timestamp for all per-country GeoParquet merges below
+          # (DuckDB COPY ... TO requires a literal value, see AGENTS.md rule 35).
+          EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
           echo "=== Downloaded region directories ==="
           find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" \) || true
 
@@ -1424,7 +1428,23 @@ stages:
                 WHERE country_code = '${cc}'
               ) WHERE rn = 1
               ORDER BY admin_level, bbox_miny, bbox_minx
-            ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+            ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
+              KV_METADATA {
+                'source': 'OpenStreetMap',
+                'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+                'dataset': 'OpenStreetMap Administrative Polygons',
+                'attribution': '© OpenStreetMap contributors',
+                'attribution_url': 'https://www.openstreetmap.org/copyright',
+                'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+                'license_url': 'https://opendatacommons.org/licenses/odbl/',
+                'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+                'schema': 'https://github.com/krizleebear/osm-polygons',
+                'schema_url': 'https://github.com/krizleebear/osm-polygons',
+                'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+                'country_code': '${cc}',
+                'exported_at': '${EXPORTED_AT}'
+              }
+            );
             "
           done < /tmp/country_codes_$(CONTINENT).csv
 
@@ -1453,7 +1473,23 @@ stages:
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
                 ORDER BY place_type, lat, lon
-              ) TO '${pout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+              ) TO '${pout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
+                KV_METADATA {
+                  'source': 'OpenStreetMap',
+                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+                  'dataset': 'OpenStreetMap Places',
+                  'attribution': '© OpenStreetMap contributors',
+                  'attribution_url': 'https://www.openstreetmap.org/copyright',
+                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
+                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+                  'schema': 'https://github.com/krizleebear/osm-polygons',
+                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
+                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+                  'country_code': '${cc}',
+                  'exported_at': '${EXPORTED_AT}'
+                }
+              );
               "
 
 
@@ -1485,7 +1521,23 @@ stages:
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
                 ORDER BY feature_class, osm_type, osm_id
-              ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+              ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
+                KV_METADATA {
+                  'source': 'OpenStreetMap',
+                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+                  'dataset': 'OpenStreetMap Facilities',
+                  'attribution': '© OpenStreetMap contributors',
+                  'attribution_url': 'https://www.openstreetmap.org/copyright',
+                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
+                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+                  'schema': 'https://github.com/krizleebear/osm-polygons',
+                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
+                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+                  'country_code': '${cc}',
+                  'exported_at': '${EXPORTED_AT}'
+                }
+              );
               "
               HAS_FACILITIES=true
             done < /tmp/facilities_ccs_$(CONTINENT).csv
@@ -1515,7 +1567,23 @@ stages:
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
                 ORDER BY landuse, osm_type, osm_id
-              ) TO '${lout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000);
+              ) TO '${lout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
+                KV_METADATA {
+                  'source': 'OpenStreetMap',
+                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+                  'dataset': 'OpenStreetMap Landuse',
+                  'attribution': '© OpenStreetMap contributors',
+                  'attribution_url': 'https://www.openstreetmap.org/copyright',
+                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
+                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+                  'schema': 'https://github.com/krizleebear/osm-polygons',
+                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
+                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+                  'country_code': '${cc}',
+                  'exported_at': '${EXPORTED_AT}'
+                }
+              );
               "
               HAS_LANDUSE=true
             done < /tmp/landuse_ccs_$(CONTINENT).csv
