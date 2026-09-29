@@ -124,6 +124,7 @@ SELECT
     COUNT(*) AS total_rows,
     COUNT(center_lat) AS with_center,
     COUNT(admin_centre_lat) AS with_admin_centre,
+    COUNT(admin_centre_name) AS with_admin_centre_name,
     COUNT(label_lat) AS with_label,
     ROUND(COUNT(center_lat) * 100.0 / COUNT(*), 1) || '%' AS center_coverage
 FROM read_parquet('${OUTPUT_PARQUET}');

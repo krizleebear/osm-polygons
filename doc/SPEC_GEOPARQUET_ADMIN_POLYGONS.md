@@ -53,6 +53,12 @@ The dataset adheres to the [OGC GeoParquet 1.1 Specification](https://geoparquet
 | `ref` | `VARCHAR` | Yes | Official statistical/administrative identifier (e.g. German AGS `"09162000"`, French INSEE `"75056"`, NUTS code). |
 | `center_lat` | `DOUBLE` | Yes | Resolved representative center latitude (priority: `admin_centre` > `label`). |
 | `center_lon` | `DOUBLE` | Yes | Resolved representative center longitude (priority: `admin_centre` > `label`). |
+| `admin_centre_osm_type` | `VARCHAR` | Yes | OSM entity type of the administrative center member (`node`). |
+| `admin_centre_osm_id` | `BIGINT` | Yes | Numeric OSM identifier of the administrative center member node. |
+| `admin_centre_source_id` | `VARCHAR` | Yes | Canonical OSM source identifier (e.g. `osm:node/107775`). |
+| `admin_centre_name` | `VARCHAR` | Yes | Canonical name of the administrative center node. |
+| `admin_centre_names_json` | `VARCHAR` | Yes | JSON string of multilingual translations (`name:*`) of the administrative center node. |
+| `admin_centre_wikidata` | `VARCHAR` | Yes | Wikidata identifier of the administrative center node (e.g. `Q84`). |
 | `admin_centre_lat` | `DOUBLE` | Yes | Administrative center / city hall node latitude (`role=admin_centre`). |
 | `admin_centre_lon` | `DOUBLE` | Yes | Administrative center / city hall node longitude (`role=admin_centre`). |
 | `label_lat` | `DOUBLE` | Yes | Cartographic label node latitude (`role=label`). |
@@ -194,10 +200,16 @@ COPY (
         COALESCE(json_extract_string(properties, '$.de:amtlicher_gemeindeschluessel'), json_extract_string(properties, '$.ref:INSEE'), json_extract_string(properties, '$.ref'), json_extract_string(properties, '$.de:regionalschluessel')) AS ref,
         TRY_CAST(json_extract_string(properties, '$.center_lat') AS DOUBLE) AS center_lat,
         TRY_CAST(json_extract_string(properties, '$.center_lon') AS DOUBLE) AS center_lon,
-        TRY_CAST(json_extract_string(properties, '$.admin_centre:lat') AS DOUBLE) AS admin_centre_lat,
-        TRY_CAST(json_extract_string(properties, '$.admin_centre:lon') AS DOUBLE) AS admin_centre_lon,
-        TRY_CAST(json_extract_string(properties, '$.label:lat') AS DOUBLE) AS label_lat,
-        TRY_CAST(json_extract_string(properties, '$.label:lon') AS DOUBLE) AS label_lon,
+        COALESCE(json_extract_string(properties, '$.admin_centre:osm_type'), json_extract_string(properties, '$.admin_centre_osm_type')) AS admin_centre_osm_type,
+        TRY_CAST(COALESCE(json_extract_string(properties, '$.admin_centre:osm_id'), json_extract_string(properties, '$.admin_centre_osm_id')) AS BIGINT) AS admin_centre_osm_id,
+        COALESCE(json_extract_string(properties, '$.admin_centre:source_id'), json_extract_string(properties, '$.admin_centre_source_id')) AS admin_centre_source_id,
+        COALESCE(json_extract_string(properties, '$.admin_centre:name'), json_extract_string(properties, '$.admin_centre_name')) AS admin_centre_name,
+        COALESCE(json_extract_string(properties, '$.admin_centre:names_json'), json_extract_string(properties, '$.admin_centre_names_json')) AS admin_centre_names_json,
+        COALESCE(json_extract_string(properties, '$.admin_centre:wikidata'), json_extract_string(properties, '$.admin_centre_wikidata')) AS admin_centre_wikidata,
+        TRY_CAST(COALESCE(json_extract_string(properties, '$.admin_centre:lat'), json_extract_string(properties, '$.admin_centre_lat')) AS DOUBLE) AS admin_centre_lat,
+        TRY_CAST(COALESCE(json_extract_string(properties, '$.admin_centre:lon'), json_extract_string(properties, '$.admin_centre_lon')) AS DOUBLE) AS admin_centre_lon,
+        TRY_CAST(COALESCE(json_extract_string(properties, '$.label:lat'), json_extract_string(properties, '$.label_lat')) AS DOUBLE) AS label_lat,
+        TRY_CAST(COALESCE(json_extract_string(properties, '$.label:lon'), json_extract_string(properties, '$.label_lon')) AS DOUBLE) AS label_lon,
         ST_XMin(geom) AS bbox_minx,
         ST_YMin(geom) AS bbox_miny,
         ST_XMax(geom) AS bbox_maxx,

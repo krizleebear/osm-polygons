@@ -24,6 +24,7 @@ import sys
 import json
 import argparse
 import subprocess
+import urllib.parse
 
 # National mainland relations that must be preserved as admin_level=2
 MAINLAND_RELATION_IDS = {
@@ -176,7 +177,7 @@ def extract_relation_centres(admin_pbf_path):
     if not needed_nodes:
         return {}
 
-    node_coords = {}
+    node_data = {}
     try:
         proc_node = subprocess.Popen(
             ['osmium', 'cat', admin_pbf_path, '-f', 'opl', '-t', 'node'],
@@ -194,6 +195,7 @@ def extract_relation_centres(admin_pbf_path):
                 continue
             if node_id in needed_nodes:
                 lon, lat = None, None
+                tags = {}
                 for p in parts:
                     if p.startswith('x'):
                         try:
@@ -205,8 +207,43 @@ def extract_relation_centres(admin_pbf_path):
                             lat = float(p[1:])
                         except ValueError:
                             pass
+                    elif p.startswith('T'):
+                        raw_tags = p[1:]
+                        if raw_tags:
+                            for tag_pair in raw_tags.split(','):
+                                if '=' in tag_pair:
+                                    k, v = tag_pair.split('=', 1)
+                                    tags[urllib.parse.unquote(k)] = urllib.parse.unquote(v)
                 if lon is not None and lat is not None:
-                    node_coords[node_id] = (lon, lat)
+                    # Canonical name with fallback
+                    name = tags.get("name")
+                    if not name or str(name).strip() == "" or str(name).lower() == "null":
+                        fallback = tags.get("name:en") or tags.get("official_name")
+                        name = str(fallback).strip() if fallback and str(fallback).strip() else None
+                    else:
+                        name = str(name).strip()
+
+                    # Multilingual name:* tags
+                    names = {k: str(v).strip() for k, v in tags.items() if k.startswith("name:") and v and str(v).strip()}
+                    names_json = json.dumps(names, ensure_ascii=False) if names else None
+
+                    # Wikidata tag
+                    wikidata = tags.get("wikidata")
+                    if wikidata:
+                        wikidata = str(wikidata).strip()
+                        if wikidata.lower() in ("none", "null", ""):
+                            wikidata = None
+
+                    node_data[node_id] = {
+                        "lon": lon,
+                        "lat": lat,
+                        "osm_type": "node",
+                        "osm_id": node_id,
+                        "source_id": f"osm:node/{node_id}",
+                        "name": name,
+                        "names_json": names_json,
+                        "wikidata": wikidata,
+                    }
         proc_node.wait()
     except Exception as e:
         sys.stderr.write(f"Warning: Failed to extract node coordinates from {admin_pbf_path}: {e}\n")
@@ -217,12 +254,12 @@ def extract_relation_centres(admin_pbf_path):
         res = {}
         if 'admin_centre_id' in members:
             nid = members['admin_centre_id']
-            if nid in node_coords:
-                res['admin_centre'] = node_coords[nid]
+            if nid in node_data:
+                res['admin_centre'] = node_data[nid]
         if 'label_id' in members:
             nid = members['label_id']
-            if nid in node_coords:
-                res['label'] = node_coords[nid]
+            if nid in node_data:
+                res['label'] = node_data[nid]
         if res:
             resolved[rel_id] = res
 
@@ -433,24 +470,50 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
         if raw_level in ("5", "6", "7") and "admin_level_mapped" not in props:
             props["admin_level_mapped"] = "4"
 
-    # Task 10: Centerpoint & Label coordinates enrichment (SPEC_ADMINISTRATIVE_CENTERS.md)
+    # Task 10: Centerpoint & Label coordinates and metadata enrichment (SPEC_ADMINISTRATIVE_CENTERS.md)
     if osm_id_num is not None and relation_centres and osm_id_num in relation_centres:
         centres = relation_centres[osm_id_num]
         if "admin_centre" in centres:
-            c_lon, c_lat = centres["admin_centre"]
-            props["admin_centre:lat"] = c_lat
-            props["admin_centre:lon"] = c_lon
+            c = centres["admin_centre"]
+            if isinstance(c, dict):
+                c_lon, c_lat = c["lon"], c["lat"]
+                props["admin_centre:lat"] = c_lat
+                props["admin_centre:lon"] = c_lon
+                props["admin_centre:osm_type"] = c.get("osm_type", "node")
+                if c.get("osm_id") is not None:
+                    props["admin_centre:osm_id"] = c["osm_id"]
+                if c.get("source_id"):
+                    props["admin_centre:source_id"] = c["source_id"]
+                if c.get("name"):
+                    props["admin_centre:name"] = c["name"]
+                if c.get("names_json"):
+                    props["admin_centre:names_json"] = c["names_json"]
+                if c.get("wikidata"):
+                    props["admin_centre:wikidata"] = c["wikidata"]
+            else:
+                c_lon, c_lat = c
+                props["admin_centre:lat"] = c_lat
+                props["admin_centre:lon"] = c_lon
+
         if "label" in centres:
-            l_lon, l_lat = centres["label"]
+            l = centres["label"]
+            if isinstance(l, dict):
+                l_lon, l_lat = l["lon"], l["lat"]
+            else:
+                l_lon, l_lat = l
             props["label:lat"] = l_lat
             props["label:lon"] = l_lon
 
         if "admin_centre" in centres:
-            props["center_lat"] = centres["admin_centre"][1]
-            props["center_lon"] = centres["admin_centre"][0]
+            c = centres["admin_centre"]
+            c_lon, c_lat = (c["lon"], c["lat"]) if isinstance(c, dict) else (c[0], c[1])
+            props["center_lat"] = c_lat
+            props["center_lon"] = c_lon
         elif "label" in centres:
-            props["center_lat"] = centres["label"][1]
-            props["center_lon"] = centres["label"][0]
+            l = centres["label"]
+            l_lon, l_lat = (l["lon"], l["lat"]) if isinstance(l, dict) else (l[0], l[1])
+            props["center_lat"] = l_lat
+            props["center_lon"] = l_lon
 
     # Task 11: Parent-child relationship enrichment
     if osm_id_num is not None and parent_mapping:
@@ -485,6 +548,7 @@ class StreamProcessor:
         self.count_total = 0
         self.count_with_center = 0
         self.count_with_admin_centre = 0
+        self.count_with_admin_centre_name = 0
         self.count_with_label = 0
         self.count_synthesized = 0
         self.count_with_parent = 0
@@ -513,6 +577,8 @@ class StreamProcessor:
             self.count_with_center += 1
         if "admin_centre:lat" in props:
             self.count_with_admin_centre += 1
+        if "admin_centre:name" in props:
+            self.count_with_admin_centre_name += 1
         if "label:lat" in props:
             self.count_with_label += 1
         if "parent_osm_id" in props:
@@ -615,7 +681,7 @@ class StreamProcessor:
         sys.stderr.write(f" filter_polygons Execution Summary{label}\n")
         sys.stderr.write(f" Total Features Emitted:    {self.count_total:,}\n")
         sys.stderr.write(f" With Center Coordinates:   {self.count_with_center:,} ({pct:.1f}%)\n")
-        sys.stderr.write(f"   - From admin_centre:     {self.count_with_admin_centre:,}\n")
+        sys.stderr.write(f"   - From admin_centre:     {self.count_with_admin_centre:,} (named: {self.count_with_admin_centre_name:,})\n")
         sys.stderr.write(f"   - From label:            {self.count_with_label:,}\n")
         sys.stderr.write(f" With Parent Relation:      {self.count_with_parent:,} ({parent_pct:.1f}%)\n")
         if self.count_synthesized > 0:

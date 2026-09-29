@@ -5,7 +5,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-from filter_polygons import process_feature, filter_features
+from filter_polygons import process_feature, filter_features, extract_relation_centres
 
 # Minimal valid polygon geometry shared by most fixtures (real osmium export always emits geometry).
 POLY_GEOM = {"type": "Polygon", "coordinates": [[[11.0, 48.0], [11.1, 48.0], [11.1, 48.1], [11.0, 48.0]]]}
@@ -237,6 +237,86 @@ class TestFilterPolygons(unittest.TestCase):
         # Center coordinates should take admin_centre priority
         self.assertEqual(props["center_lat"], 48.1374)
         self.assertEqual(props["center_lon"], 11.5755)
+
+    def test_admin_centre_metadata_enrichment(self):
+        # Greater London (relation 175342) linked to London (node 107775) per Issue #9
+        feature = feat({"@type": "relation", "id": 175342, "admin_level": "5", "name": "Greater London"})
+        relation_centres = {
+            175342: {
+                "admin_centre": {
+                    "osm_type": "node",
+                    "osm_id": 107775,
+                    "source_id": "osm:node/107775",
+                    "name": "London",
+                    "names_json": '{"name:en": "London", "name:fr": "Londres", "name:de": "London"}',
+                    "wikidata": "Q84",
+                    "lon": -0.1276,
+                    "lat": 51.5074
+                }
+            }
+        }
+        res = process_feature(feature, relation_centres=relation_centres)
+        self.assertIsNotNone(res)
+        props = res["properties"]
+        self.assertEqual(props["admin_centre:lat"], 51.5074)
+        self.assertEqual(props["admin_centre:lon"], -0.1276)
+        self.assertEqual(props["admin_centre:osm_type"], "node")
+        self.assertEqual(props["admin_centre:osm_id"], 107775)
+        self.assertEqual(props["admin_centre:source_id"], "osm:node/107775")
+        self.assertEqual(props["admin_centre:name"], "London")
+        self.assertEqual(props["admin_centre:names_json"], '{"name:en": "London", "name:fr": "Londres", "name:de": "London"}')
+        self.assertEqual(props["admin_centre:wikidata"], "Q84")
+        self.assertEqual(props["center_lat"], 51.5074)
+        self.assertEqual(props["center_lon"], -0.1276)
+
+    def test_admin_centre_missing_nullable(self):
+        # Relation without admin_centre member: admin_centre properties must not be present
+        feature = feat({"@type": "relation", "id": 99999, "admin_level": "8", "name": "Some Forest Boundary"})
+        res = process_feature(feature, relation_centres={})
+        self.assertIsNotNone(res)
+        props = res["properties"]
+        for key in ("admin_centre:lat", "admin_centre:lon", "admin_centre:osm_type",
+                    "admin_centre:osm_id", "admin_centre:source_id", "admin_centre:name",
+                    "admin_centre:names_json", "admin_centre:wikidata"):
+            self.assertNotIn(key, props)
+
+    def test_extract_relation_centres_opl_parsing(self):
+        from unittest.mock import patch, MagicMock
+
+        # Synthetic OPL lines
+        # Relation with admin_centre node 107775
+        opl_relations = "r175342 v1 dV c1 t1 i1 u1 Tboundary=administrative Mn107775@admin_centre\n"
+        # Node with percent-encoded name and tags
+        opl_nodes = "n107775 v1 dV c1 t1 i1 u1 Tname=London,name:en=London,name:fr=Londres,name:de=London,wikidata=Q84 x-0.1276 y51.5074\n"
+
+        def mock_popen(cmd, *args, **kwargs):
+            proc = MagicMock()
+            if "relation" in cmd:
+                proc.stdout = opl_relations.splitlines(keepends=True)
+            elif "node" in cmd:
+                proc.stdout = opl_nodes.splitlines(keepends=True)
+            else:
+                proc.stdout = []
+            proc.wait.return_value = 0
+            return proc
+
+        with patch("os.path.exists", return_value=True):
+            with patch("subprocess.Popen", side_effect=mock_popen):
+                centres = extract_relation_centres("/fake/admin.pbf")
+
+        self.assertIn(175342, centres)
+        ac = centres[175342]["admin_centre"]
+        self.assertEqual(ac["osm_type"], "node")
+        self.assertEqual(ac["osm_id"], 107775)
+        self.assertEqual(ac["source_id"], "osm:node/107775")
+        self.assertEqual(ac["name"], "London")
+        self.assertEqual(ac["wikidata"], "Q84")
+        self.assertEqual(ac["lon"], -0.1276)
+        self.assertEqual(ac["lat"], 51.5074)
+        names = json.loads(ac["names_json"])
+        self.assertEqual(names["name:en"], "London")
+        self.assertEqual(names["name:fr"], "Londres")
+        self.assertEqual(names["name:de"], "London")
 
     def test_label_fallback_when_no_admin_centre(self):
         # Feature with only label coordinate
