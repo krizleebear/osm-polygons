@@ -20,7 +20,7 @@ In Downstream-Geocodern (`osm-geocoder`) scheitert die Point-in-Polygon (PIP) Au
 
 ### Lösungsweg: Entkoppelung Upstream / Downstream
 Um die Upstream-Pipeline in `osm-polygons` schlank, robust und performant zu halten:
-- **`osm-polygons` (Upstream):** Extrahiert alle bebauten `landuse`-Flächen (`residential`, `commercial`, `retail`) und stellt sie als standardisiertes, ZSTD-komprimiertes GeoParquet Companion-Dataset (`osm-landuse-{CC}.parquet`) bereit.
+- **`osm-polygons` (Upstream):** Extrahiert alle bebauten Siedlungs- und Ortsflächen (`residential`, `commercial`, `retail`, `farmyard`, `industrial`, `village_green`, `religious`, `construction`, `institutional`) und stellt sie als standardisiertes, ZSTD-komprimiertes GeoParquet Companion-Dataset (`osm-landuse-{CC}.parquet`) bereit.
 - **`osm-geocoder` (Downstream):** Verschneidet und partitioniert die Landuse-Polygone mit den `osm-places`-Punkten und `admin-polygons`-Gemeindegrenzen flexibel zur Geocoding-Laufzeit (z. B. via Voronoi-Diagramm).
 
 ---
@@ -34,7 +34,7 @@ Landuse-Polygone werden bewusst als eigenständiges Companion-Dataset geführt:
 | **`admin-polygons-{CC}.parquet`** | Amtliche Grenzen & Gebietskörperschaften | `Polygon / MultiPolygon` | ~19.000 |
 | **`osm-places-{CC}.parquet`** | Benannte Siedlungspunkte / Ortskerne | `Point` | ~150.000 |
 | **`osm-facilities-{CC}.parquet`** | POIs, Infrastruktur & Navigations-Zugänge | `Point, Line, Polygon` | ~15.000 |
-| **`osm-landuse-{CC}.parquet`** | Bebaute Siedlungsflächen (`residential`, ...) | `Polygon / MultiPolygon` | ~400.000 |
+| **`osm-landuse-{CC}.parquet`** | Bebaute Siedlungsflächen (`residential`, `farmyard`, ...) | `Polygon / MultiPolygon` | ~450.000 |
 
 **Vorteile der Trennung:**
 1. **Keine Aufblähung von `admin-polygons`:** `admin-polygons` bleibt 100 % amtlich und schlank (19k statt 450k Zeilen in DE).
@@ -53,7 +53,7 @@ Das Dataset folgt der OGC GeoParquet 1.1 Spezifikation (CRS `OGC:CRS84` / WGS84)
 | `country_code` | `VARCHAR` | Nein | ISO 3166-1 alpha-2 Code (`DE`, `FR`, ...) |
 | `osm_id` | `BIGINT` | Nein | Numerische OSM-ID des Ways oder der Relation |
 | `osm_type` | `VARCHAR` | Nein | `way` oder `relation` |
-| `landuse` | `VARCHAR` | Nein | Landuse-Klasse (`residential`, `commercial`, `retail`) |
+| `landuse` | `VARCHAR` | Nein | Landuse-Klasse (`residential`, `commercial`, `retail`, `farmyard`, ...) |
 | `name` | `VARCHAR` | Ja | Name des Gebiets (falls in OSM erfasst, sonst `NULL`) |
 | `name_en` | `VARCHAR` | Ja | Englischer Name (falls vorhanden) |
 | `bbox_minx` | `DOUBLE` | Nein | Bounding Box Min Lon |
@@ -72,8 +72,8 @@ Gemäß Rule 28 der `AGENTS.md` (1-Pass PBF Extraction Invariant) wird der schwe
 
 ```python
 LANDUSE_FILTER_RULES = [
-    "w/landuse=residential,commercial,retail",
-    "r/landuse=residential,commercial,retail",
+    "w/landuse=residential,commercial,retail,farmyard,industrial,village_green,religious,construction,institutional",
+    "r/landuse=residential,commercial,retail,farmyard,industrial,village_green,religious,construction,institutional",
 ]
 ```
 
@@ -85,7 +85,7 @@ LANDUSE_FILTER_RULES = [
 ### 4.2 Streaming-Filter (`scripts/filter_landuse.py`)
 Ein speichereffizientes Python-Streaming-Skript:
 - Liest GeoJSON-Features aus `stdin`.
-- Filtert strikt auf `landuse IN ('residential', 'commercial', 'retail')`.
+- Filtert strikt auf die Whitelist (`residential`, `commercial`, `retail`, `farmyard`, `industrial`, `village_green`, `religious`, `construction`, `institutional`).
 - Verwirft fehlerhafte oder nicht-polygonale Geometrien (`Point`, `LineString`).
 - Bereinigt Metadaten-Tags (`source`, `created_by`, `osm_version`, etc.).
 - Schreibt formatierte Zeilen als `.landuse.jsonl` (gemäß Rule 33 der `AGENTS.md`).

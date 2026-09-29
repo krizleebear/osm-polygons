@@ -2,16 +2,27 @@
 """
 Filter and structure OSM Landuse GeoJSON stream for osm-landuse.parquet export.
 
-Extracts built-up landuse areas (residential, commercial, retail) as Polygon and
-MultiPolygon geometries, cleans metadata tags, extracts names and produces a
-flattened JSONL stream.
+Extracts built-up and settlement landuse areas (residential, commercial, retail,
+farmyard, industrial, village_green, religious, construction, institutional) as
+Polygon and MultiPolygon geometries, cleans metadata tags, extracts names and
+produces a flattened JSONL stream.
 """
 
 import argparse
 import json
 import sys
 
-LANDUSE_WHITELIST = {"residential", "commercial", "retail"}
+LANDUSE_WHITELIST = {
+    "residential",
+    "commercial",
+    "retail",
+    "farmyard",
+    "industrial",
+    "village_green",
+    "religious",
+    "construction",
+    "institutional",
+}
 
 EXCLUDED_TAG_KEYS = {
     "source", "created_by", "note", "fixme", "FIXME", "check_date",

@@ -18,7 +18,7 @@ class TestExtractRegion(unittest.TestCase):
         self.assertTrue(len(PLACES_FILTER_RULES) >= 1)
         self.assertTrue(len(LANDUSE_FILTER_RULES) >= 1)
         self.assertIn("boundary=administrative", ADMIN_FILTER_RULES[0])
-        self.assertIn("w/landuse=residential,commercial,retail", LANDUSE_FILTER_RULES[0])
+        self.assertTrue(any("residential" in r and "farmyard" in r for r in LANDUSE_FILTER_RULES))
 
     def test_missing_input_pbf_raises(self):
         with self.assertRaises(FileNotFoundError):

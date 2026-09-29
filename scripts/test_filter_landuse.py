@@ -92,19 +92,62 @@ class TestFilterLanduse(unittest.TestCase):
         self.assertEqual(res["name"], "Commercial Center")
         self.assertEqual(res["name_en"], "Commercial Center")
 
-    def test_reject_non_whitelisted_landuse(self):
+    def test_process_valid_farmyard_way(self):
         feat = {
             "type": "Feature",
+            "id": 108244158,
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]
+                "coordinates": [
+                    [[12.419, 48.780], [12.421, 48.780], [12.421, 48.781], [12.419, 48.781], [12.419, 48.780]]
+                ]
             },
             "properties": {
-                "@id": 999,
-                "landuse": "forest"
+                "@id": 108244158,
+                "@type": "way",
+                "landuse": "farmyard",
+                "name": "Kleinwissing",
             }
         }
-        self.assertIsNone(process_landuse_feature(feat))
+        res = process_landuse_feature(feat, continent="europe", country_code="DE")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["osm_id"], 108244158)
+        self.assertEqual(res["osm_type"], "way")
+        self.assertEqual(res["landuse"], "farmyard")
+        self.assertEqual(res["name"], "Kleinwissing")
+
+    def test_process_valid_other_settlement_types(self):
+        for lu in ("industrial", "village_green", "religious", "construction", "institutional", "retail"):
+            feat = {
+                "type": "Feature",
+                "id": 555,
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]
+                },
+                "properties": {
+                    "@id": 555,
+                    "landuse": lu,
+                }
+            }
+            res = process_landuse_feature(feat, continent="europe", country_code="DE")
+            self.assertIsNotNone(res, f"Expected {lu} to be accepted")
+            self.assertEqual(res["landuse"], lu)
+
+    def test_reject_non_whitelisted_landuse(self):
+        for non_whitelisted in ("forest", "farmland", "meadow", "grass", "quarry", "landfill", "orchard"):
+            feat = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]
+                },
+                "properties": {
+                    "@id": 999,
+                    "landuse": non_whitelisted
+                }
+            }
+            self.assertIsNone(process_landuse_feature(feat), f"Expected {non_whitelisted} to be rejected")
 
     def test_reject_non_polygonal_geometry(self):
         point_feat = {

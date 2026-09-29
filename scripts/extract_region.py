@@ -99,8 +99,8 @@ FACILITIES_FILTER_RULES = [
 ]
 
 LANDUSE_FILTER_RULES = [
-    "w/landuse=residential,commercial,retail",
-    "r/landuse=residential,commercial,retail",
+    "w/landuse=residential,commercial,retail,farmyard,industrial,village_green,religious,construction,institutional",
+    "r/landuse=residential,commercial,retail,farmyard,industrial,village_green,religious,construction,institutional",
 ]
 
 
