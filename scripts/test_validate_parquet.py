@@ -79,6 +79,43 @@ class TestValidateParquet(unittest.TestCase):
         self.assertEqual(exit_code, 0)
 
 
+    @patch("subprocess.run")
+    def test_inspect_parquet_file_corrupt_names(self, mock_run):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = ('[{"total_rows": 80, "l2_count": 1, "null_geom_count": 0, "dupe_feature_count": 0, '
+                            '"ac_name_corrupt_count": 3, "ac_names_corrupt_count": 4, '
+                            '"populated_levels": [2, 4], "meta_keys": ["source"]}]')
+        mock_run.return_value = mock_proc
+
+        res = inspect_parquet_file("path/to/admin-polygons-JP.parquet")
+        self.assertEqual(res["ac_name_corrupt_count"], 3)
+        self.assertEqual(res["ac_names_corrupt_count"], 4)
+
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_warns_on_corrupt_admin_centre_names(self, mock_inspect, mock_find):
+        mock_find.return_value = ["admin-polygons-JP.parquet"]
+        mock_inspect.side_effect = [
+            {"country_code": "JP", "path": "admin-polygons-JP.parquet", "error": None,
+             "total_rows": 100, "l2_count": 1, "null_geom_count": 0, "dupe_feature_count": 0,
+             "ac_name_corrupt_count": 7, "ac_names_corrupt_count": 5,
+             "populated_levels": [2, 4], "meta_keys": ["source", "license", "attribution", "country_code", "exported_at"]},
+        ]
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        # Encoding corruption must be reported as a non-breaking warning (rule: transparent audits).
+        self.assertIn("suspected OPL encoding corruption", output)
+        self.assertIn("Corrupted Admin-Centre Names:   1", output)
+        self.assertEqual(exit_code, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -8,6 +8,8 @@ admin-polygons-*.parquet files:
   2. Level 2 National Boundary Completeness Check
   3. Feature Deduplication Check (no duplicate osm_type + osm_id in a file)
   4. Empty Datasets & NULL Geometry Integrity Check
+  5. Admin-Centre Name Encoding Corruption Check (raw '%' / control characters,
+     i.e. OPL escape sequences that were not decoded properly)
 
 Outputs human-readable diagnostic tables and native Azure DevOps warning annotations
 (##vso[task.logissue type=warning]...).
@@ -54,6 +56,16 @@ def inspect_parquet_file(file_path):
         count(*) AS total_rows,
         count(*) FILTER (WHERE admin_level = 2) AS l2_count,
         count(*) FILTER (WHERE geom IS NULL) AS null_geom_count,
+        count(*) FILTER (
+            WHERE admin_centre_name IS NOT NULL
+              AND (position('%' IN admin_centre_name) > 0
+                   OR regexp_matches(admin_centre_name, '[[:cntrl:]]'))
+        ) AS ac_name_corrupt_count,
+        count(*) FILTER (
+            WHERE admin_centre_names_json IS NOT NULL
+              AND (position('%' IN admin_centre_names_json) > 0
+                   OR regexp_matches(admin_centre_names_json, '[[:cntrl:]]'))
+        ) AS ac_names_corrupt_count,
         (SELECT count(*) FROM (
             SELECT osm_type, osm_id, count(*) 
             FROM read_parquet('{file_path}') 
@@ -75,6 +87,8 @@ def inspect_parquet_file(file_path):
             "l2_count": 0,
             "null_geom_count": 0,
             "dupe_feature_count": 0,
+            "ac_name_corrupt_count": 0,
+            "ac_names_corrupt_count": 0,
             "populated_levels": [],
             "meta_keys": [],
         }
@@ -92,6 +106,8 @@ def inspect_parquet_file(file_path):
             "l2_count": int(row.get("l2_count", 0)),
             "null_geom_count": int(row.get("null_geom_count", 0)),
             "dupe_feature_count": int(row.get("dupe_feature_count", 0)),
+            "ac_name_corrupt_count": int(row.get("ac_name_corrupt_count", 0)),
+            "ac_names_corrupt_count": int(row.get("ac_names_corrupt_count", 0)),
             "populated_levels": [int(x) for x in row.get("populated_levels", []) if x is not None],
             "meta_keys": [str(x) for x in row.get("meta_keys", []) if x is not None],
         }
@@ -104,6 +120,8 @@ def inspect_parquet_file(file_path):
             "l2_count": 0,
             "null_geom_count": 0,
             "dupe_feature_count": 0,
+            "ac_name_corrupt_count": 0,
+            "ac_names_corrupt_count": 0,
             "populated_levels": [],
             "meta_keys": [],
         }
@@ -147,6 +165,7 @@ def validate_parquets(base_dir, fail_on_error=False):
     duplicate_features = []
     empty_files = []
     null_geoms = []
+    corrupt_names = []
     missing_metadata = []
     errors = []
     
@@ -187,6 +206,13 @@ def validate_parquets(base_dir, fail_on_error=False):
             print(f"##vso[task.logissue type=warning]Country {cc} ({path}) contains {metrics['null_geom_count']} record(s) with NULL geometry!")
             null_geoms.append((cc, path, metrics["null_geom_count"]))
 
+        # 5. Admin-centre name encoding corruption (undecoded OPL escapes)
+        ac_name_bad = metrics.get("ac_name_corrupt_count", 0)
+        ac_names_bad = metrics.get("ac_names_corrupt_count", 0)
+        if ac_name_bad or ac_names_bad:
+            print(f"##vso[task.logissue type=warning]Country {cc} ({path}) has {ac_name_bad} admin_centre_name / {ac_names_bad} admin_centre_names_json value(s) with suspected OPL encoding corruption (raw '%' or control characters)!")
+            corrupt_names.append((cc, path, ac_name_bad, ac_names_bad))
+
         # Check required Parquet metadata keys
         required_meta = {"source", "license", "attribution", "country_code", "exported_at"}
         present_meta = set(metrics.get("meta_keys", []))
@@ -207,6 +233,7 @@ def validate_parquets(base_dir, fail_on_error=False):
     print(f" Duplicate Features Detected:    {len(duplicate_features)}")
     print(f" Empty Files (0 rows):           {len(empty_files)}")
     print(f" NULL Geometries Detected:       {len(null_geoms)}")
+    print(f" Corrupted Admin-Centre Names:   {len(corrupt_names)}")
     print(f" Missing Metadata Headers:       {len(missing_metadata)}")
     print(f" Extraction Errors:              {len(errors)}")
     print("=" * 60)
@@ -218,6 +245,7 @@ def validate_parquets(base_dir, fail_on_error=False):
         or len(duplicate_features) > 0
         or len(empty_files) > 0
         or len(null_geoms) > 0
+        or len(corrupt_names) > 0
         or len(missing_metadata) > 0
         or len(errors) > 0
     )
