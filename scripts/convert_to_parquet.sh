@@ -51,11 +51,25 @@ trap 'rm -f "$TMP_SQL"' EXIT
 
 EXPORTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+DIRNAME="$(dirname "$INPUT_GEOJSONSEQ")"
+BASENAME="$(basename "$INPUT_GEOJSONSEQ")"
+PREFIX="${BASENAME%%.*}"
+META_FILE="${DIRNAME}/${PREFIX}.meta.json"
+
+OSM_DATA_TIMESTAMP="${4:-${OSM_DATA_TIMESTAMP:-}}"
+if [ -z "$OSM_DATA_TIMESTAMP" ] && [ -f "$META_FILE" ]; then
+    OSM_DATA_TIMESTAMP=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1])).get('osm_data_timestamp', ''))" "$META_FILE" 2>/dev/null || true)
+fi
+if [ -z "$OSM_DATA_TIMESTAMP" ]; then
+    OSM_DATA_TIMESTAMP="$EXPORTED_AT"
+fi
+
 sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
     -e "s|__INPUT_GEOJSONSEQ__|${INPUT_GEOJSONSEQ}|g" \
     -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
     -e "s|__COUNTRIES_JSON__|${COUNTRIES_JSON}|g" \
     -e "s|__EXPORTED_AT__|${EXPORTED_AT}|g" \
+    -e "s|__OSM_DATA_TIMESTAMP__|${OSM_DATA_TIMESTAMP}|g" \
     "$SQL_TEMPLATE" > "$TMP_SQL"
 
 duckdb < "$TMP_SQL"
@@ -105,7 +119,8 @@ if [ -n "$CC_REMAP" ]; then
         'schema_url': 'https://github.com/krizleebear/osm-polygons',
         'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
         'country_code': '${NEW_CC}',
-        'exported_at': '${EXPORTED_AT}'
+        'exported_at': '${EXPORTED_AT}',
+        'osm_data_timestamp': '${OSM_DATA_TIMESTAMP}'
     }
   );
   "

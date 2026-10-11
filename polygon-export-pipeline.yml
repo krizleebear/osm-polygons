@@ -942,6 +942,7 @@ stages:
           PLACES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl"
           FACILITIES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl"
           LANDUSE_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).landuse.jsonl"
+          META_JSON="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).meta.json"
 
           python3 scripts/extract_region.py \
             --input-pbf "${INPUT_PBF}" \
@@ -951,6 +952,7 @@ stages:
             --places-out "${PLACES_JSONL}" \
             --facilities-out "${FACILITIES_JSONL}" \
             --landuse-out "${LANDUSE_JSONL}" \
+            --meta-out "${META_JSON}" \
             ${REF_ARG}
 
           if [ -f "validation.json" ]; then
@@ -1418,6 +1420,12 @@ stages:
             [ -n "$cc" ] || continue
             out="parquet/admin-polygons-${cc}.parquet"
             echo "Writing $out ..."
+            country_osm_ts=$(duckdb -no-init -noheader -list -c "
+              SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
+              FROM parquet_kv_metadata('temp_parquet/*.parquet')
+              WHERE key = 'osm_data_timestamp';
+            " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
+            [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
             duckdb -c "
             LOAD spatial;
             CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
@@ -1442,7 +1450,8 @@ stages:
                 'schema_url': 'https://github.com/krizleebear/osm-polygons',
                 'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
                 'country_code': '${cc}',
-                'exported_at': '${EXPORTED_AT}'
+                'exported_at': '${EXPORTED_AT}',
+                'osm_data_timestamp': '${country_osm_ts}'
               }
             );
             "
@@ -1463,6 +1472,12 @@ stages:
               [ -n "$cc" ] || continue
               pout="parquet/osm-places-${cc}.parquet"
               echo "Writing $pout ..."
+              country_osm_ts=$(duckdb -no-init -noheader -list -c "
+                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
+                FROM parquet_kv_metadata('temp_places_parquet/*.parquet')
+                WHERE key = 'osm_data_timestamp';
+              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
+              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
               duckdb -c "
               LOAD spatial;
               CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
@@ -1487,7 +1502,8 @@ stages:
                   'schema_url': 'https://github.com/krizleebear/osm-polygons',
                   'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
                   'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}'
+                  'exported_at': '${EXPORTED_AT}',
+                  'osm_data_timestamp': '${country_osm_ts}'
                 }
               );
               "
@@ -1511,6 +1527,12 @@ stages:
               [ -n "$cc" ] || continue
               fout="parquet/osm-facilities-${cc}.parquet"
               echo "Writing $fout ..."
+              country_osm_ts=$(duckdb -no-init -noheader -list -c "
+                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
+                FROM parquet_kv_metadata('temp_facilities_parquet/*.parquet')
+                WHERE key = 'osm_data_timestamp';
+              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
+              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
               duckdb -c "
               LOAD spatial;
               CREATE TABLE fcombined AS SELECT * FROM read_parquet('temp_facilities_parquet/*.parquet');
@@ -1535,7 +1557,8 @@ stages:
                   'schema_url': 'https://github.com/krizleebear/osm-polygons',
                   'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
                   'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}'
+                  'exported_at': '${EXPORTED_AT}',
+                  'osm_data_timestamp': '${country_osm_ts}'
                 }
               );
               "
@@ -1557,6 +1580,12 @@ stages:
               [ -n "$cc" ] || continue
               lout="parquet/osm-landuse-${cc}.parquet"
               echo "Writing $lout ..."
+              country_osm_ts=$(duckdb -no-init -noheader -list -c "
+                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
+                FROM parquet_kv_metadata('temp_landuse_parquet/*.parquet')
+                WHERE key = 'osm_data_timestamp';
+              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
+              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
               duckdb -c "
               LOAD spatial;
               CREATE TABLE lcombined AS SELECT * FROM read_parquet('temp_landuse_parquet/*.parquet');
@@ -1581,7 +1610,8 @@ stages:
                   'schema_url': 'https://github.com/krizleebear/osm-polygons',
                   'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
                   'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}'
+                  'exported_at': '${EXPORTED_AT}',
+                  'osm_data_timestamp': '${country_osm_ts}'
                 }
               );
               "

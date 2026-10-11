@@ -214,7 +214,7 @@ def validate_parquets(base_dir, fail_on_error=False):
             corrupt_names.append((cc, path, ac_name_bad, ac_names_bad))
 
         # Check required Parquet metadata keys
-        required_meta = {"source", "license", "attribution", "country_code", "exported_at"}
+        required_meta = {"source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"}
         present_meta = set(metrics.get("meta_keys", []))
         missing_meta = required_meta - present_meta
         if missing_meta:

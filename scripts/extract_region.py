@@ -117,6 +117,45 @@ def run_command(cmd, desc, stdin=None, stdout=None):
     return res
 
 
+def get_pbf_timestamp(pbf_path):
+    """Extract osmosis replication timestamp or file timestamp from PBF header."""
+    try:
+        res = subprocess.run(
+            ["osmium", "fileinfo", "-e", "-g", "header.option.osmosis_replication_timestamp", pbf_path],
+            capture_output=True, text=True, check=False
+        )
+        if res.returncode == 0:
+            ts = res.stdout.strip()
+            if ts:
+                return ts
+    except Exception:
+        pass
+
+    try:
+        res = subprocess.run(
+            ["osmium", "fileinfo", "-j", pbf_path],
+            capture_output=True, text=True, check=False
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            info = json.loads(res.stdout)
+            opts = info.get("header", {}).get("options", {})
+            ts = opts.get("osmosis_replication_timestamp") or opts.get("timestamp")
+            if ts:
+                return str(ts)
+    except Exception:
+        pass
+
+    try:
+        mtime = os.path.getmtime(pbf_path)
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        pass
+
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def extract_region(
     input_pbf,
     country_code,
@@ -125,6 +164,7 @@ def extract_region(
     places_out,
     facilities_out=None,
     landuse_out=None,
+    meta_out=None,
     reference_polygons=None,
     postpass_candidates="scripts/postpass-candidates.json",
     keep_input_pbf=False,
@@ -137,6 +177,21 @@ def extract_region(
     print(f" Region Export Pipeline: {region} ({country_code})")
     print(f" Input PBF:  {input_pbf} ({os.path.getsize(input_pbf) / (1024*1024):.1f} MB)")
     print("=" * 60)
+
+    # Step 0: Extract OSM data timestamp from input PBF before deletion
+    osm_data_timestamp = get_pbf_timestamp(input_pbf)
+    print(f"[EXTRACT] OSM data timestamp from PBF: {osm_data_timestamp}", flush=True)
+    if meta_out:
+        meta_data = {
+            "osm_data_timestamp": osm_data_timestamp,
+            "region": region,
+            "country_code": country_code,
+            "pbf_file": os.path.basename(input_pbf),
+        }
+        with open(meta_out, "w", encoding="utf-8") as f:
+            import json
+            json.dump(meta_data, f, indent=2)
+            f.write("\n")
 
     combined_pbf = f"{region}.combined.pbf"
     admins_pbf = f"{region}.admins.pbf"
@@ -342,6 +397,7 @@ if __name__ == "__main__":
     parser.add_argument("--places-out", required=True, help="Output .places.jsonl file")
     parser.add_argument("--facilities-out", default=None, help="Optional output .facilities.jsonl file")
     parser.add_argument("--landuse-out", default=None, help="Optional output .landuse.jsonl file")
+    parser.add_argument("--meta-out", default=None, help="Optional output .meta.json file")
     parser.add_argument("--reference-polygons", default=None, help="Optional path to reference-polygons.geojsonseq")
     parser.add_argument("--postpass-candidates", default="scripts/postpass-candidates.json", help="Path to candidates JSON")
     parser.add_argument("--keep-input-pbf", action="store_true", default=False, help="Do not delete input PBF")
@@ -356,6 +412,7 @@ if __name__ == "__main__":
         places_out=args.places_out,
         facilities_out=args.facilities_out,
         landuse_out=args.landuse_out,
+        meta_out=args.meta_out,
         reference_polygons=args.reference_polygons,
         postpass_candidates=args.postpass_candidates,
         keep_input_pbf=args.keep_input_pbf,

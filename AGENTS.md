@@ -117,11 +117,11 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
 34. **Explanation Preceding Git Actions Invariant (Explain First, Commit Second):**
     - The agent must always first present a clear, comprehensive explanation of the diagnosis, the rationale, and the exact changes in the visible response text before requesting permission or attempting to execute `git commit`, `git push`, or pipeline triggers. Never trigger permission prompts for Git actions without the user having seen the complete explanatory context first.
 35. **Parquet Provenance & License Metadata Invariant:**
-    - All GeoParquet files produced by export pipelines (`export_parquet.sql`, `export_places.sql`, `export_facilities.sql`) MUST embed standard provenance, copyright, and licensing metadata in the Parquet file footer via DuckDB's `KV_METADATA` option.
+    - All GeoParquet files produced by export pipelines (`export_parquet.sql`, `export_places.sql`, `export_facilities.sql`, `export_landuse.sql`) MUST embed standard provenance, copyright, and licensing metadata in the Parquet file footer via DuckDB's `KV_METADATA` option.
     - Required metadata keys:
       - `source`: `OpenStreetMap`
       - `origin`: `OpenStreetMap (https://www.openstreetmap.org)`
-      - `dataset`: Canonical dataset title (e.g. `OpenStreetMap Administrative Polygons`, `OpenStreetMap Places`, `OpenStreetMap Facilities`)
+      - `dataset`: Canonical dataset title (e.g. `OpenStreetMap Administrative Polygons`, `OpenStreetMap Places`, `OpenStreetMap Facilities`, `OpenStreetMap Landuse`)
       - `attribution`: `© OpenStreetMap contributors`
       - `attribution_url`: `https://www.openstreetmap.org/copyright`
       - `license`: `ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)`
@@ -132,6 +132,7 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
       - `compiler`: Generator project reference (e.g. `osm-polygons (https://github.com/krizleebear/osm-polygons)`)
       - `country_code`: 2-letter ISO code or territory identifier (e.g. `DE`, `US`)
       - `exported_at`: ISO-8601 UTC timestamp (e.g. `YYYY-MM-DDTHH:MM:SSZ`)
+      - `osm_data_timestamp`: ISO-8601 UTC timestamp of OSM PBF replication/data cutoff (e.g. `YYYY-MM-DDTHH:MM:SSZ`)
     - Any intermediate or post-processing re-write of Parquet files (such as country_code remapping) must preserve these metadata keys.
 36. **Devcontainer Git `safe.directory` Whitelist:**
     - The devcontainer bind-mounts the repository at `/app` and mounts the host `~/.gitconfig` **read-only**. Git can therefore abort with `fatal: detected dubious ownership in repository at '/app'`; `git config --global` cannot fix this (read-only host file) and `safe.directory` is intentionally ignored in the repository-local `.git/config`.

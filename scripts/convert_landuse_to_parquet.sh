@@ -51,11 +51,25 @@ trap 'rm -f "$TMP_SQL"' EXIT
 
 EXPORTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+DIRNAME="$(dirname "$INPUT_STREAM")"
+BASENAME="$(basename "$INPUT_STREAM")"
+PREFIX="${BASENAME%%.*}"
+META_FILE="${DIRNAME}/${PREFIX}.meta.json"
+
+OSM_DATA_TIMESTAMP="${4:-${OSM_DATA_TIMESTAMP:-}}"
+if [ -z "$OSM_DATA_TIMESTAMP" ] && [ -f "$META_FILE" ]; then
+    OSM_DATA_TIMESTAMP=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1])).get('osm_data_timestamp', ''))" "$META_FILE" 2>/dev/null || true)
+fi
+if [ -z "$OSM_DATA_TIMESTAMP" ]; then
+    OSM_DATA_TIMESTAMP="$EXPORTED_AT"
+fi
+
 sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
     -e "s|__INPUT_JSONL__|${INPUT_STREAM}|g" \
     -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
     -e "s|__COUNTRIES_JSON__|${COUNTRIES_JSON}|g" \
     -e "s|__EXPORTED_AT__|${EXPORTED_AT}|g" \
+    -e "s|__OSM_DATA_TIMESTAMP__|${OSM_DATA_TIMESTAMP}|g" \
     "$SQL_TEMPLATE" > "$TMP_SQL"
 
 duckdb < "$TMP_SQL"

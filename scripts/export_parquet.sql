@@ -102,7 +102,8 @@ COPY (
         'schema_url': 'https://github.com/krizleebear/osm-polygons',
         'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
         'country_code': '__COUNTRY_CODE__',
-        'exported_at': '__EXPORTED_AT__'
+        'exported_at': '__EXPORTED_AT__',
+        'osm_data_timestamp': '__OSM_DATA_TIMESTAMP__'
     }
 );
 

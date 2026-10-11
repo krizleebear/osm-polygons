@@ -39,6 +39,7 @@ REQUIRED_METADATA_KEYS = (
     "compiler",
     "country_code",
     "exported_at",
+    "osm_data_timestamp",
 )
 
 # Shell variables holding the per-country output paths of the four merges.
@@ -131,6 +132,20 @@ class TestSqlTemplateMetadata(unittest.TestCase):
             '"s|__EXPORTED_AT__|${EXPORTED_AT}|g"', converter,
             "convert_landuse_to_parquet.sh must substitute __EXPORTED_AT__",
         )
+
+    def test_converters_substitute_osm_data_timestamp_placeholder(self):
+        converters = (
+            "scripts/convert_to_parquet.sh",
+            "scripts/convert_places_to_parquet.sh",
+            "scripts/convert_facilities_to_parquet.sh",
+            "scripts/convert_landuse_to_parquet.sh",
+        )
+        for rel in converters:
+            content = read_file(os.path.join(REPO_ROOT, rel))
+            self.assertIn(
+                "__OSM_DATA_TIMESTAMP__", content,
+                f"{rel} must substitute __OSM_DATA_TIMESTAMP__",
+            )
 
 
 if __name__ == "__main__":
