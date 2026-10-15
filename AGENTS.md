@@ -138,6 +138,11 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - The devcontainer bind-mounts the repository at `/app` and mounts the host `~/.gitconfig` **read-only**. Git can therefore abort with `fatal: detected dubious ownership in repository at '/app'`; `git config --global` cannot fix this (read-only host file) and `safe.directory` is intentionally ignored in the repository-local `.git/config`.
     - The whitelist is baked into the devcontainer image via `.devcontainer/Dockerfile` (`git config --system --add safe.directory /app`), effective after the next image rebuild. For sessions running an older image, use a per-invocation override (`git -c safe.directory=/app <command>`) or export `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/app` for the current shell session.
     - Never edit the host-mounted `~/.gitconfig` and never escalate to root (`sudo git config`) to silence this warning (see rule 7).
+37. **Geometric Complexity-Based Simplification Invariant:**
+    - Geometry decimation and simplification must strictly be driven by intrinsic geometric complexity (e.g. vertex count / scale), never by semantic domain categories (`feature_class`, `area_type`). Small features retain full precision regardless of class; complex geometries are simplified progressively to bound file size while preserving topology.
+38. **Spatial JSON Streaming Buffer Headroom Invariant:**
+    - Spatial JSONL/GeoJSON ingestion queries must configure adequate line/object buffer headroom (`maximum_object_size`) well beyond engine defaults. Sprawling geographic multipolygons produce individual JSON features exceeding dozens of megabytes that cause pipeline failures under default engine thresholds.
+
 
 
 
