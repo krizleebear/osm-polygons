@@ -96,6 +96,26 @@ FACILITIES_FILTER_RULES = [
     # Delivery access ways
     "w/service=delivery",
     "w/access=delivery",
+    # Pedestrian squares, plazas, and city squares
+    "w/highway=pedestrian",
+    "r/highway=pedestrian",
+    "w/place=square",
+    "r/place=square",
+    "w/amenity=plaza",
+    "r/amenity=plaza",
+    # Parks, gardens, nature reserves, and recreation grounds
+    "w/leisure=park,garden,nature_reserve,recreation_ground",
+    "r/leisure=park,garden,nature_reserve,recreation_ground",
+    # Cemeteries and graveyards
+    "w/landuse=cemetery",
+    "r/landuse=cemetery",
+    "w/amenity=grave_yard",
+    "r/amenity=grave_yard",
+    # Allotments
+    "w/landuse=allotments",
+    "r/landuse=allotments",
+    # Named multipolygon relations (generic area fallback)
+    "r/type=multipolygon",
 ]
 
 LANDUSE_FILTER_RULES = [

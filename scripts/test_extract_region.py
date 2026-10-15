@@ -8,7 +8,14 @@ from unittest.mock import patch, MagicMock
 import os
 import sys
 
-from extract_region import extract_region, get_pbf_timestamp, ADMIN_FILTER_RULES, PLACES_FILTER_RULES, LANDUSE_FILTER_RULES
+from extract_region import (
+    extract_region,
+    get_pbf_timestamp,
+    ADMIN_FILTER_RULES,
+    PLACES_FILTER_RULES,
+    LANDUSE_FILTER_RULES,
+    FACILITIES_FILTER_RULES,
+)
 
 
 class TestExtractRegion(unittest.TestCase):
@@ -17,8 +24,13 @@ class TestExtractRegion(unittest.TestCase):
         self.assertTrue(len(ADMIN_FILTER_RULES) >= 3)
         self.assertTrue(len(PLACES_FILTER_RULES) >= 1)
         self.assertTrue(len(LANDUSE_FILTER_RULES) >= 1)
+        self.assertTrue(len(FACILITIES_FILTER_RULES) >= 10)
         self.assertIn("boundary=administrative", ADMIN_FILTER_RULES[0])
         self.assertTrue(any("residential" in r and "farmyard" in r for r in LANDUSE_FILTER_RULES))
+        self.assertTrue(any("highway=pedestrian" in r for r in FACILITIES_FILTER_RULES))
+        self.assertTrue(any("leisure=park" in r for r in FACILITIES_FILTER_RULES))
+        self.assertTrue(any("landuse=cemetery" in r for r in FACILITIES_FILTER_RULES))
+        self.assertTrue(any("r/type=multipolygon" in r for r in FACILITIES_FILTER_RULES))
 
     def test_missing_input_pbf_raises(self):
         with self.assertRaises(FileNotFoundError):

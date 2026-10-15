@@ -687,6 +687,198 @@ class TestFilterFacilities(unittest.TestCase):
         self.assertEqual(del_tags.get("entrance"), "delivery")
         self.assertEqual(del_tags.get("hgv"), "yes")
 
+    def test_piazza_di_sant_anastasia_reference_case(self):
+        """
+        Validate OSM relation 1862149 (Piazza di Sant'Anastasia) resolves to
+        feature_class 'square' with osm_type 'R'.
+        """
+        coords = [[[[12.483, 41.890], [12.484, 41.890], [12.484, 41.891], [12.483, 41.891], [12.483, 41.890]]]]
+        feat = make_feature({
+            "@type": "relation",
+            "@id": 1862149,
+            "type": "multipolygon",
+            "highway": "pedestrian",
+            "name": "Piazza di Sant'Anastasia",
+            "bicycle": "yes",
+            "lit": "yes"
+        }, geom_type="MultiPolygon", coordinates=coords)
+
+        res = process_facility_feature(feat, continent="europe", country_code="IT")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "square")
+        self.assertEqual(res["osm_type"], "R")
+        self.assertEqual(res["osm_id"], 1862149)
+        self.assertEqual(res["country_code"], "IT")
+        tags = json.loads(res["tags"])
+        self.assertEqual(tags.get("name"), "Piazza di Sant'Anastasia")
+        self.assertEqual(tags.get("highway"), "pedestrian")
+        self.assertEqual(tags.get("lit"), "yes")
+
+    def test_pedestrian_square_and_plaza_variations(self):
+        # 1. highway=pedestrian polygon with name -> square
+        feat_hw = make_feature({
+            "@type": "way",
+            "@id": 5001,
+            "highway": "pedestrian",
+            "name": "Marienplatz"
+        }, geom_type="Polygon")
+        res_hw = process_facility_feature(feat_hw)
+        self.assertIsNotNone(res_hw)
+        self.assertEqual(res_hw["feature_class"], "square")
+        self.assertEqual(res_hw["osm_type"], "W")
+
+        # 2. place=square polygon with name -> square
+        feat_place = make_feature({
+            "@type": "way",
+            "@id": 5002,
+            "place": "square",
+            "name": "Piazza Navona"
+        }, geom_type="Polygon")
+        res_place = process_facility_feature(feat_place)
+        self.assertIsNotNone(res_place)
+        self.assertEqual(res_place["feature_class"], "square")
+
+        # 3. amenity=plaza polygon with name -> square
+        feat_plaza = make_feature({
+            "@type": "way",
+            "@id": 5003,
+            "amenity": "plaza",
+            "name": "Grand Plaza"
+        }, geom_type="Polygon")
+        res_plaza = process_facility_feature(feat_plaza)
+        self.assertIsNotNone(res_plaza)
+        self.assertEqual(res_plaza["feature_class"], "square")
+
+        # 4. highway=pedestrian LineString (pedestrian street) -> dropped (not a square)
+        feat_line = make_feature({
+            "@type": "way",
+            "@id": 5004,
+            "highway": "pedestrian",
+            "name": "Kaufingerstraße"
+        }, geom_type="LineString")
+        res_line = process_facility_feature(feat_line)
+        self.assertIsNone(res_line)
+
+        # 5. highway=pedestrian Polygon without name -> dropped (noise filter)
+        feat_noname = make_feature({
+            "@type": "way",
+            "@id": 5005,
+            "highway": "pedestrian"
+        }, geom_type="Polygon")
+        res_noname = process_facility_feature(feat_noname)
+        self.assertIsNone(res_noname)
+
+    def test_parks_and_green_spaces(self):
+        for leisure_val in ["park", "garden", "nature_reserve", "recreation_ground"]:
+            feat = make_feature({
+                "@type": "way",
+                "@id": 6001,
+                "leisure": leisure_val,
+                "name": f"Great {leisure_val.capitalize()}"
+            }, geom_type="Polygon")
+            res = process_facility_feature(feat)
+            self.assertIsNotNone(res, f"Failed for leisure={leisure_val}")
+            self.assertEqual(res["feature_class"], "park")
+
+        # Unnamed park is dropped by noise filter
+        feat_unnamed = make_feature({
+            "@type": "way",
+            "@id": 6002,
+            "leisure": "park"
+        }, geom_type="Polygon")
+        self.assertIsNone(process_facility_feature(feat_unnamed))
+
+    def test_cemeteries(self):
+        feat_cem = make_feature({
+            "@type": "way",
+            "@id": 7001,
+            "landuse": "cemetery",
+            "name": "Waldfriedhof"
+        }, geom_type="Polygon")
+        res_cem = process_facility_feature(feat_cem)
+        self.assertIsNotNone(res_cem)
+        self.assertEqual(res_cem["feature_class"], "cemetery")
+
+        feat_gy = make_feature({
+            "@type": "way",
+            "@id": 7002,
+            "amenity": "grave_yard",
+            "name": "Kirchhof St. Peter"
+        }, geom_type="Polygon")
+        res_gy = process_facility_feature(feat_gy)
+        self.assertIsNotNone(res_gy)
+        self.assertEqual(res_gy["feature_class"], "cemetery")
+
+        # Unnamed cemetery is dropped
+        feat_unnamed = make_feature({
+            "@type": "way",
+            "@id": 7003,
+            "landuse": "cemetery"
+        }, geom_type="Polygon")
+        self.assertIsNone(process_facility_feature(feat_unnamed))
+
+    def test_allotments(self):
+        feat = make_feature({
+            "@type": "way",
+            "@id": 8001,
+            "landuse": "allotments",
+            "name": "KGV Sonnenschein"
+        }, geom_type="Polygon")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "allotments")
+
+        # Unnamed allotments are dropped
+        feat_unnamed = make_feature({
+            "@type": "way",
+            "@id": 8002,
+            "landuse": "allotments"
+        }, geom_type="Polygon")
+        self.assertIsNone(process_facility_feature(feat_unnamed))
+
+    def test_generic_named_area_fallback(self):
+        # Named multipolygon relation not building or admin boundary -> area
+        feat_rel = make_feature({
+            "@type": "relation",
+            "@id": 9001,
+            "type": "multipolygon",
+            "name": "Battle of Hastings",
+            "historic": "battlefield"
+        }, geom_type="MultiPolygon")
+        res_rel = process_facility_feature(feat_rel)
+        self.assertIsNotNone(res_rel)
+        self.assertEqual(res_rel["feature_class"], "area")
+        self.assertEqual(res_rel["osm_type"], "R")
+
+        # Named relation with building=yes is excluded from area
+        feat_bldg = make_feature({
+            "@type": "relation",
+            "@id": 9002,
+            "type": "multipolygon",
+            "name": "Kölner Dom",
+            "building": "cathedral"
+        }, geom_type="MultiPolygon")
+        self.assertIsNone(process_facility_feature(feat_bldg))
+
+        # Named relation with boundary=administrative is excluded from area
+        feat_admin = make_feature({
+            "@type": "relation",
+            "@id": 9003,
+            "type": "multipolygon",
+            "name": "Freistaat Bayern",
+            "boundary": "administrative"
+        }, geom_type="MultiPolygon")
+        self.assertIsNone(process_facility_feature(feat_admin))
+
+        # Unnamed relation is dropped
+        feat_unnamed = make_feature({
+            "@type": "relation",
+            "@id": 9004,
+            "type": "multipolygon",
+            "historic": "battlefield"
+        }, geom_type="MultiPolygon")
+        self.assertIsNone(process_facility_feature(feat_unnamed))
+
 
 if __name__ == "__main__":
     unittest.main()

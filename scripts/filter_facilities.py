@@ -21,6 +21,11 @@ Classifies features into normalized feature classes:
   - gate (Point, LineString, Polygon -> Centroid Point)
   - parking_entrance (Point, LineString, Polygon -> Centroid Point)
   - emergency_entrance (Point, LineString, Polygon -> Centroid Point)
+  - square (Polygon, MultiPolygon)
+  - park (Polygon, MultiPolygon)
+  - cemetery (Polygon, MultiPolygon)
+  - allotments (Polygon, MultiPolygon)
+  - area (Polygon, MultiPolygon)
 
 Filters tags to prune metadata (source, created_by, note, fixme, etc.) and retains
 domain tags, multilingual names, and references (projected to whitelist for access points).
@@ -137,9 +142,22 @@ def normalize_osm_type(raw_type):
     return None
 
 
+def has_valid_name(props):
+    """Check if props has an explicit, non-empty name or multilingual name."""
+    if not props or not isinstance(props, dict):
+        return False
+    for k, v in props.items():
+        if k == "name" or k.startswith("name:") or k in ("official_name", "int_name", "alt_name"):
+            if v is not None:
+                v_str = str(v).strip()
+                if v_str and v_str.lower() != "null":
+                    return True
+    return False
+
+
 def classify_facility(props, geom_type):
     """
-    Classify OSM feature into one of the 13 target feature_classes based on tags and geometry.
+    Classify OSM feature into one of the target feature_classes based on tags and geometry.
     Returns (feature_class, is_valid_geometry) or (None, False).
     """
     if not props or not geom_type:
@@ -153,6 +171,8 @@ def classify_facility(props, geom_type):
     railway = str(props.get("railway", "")).strip().lower()
     tourism = str(props.get("tourism", "")).strip().lower()
     building = str(props.get("building", "")).strip().lower()
+    if building in ("no", "0", "false"):
+        building = ""
     station = str(props.get("station", "")).strip().lower()
     subway = str(props.get("subway", "")).strip().lower()
     tunnel = str(props.get("tunnel", "")).strip().lower()
@@ -164,6 +184,8 @@ def classify_facility(props, geom_type):
     entrance = str(props.get("entrance", "")).strip().lower()
     parking = str(props.get("parking", "")).strip().lower()
     emergency = str(props.get("emergency", "")).strip().lower()
+    place = str(props.get("place", "")).strip().lower()
+    boundary = str(props.get("boundary", "")).strip().lower()
 
     # Navigational Access Points & Entrances (Point, LineString, Polygon)
     # A. emergency_entrance: Emergency ward & ambulance station entrances
@@ -300,6 +322,38 @@ def classify_facility(props, geom_type):
         if geom_type in ("Polygon", "MultiPolygon"):
             return "parking", True
         return "parking", False
+
+    # 15. square: Pedestrian squares, plazas, and city squares (Polygon / MultiPolygon)
+    if (highway == "pedestrian" or place == "square" or amenity == "plaza") and has_valid_name(props):
+        if geom_type in ("Polygon", "MultiPolygon"):
+            return "square", True
+        return "square", False
+
+    # 16. park: Parks, gardens, nature reserves, and recreation grounds (Polygon / MultiPolygon)
+    if leisure in ("park", "garden", "nature_reserve", "recreation_ground") and has_valid_name(props):
+        if geom_type in ("Polygon", "MultiPolygon"):
+            return "park", True
+        return "park", False
+
+    # 17. cemetery: Cemeteries and graveyards (Polygon / MultiPolygon)
+    if (landuse == "cemetery" or amenity == "grave_yard") and has_valid_name(props):
+        if geom_type in ("Polygon", "MultiPolygon"):
+            return "cemetery", True
+        return "cemetery", False
+
+    # 18. allotments: Allotment gardens and community garden plots (Polygon / MultiPolygon)
+    if landuse == "allotments" and has_valid_name(props):
+        if geom_type in ("Polygon", "MultiPolygon"):
+            return "allotments", True
+        return "allotments", False
+
+    # 19. area: Generic named area fallback for multipolygon relations (Polygon / MultiPolygon)
+    if has_valid_name(props) and geom_type in ("Polygon", "MultiPolygon"):
+        raw_osm_type = str(props.get("@type", "")).strip().lower()
+        rel_type = str(props.get("type", "")).strip().lower()
+        is_rel = raw_osm_type in ("r", "relation", "multipolygon") or rel_type == "multipolygon" or geom_type == "MultiPolygon"
+        if is_rel and not building and boundary not in ("administrative", "traditional", "statistical", "cadastral", "local_authority", "borough"):
+            return "area", True
 
     return None, False
 
