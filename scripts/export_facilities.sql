@@ -36,7 +36,7 @@ COPY (
                 'geom_json': 'VARCHAR',
                 'tags': 'VARCHAR'
             },
-            maximum_object_size=67108864,
+            maximum_object_size=134217728,
             ignore_errors=true
         ) f
         LEFT JOIN countries_meta m ON m.cc = COALESCE(NULLIF('__COUNTRY_CODE__', ''), f.country_code)
