@@ -16,23 +16,15 @@ CREATE TEMP TABLE countries_meta AS
     );
 
 COPY (
-    WITH raw_facilities AS (
+    WITH parsed_json AS (
         SELECT
             COALESCE(m.continent, f.continent, 'unknown') AS continent,
             COALESCE(NULLIF('__COUNTRY_CODE__', ''), f.country_code) AS country_code,
             TRY_CAST(f.osm_id AS BIGINT) AS osm_id,
             f.osm_type,
             f.feature_class,
-            CASE
-                WHEN f.feature_class IN ('entrance', 'gate', 'parking_entrance', 'emergency_entrance')
-                THEN ST_Centroid(ST_GeomFromGeoJSON(f.geom_json))
-                ELSE ST_GeomFromGeoJSON(f.geom_json)
-            END AS geom,
-            f.tags,
-            ROW_NUMBER() OVER (
-                PARTITION BY f.osm_type, TRY_CAST(f.osm_id AS BIGINT)
-                ORDER BY f.feature_class
-            ) AS rn
+            ST_GeomFromGeoJSON(f.geom_json) AS geom_raw,
+            f.tags
         FROM read_json('__INPUT_JSONL__',
             format='newline_delimited',
             columns={
@@ -44,12 +36,37 @@ COPY (
                 'geom_json': 'VARCHAR',
                 'tags': 'VARCHAR'
             },
+            maximum_object_size=67108864,
             ignore_errors=true
         ) f
         LEFT JOIN countries_meta m ON m.cc = COALESCE(NULLIF('__COUNTRY_CODE__', ''), f.country_code)
         WHERE f.osm_id IS NOT NULL
           AND f.feature_class IS NOT NULL
           AND f.geom_json IS NOT NULL
+    ),
+    raw_facilities AS (
+        SELECT
+            continent,
+            country_code,
+            osm_id,
+            osm_type,
+            feature_class,
+            CASE
+                WHEN feature_class IN ('entrance', 'gate', 'parking_entrance', 'emergency_entrance')
+                THEN ST_Centroid(geom_raw)
+                -- Dynamic size-based simplification independent of feature_class:
+                WHEN ST_NPoints(geom_raw) > 10000
+                THEN ST_SimplifyPreserveTopology(geom_raw, 0.0005)
+                WHEN ST_NPoints(geom_raw) > 100
+                THEN ST_SimplifyPreserveTopology(geom_raw, 0.0001)
+                ELSE geom_raw
+            END AS geom,
+            tags,
+            ROW_NUMBER() OVER (
+                PARTITION BY osm_type, osm_id
+                ORDER BY feature_class
+            ) AS rn
+        FROM parsed_json
     ),
     deduped_facilities AS (
             SELECT
