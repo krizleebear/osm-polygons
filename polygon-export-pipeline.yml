@@ -1562,7 +1562,7 @@ stages:
                   FROM fcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
-                ORDER BY ST_Hilbert(ST_Centroid(geom))
+                ORDER BY ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
               ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
                 KV_METADATA {
                   'source': 'OpenStreetMap',
@@ -1615,7 +1615,7 @@ stages:
                   FROM lcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
-                ORDER BY ST_Hilbert(ST_Centroid(geom))
+                ORDER BY ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
               ) TO '${lout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
                 KV_METADATA {
                   'source': 'OpenStreetMap',
@@ -1813,13 +1813,29 @@ stages:
         script: |
           echo "[INFO] Disk space before cleanup:"
           df -h /
+          sudo systemctl stop docker 2>/dev/null || true
           sudo rm -rf \
+            /var/lib/docker \
             /usr/share/dotnet \
             /usr/local/lib/android \
             /opt/ghc \
+            /usr/local/.ghcup \
             /usr/local/share/boost \
             /opt/hostedtoolcache \
+            /usr/share/swift \
+            /usr/lib/jvm \
+            /usr/local/julia \
+            /usr/share/miniconda \
+            /usr/local/share/powershell \
+            /opt/microsoft/powershell \
+            /usr/local/share/vcpkg \
+            /usr/local/share/chromium \
+            /usr/share/google-chrome \
+            /opt/google/chrome \
+            /usr/share/firefox \
             2>/dev/null || true
+          sudo apt-get clean 2>/dev/null || true
+          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* 2>/dev/null || true
           echo "[INFO] Disk space after cleanup:"
           df -h /
 

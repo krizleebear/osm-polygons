@@ -211,7 +211,7 @@ COPY (
             geom,
             tags
         FROM final_facilities
-        ORDER BY continent, country_code, ST_Hilbert(ST_Centroid(geom))
+        ORDER BY continent, country_code, ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
     ) TO '__OUTPUT_PARQUET__' (
     FORMAT PARQUET,
     COMPRESSION ZSTD,

@@ -160,8 +160,8 @@ class TestSqlTemplateMetadata(unittest.TestCase):
         for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
             content = read_file(os.path.join(REPO_ROOT, sql_rel))
             self.assertRegex(
-                content, r"ORDER BY .*ST_Hilbert\(",
-                f"{sql_rel} must sort by ST_Hilbert for spatial clustering",
+                content, r"ORDER BY .*ST_Hilbert\(.*ST_Extent\(ST_Extent_Agg\(",
+                f"{sql_rel} must sort by bounded ST_Hilbert with ST_Extent(ST_Extent_Agg(...)) for accurate spatial clustering",
             )
 
 
