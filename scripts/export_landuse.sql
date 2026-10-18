@@ -73,7 +73,7 @@ COPY (
       AND ST_IsValid(geom)
       AND ST_XMin(geom) >= -180.0 AND ST_XMax(geom) <= 180.0
       AND ST_YMin(geom) >= -90.0 AND ST_YMax(geom) <= 90.0
-    ORDER BY continent, country_code, landuse, osm_type, osm_id
+    ORDER BY continent, country_code, ST_Hilbert(ST_Centroid(geom))
 ) TO '__OUTPUT_PARQUET__' (
     FORMAT PARQUET,
     COMPRESSION ZSTD,

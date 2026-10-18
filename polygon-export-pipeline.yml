@@ -1542,7 +1542,7 @@ stages:
                   FROM fcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
-                ORDER BY feature_class, osm_type, osm_id
+                ORDER BY ST_Hilbert(ST_Centroid(geom))
               ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
                 KV_METADATA {
                   'source': 'OpenStreetMap',
@@ -1595,7 +1595,7 @@ stages:
                   FROM lcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
-                ORDER BY landuse, osm_type, osm_id
+                ORDER BY ST_Hilbert(ST_Centroid(geom))
               ) TO '${lout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
                 KV_METADATA {
                   'source': 'OpenStreetMap',

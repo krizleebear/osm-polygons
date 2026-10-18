@@ -204,10 +204,14 @@ COPY (
             osm_id,
             osm_type,
             feature_class,
+            ST_XMin(geom) AS bbox_minx,
+            ST_YMin(geom) AS bbox_miny,
+            ST_XMax(geom) AS bbox_maxx,
+            ST_YMax(geom) AS bbox_maxy,
             geom,
             tags
         FROM final_facilities
-        ORDER BY continent, country_code, feature_class, osm_type, osm_id
+        ORDER BY continent, country_code, ST_Hilbert(ST_Centroid(geom))
     ) TO '__OUTPUT_PARQUET__' (
     FORMAT PARQUET,
     COMPRESSION ZSTD,

@@ -147,6 +147,23 @@ class TestSqlTemplateMetadata(unittest.TestCase):
                 f"{rel} must substitute __OSM_DATA_TIMESTAMP__",
             )
 
+    def test_facilities_and_landuse_project_bbox_columns(self):
+        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
+            content = read_file(os.path.join(REPO_ROOT, sql_rel))
+            for col in ("bbox_minx", "bbox_miny", "bbox_maxx", "bbox_maxy"):
+                self.assertIn(
+                    col, content,
+                    f"{sql_rel} must project '{col}' column for Parquet row group pruning",
+                )
+
+    def test_facilities_and_landuse_sort_by_hilbert(self):
+        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
+            content = read_file(os.path.join(REPO_ROOT, sql_rel))
+            self.assertRegex(
+                content, r"ORDER BY .*ST_Hilbert\(",
+                f"{sql_rel} must sort by ST_Hilbert for spatial clustering",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
