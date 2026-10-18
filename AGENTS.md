@@ -27,12 +27,13 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
    - Each job filters its respective `REGIONS` list from the downloaded export artifacts and creates an archive (`simplified-$(CONTINENT).tar.gz`).
 
 
-3. **Global Artifact Packaging:**
-   - The `package` stage depends on `simplify`, extracts all continental archives into a unified `simplified/` folder, and publishes a single global artifact (`admin-polygons-simplified` containing `simplified.tar.gz`).
+3. **Global Artifact Packaging & Integrated GitHub Release:**
+   - The `parquet` stage converts boundaries to per-country GeoParquet datasets and bundles validation artifacts and export metadata.
+   - Features integrated `release` stage controlled via parameter `publishGitHubRelease` (default `true`) using SemVer build naming `v3.8.$(Date:yyyyMMdd)$(Rev:.r)`. Downloads per-country GeoParquet and metadata artifacts from the current run, generates `index.json`, and publishes directly to GitHub Releases.
 
 4. **Standalone Manual GitHub Release Pipeline (`polygon-release-pipeline.yml`):**
-   - Releases are triggered manually on-demand (`trigger: none`).
-   - Downloads the latest build artifacts, packages global (`simplified-all.tar.gz`), continental (`simplified-*.tar.gz`), and individual country (`.geojsonseq`) files, and publishes them as GitHub Release assets.
+   - Retained as a fallback pipeline triggered manually on-demand (`trigger: none`) to re-release from specific past build IDs without re-running data extraction.
+   - Downloads build artifacts from a specified or latest build, packages datasets, generates `index.json`, and publishes them as GitHub Release assets.
 
 ---
 
