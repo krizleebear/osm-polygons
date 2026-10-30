@@ -26,6 +26,8 @@ Classifies features into normalized feature classes:
   - cemetery (Polygon, MultiPolygon)
   - allotments (Polygon, MultiPolygon)
   - area (Polygon, MultiPolygon)
+  - island (Polygon, MultiPolygon)
+  - gorge (LineString, MultiLineString, Polygon, MultiPolygon)
 
 Filters tags to prune metadata (source, created_by, note, fixme, etc.) and retains
 domain tags, multilingual names, and references (projected to whitelist for access points).
@@ -186,6 +188,7 @@ def classify_facility(props, geom_type):
     emergency = str(props.get("emergency", "")).strip().lower()
     place = str(props.get("place", "")).strip().lower()
     boundary = str(props.get("boundary", "")).strip().lower()
+    natural = str(props.get("natural", "")).strip().lower()
 
     # Navigational Access Points & Entrances (Point, LineString, Polygon)
     # A. emergency_entrance: Emergency ward & ambulance station entrances
@@ -347,7 +350,19 @@ def classify_facility(props, geom_type):
             return "allotments", True
         return "allotments", False
 
-    # 19. area: Generic named area fallback for multipolygon relations (Polygon / MultiPolygon)
+    # 19. island: Named islands, islets, and archipelagos (Polygon / MultiPolygon)
+    if (place in ("island", "islet", "archipelago") or natural == "island") and has_valid_name(props):
+        if geom_type in ("Polygon", "MultiPolygon"):
+            return "island", True
+        return "island", False
+
+    # 20. gorge: Gorges, canyons, and ravines (LineString / MultiLineString / Polygon / MultiPolygon)
+    if natural in ("gorge", "canyon", "ravine") and has_valid_name(props):
+        if geom_type in ("LineString", "MultiLineString", "Polygon", "MultiPolygon"):
+            return "gorge", True
+        return "gorge", False
+
+    # 21. area: Generic named area fallback for multipolygon relations (Polygon / MultiPolygon)
     if has_valid_name(props) and geom_type in ("Polygon", "MultiPolygon"):
         raw_osm_type = str(props.get("@type", "")).strip().lower()
         rel_type = str(props.get("type", "")).strip().lower()

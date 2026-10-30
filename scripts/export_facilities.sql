@@ -179,7 +179,7 @@ COPY (
         other_features AS (
             SELECT r.continent, r.country_code, r.osm_id, r.osm_type, r.feature_class, r.geom, r.tags
             FROM deduped_facilities r
-            WHERE r.feature_class IN ('motorway', 'junction', 'square', 'park', 'cemetery', 'allotments', 'area')
+            WHERE r.feature_class IN ('motorway', 'junction', 'square', 'park', 'cemetery', 'allotments', 'area', 'island', 'gorge')
                OR (
                    r.feature_class IN (
                        'shopping_mall', 'hospital', 'stadium', 'university',

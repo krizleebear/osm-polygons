@@ -29,12 +29,14 @@ import time
 
 ADMIN_FILTER_RULES = [
     "boundary=administrative,traditional,statistical,cadastral,local_authority,borough",
-    "r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality",
-    "w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality",
+    "r/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality,island,islet,archipelago",
+    "w/place=suburb,quarter,borough,neighbourhood,city_block,hamlet,village,locality,island,islet,archipelago",
+    "r/natural=island",
+    "w/natural=island",
 ]
 
 PLACES_FILTER_RULES = [
-    "n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality",
+    "n/place=city,town,municipality,commune,suburb,quarter,neighbourhood,city_block,townlet,village,hamlet,isolated_dwelling,locality,island,islet,island_group",
 ]
 
 FACILITIES_FILTER_RULES = [
@@ -114,6 +116,14 @@ FACILITIES_FILTER_RULES = [
     # Allotments
     "w/landuse=allotments",
     "r/landuse=allotments",
+    # Islands and archipelagos
+    "w/place=island,islet,archipelago",
+    "r/place=island,islet,archipelago",
+    "w/natural=island",
+    "r/natural=island",
+    # Gorges, ravines, and canyons
+    "w/natural=gorge,canyon,ravine",
+    "r/natural=gorge,canyon,ravine",
     # Named multipolygon relations (generic area fallback)
     "r/type=multipolygon",
 ]

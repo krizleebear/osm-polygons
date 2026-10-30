@@ -15,12 +15,12 @@ import argparse
 PLACE_WHITELIST = {
     "hamlet", "village", "quarter", "suburb", "neighbourhood", "neighborhood",
     "isolated_dwelling", "locality", "city", "town", "municipality", "commune",
-    "city_block", "townlet"
+    "city_block", "townlet", "island", "islet", "island_group"
 }
 
 EXCLUDED_PLACES = {
     "country", "state", "province", "region", "county", "district",
-    "sea", "ocean", "water", "island", "islet", "glacier", "continent", "island_group"
+    "sea", "ocean", "water", "glacier", "continent"
 }
 
 ALT_NAME_TAG_PREFIXES = ("name:", "alt_name", "official_name", "loc_name", "int_name", "short_name", "reg_name", "old_name")

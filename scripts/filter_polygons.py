@@ -84,6 +84,9 @@ PLACE_TO_ADMIN_LEVEL = {
     "city": "8",
     "locality": "10",
     "townlet": "9",
+    "archipelago": "6",
+    "island": "7",
+    "islet": "10",
 }
 PLACE_RELATION_TYPES = ("boundary", "multipolygon")
 
@@ -308,6 +311,10 @@ def derive_area_type(props, admin_level_str):
             return "neighbourhood"
         return place
 
+    natural = str(props.get("natural", "")).strip().lower()
+    if natural in ("island", "islet"):
+        return natural
+
     # 2. Check subdistrict tag
     subdistrict = str(props.get("subdistrict", "")).strip().lower()
     if subdistrict:
@@ -437,10 +444,15 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
     # (Rule 3 takes precedence over Rule 2)
     rel_type = str(props.get("type", "")).strip().lower()
     place_val = str(props.get("place", "")).strip().lower()
+    natural_val = str(props.get("natural", "")).strip().lower()
     is_non_area_relation = (element_type == "relation" and rel_type and rel_type not in PLACE_RELATION_TYPES)
     if not is_non_area_relation and place_val in PLACE_TO_ADMIN_LEVEL and (not raw_level or raw_level == "None"):
         props["admin_level"] = PLACE_TO_ADMIN_LEVEL[place_val]
         raw_level = PLACE_TO_ADMIN_LEVEL[place_val]
+    elif not is_non_area_relation and natural_val in ("island", "islet") and (not raw_level or raw_level == "None"):
+        inferred = "7" if natural_val == "island" else "10"
+        props["admin_level"] = inferred
+        raw_level = inferred
 
     if (boundary_val in SUBMUNICIPAL_BOUNDARY_VALUES
             and (not raw_level or raw_level == "None")):

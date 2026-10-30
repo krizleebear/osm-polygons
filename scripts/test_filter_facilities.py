@@ -879,6 +879,54 @@ class TestFilterFacilities(unittest.TestCase):
         }, geom_type="MultiPolygon")
         self.assertIsNone(process_facility_feature(feat_unnamed))
 
+    def test_island_facility(self):
+        feat = make_feature({
+            "@type": "relation",
+            "@id": 53255,
+            "type": "multipolygon",
+            "place": "island",
+            "name": "Rügen"
+        }, geom_type="MultiPolygon")
+        res = process_facility_feature(feat)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["feature_class"], "island")
+        self.assertEqual(res["osm_id"], 53255)
+
+        feat_natural = make_feature({
+            "@type": "way",
+            "@id": 12345,
+            "natural": "island",
+            "name": "Pfaueninsel"
+        }, geom_type="Polygon")
+        res_natural = process_facility_feature(feat_natural)
+        self.assertIsNotNone(res_natural)
+        self.assertEqual(res_natural["feature_class"], "island")
+
+    def test_gorge_facility(self):
+        # Partnachklamm as LineString way
+        feat_line = make_feature({
+            "@type": "way",
+            "@id": 67890,
+            "natural": "gorge",
+            "name": "Partnachklamm"
+        }, geom_type="LineString")
+        res_line = process_facility_feature(feat_line)
+        self.assertIsNotNone(res_line)
+        self.assertEqual(res_line["feature_class"], "gorge")
+        self.assertEqual(res_line["osm_id"], 67890)
+
+        # Breitachklamm as Polygon
+        feat_poly = make_feature({
+            "@type": "relation",
+            "@id": 67891,
+            "type": "multipolygon",
+            "natural": "canyon",
+            "name": "Breitachklamm"
+        }, geom_type="MultiPolygon")
+        res_poly = process_facility_feature(feat_poly)
+        self.assertIsNotNone(res_poly)
+        self.assertEqual(res_poly["feature_class"], "gorge")
+
 
 if __name__ == "__main__":
     unittest.main()

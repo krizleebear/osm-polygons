@@ -423,6 +423,26 @@ class TestFilterPolygons(unittest.TestCase):
         f3b = feat({"admin_level": "10", "place": "island", "name": "Holm Island"})
         self.assertEqual(process_feature(f3b)["properties"]["area_type"], "island")
 
+        # Test island / islet / archipelago without explicit admin_level (synthesized level)
+        f_ruegen = feat({"@type": "relation", "type": "multipolygon", "place": "island", "name": "Rügen"})
+        res_ruegen = process_feature(f_ruegen)
+        self.assertIsNotNone(res_ruegen)
+        self.assertEqual(res_ruegen["properties"]["admin_level"], "7")
+        self.assertEqual(res_ruegen["properties"]["area_type"], "island")
+        self.assertEqual(res_ruegen["properties"]["name"], "Rügen")
+
+        f_sylt = feat({"@type": "relation", "type": "multipolygon", "place": "island", "name": "Sylt"})
+        res_sylt = process_feature(f_sylt)
+        self.assertIsNotNone(res_sylt)
+        self.assertEqual(res_sylt["properties"]["admin_level"], "7")
+        self.assertEqual(res_sylt["properties"]["area_type"], "island")
+
+        f_natural_island = feat({"@type": "relation", "type": "multipolygon", "natural": "island", "name": "Usedom"})
+        res_usedom = process_feature(f_natural_island)
+        self.assertIsNotNone(res_usedom)
+        self.assertEqual(res_usedom["properties"]["admin_level"], "7")
+        self.assertEqual(res_usedom["properties"]["area_type"], "island")
+
         f3c = feat({"admin_level": "10", "place": "islet", "name": "Wart Holm"})
         self.assertEqual(process_feature(f3c)["properties"]["area_type"], "islet")
 
