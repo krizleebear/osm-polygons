@@ -64,16 +64,36 @@ COPY (
     FROM (
         SELECT
             properties,
-            ST_GeomFromGeoJSON(geometry) AS geom
-        FROM read_json('__INPUT_GEOJSONSEQ__',
-            format='newline_delimited',
-            columns={'properties': 'JSON', 'geometry': 'JSON'},
-            ignore_errors=true)
-        WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
-          AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral', 'political')
-          AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
-          AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
-          AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')
+            CASE
+                -- Non-administrative hierarchy polygons (islands, archipelagos, natural areas, etc.)
+                WHEN COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') != 'administrative'
+                     OR json_extract_string(properties, '$.area_type') IN ('island', 'islet', 'archipelago') THEN
+                    CASE
+                        WHEN ST_NPoints(geom_raw) > 50000 THEN ST_SimplifyPreserveTopology(geom_raw, 0.001)
+                        WHEN ST_NPoints(geom_raw) > 10000 THEN ST_SimplifyPreserveTopology(geom_raw, 0.0005)
+                        WHEN ST_NPoints(geom_raw) > 1000  THEN ST_SimplifyPreserveTopology(geom_raw, 0.0001)
+                        ELSE geom_raw
+                    END
+                -- Administrative boundaries with extreme complexity
+                WHEN ST_NPoints(geom_raw) > 100000 THEN ST_SimplifyPreserveTopology(geom_raw, 0.0002)
+                WHEN ST_NPoints(geom_raw) > 50000  THEN ST_SimplifyPreserveTopology(geom_raw, 0.0001)
+                ELSE geom_raw
+            END AS geom
+        FROM (
+            SELECT
+                properties,
+                ST_GeomFromGeoJSON(geometry) AS geom_raw
+            FROM read_json('__INPUT_GEOJSONSEQ__',
+                format='newline_delimited',
+                columns={'properties': 'JSON', 'geometry': 'JSON'},
+                maximum_object_size=268435456,
+                ignore_errors=true)
+            WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
+              AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral', 'political')
+              AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
+              AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
+              AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')
+        ) sub
     ) raw
     LEFT JOIN countries_meta m ON m.cc = COALESCE(
         json_extract_string(raw.properties, '$.ISO3166-1'),
