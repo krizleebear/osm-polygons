@@ -80,8 +80,8 @@ COPY (
             FROM raw_facilities
             WHERE rn = 1
               AND geom IS NOT NULL
-              AND ST_X(ST_Centroid(geom)) >= -180.0 AND ST_X(ST_Centroid(geom)) <= 180.0
-              AND ST_Y(ST_Centroid(geom)) >= -90.0 AND ST_Y(ST_Centroid(geom)) <= 90.0
+              AND ST_X(ST_PointOnSurface(geom)) >= -180.0 AND ST_X(ST_PointOnSurface(geom)) <= 180.0
+              AND ST_Y(ST_PointOnSurface(geom)) >= -90.0 AND ST_Y(ST_PointOnSurface(geom)) <= 90.0
         ),
         target_facilities AS (
             SELECT * FROM deduped_facilities
@@ -211,7 +211,7 @@ COPY (
             geom,
             tags
         FROM final_facilities
-        ORDER BY continent, country_code, ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
+        ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
     ) TO '__OUTPUT_PARQUET__' (
     FORMAT PARQUET,
     COMPRESSION ZSTD,

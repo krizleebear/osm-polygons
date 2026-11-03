@@ -145,7 +145,8 @@ To ensure consistent pipeline execution, full geographical coverage, and clean G
     - Spatial JSONL/GeoJSON ingestion queries must configure adequate line/object buffer headroom (`maximum_object_size`) well beyond engine defaults. Sprawling geographic multipolygons produce individual JSON features exceeding dozens of megabytes that cause pipeline failures under default engine thresholds.
 39. **DuckDB Bounded ST_Hilbert Spatial Sorting & Row Group Pruning Invariant:**
     - All polygon, linestring, and facility export queries (`export_facilities.sql`, `export_landuse.sql`, and downstream per-country consolidation merges in `polygon-export-pipeline.yml`) MUST order features using bounded Hilbert indexing:
-      `ORDER BY continent, country_code, ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))`
+      `ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))`
+    - **Dateline-Safe Anchors**: Never use planar `ST_Centroid` for place anchors or Hilbert keys: geometries split at the antimeridian (e.g. Taveuni, FJ, `relation/3237101`) get centroids far from the feature. Use `ST_PointOnSurface`; downstream consumers needing a place anchor must compute `ST_PointOnSurface(geom)` themselves.
     - **Never call unbounded `ST_Hilbert(geom)`**: Omitting the bounding box forces DuckDB to scale to the universal Float32 domain (-3.4e38..+3.4e38), corrupting bit-interleaving for geographic coordinates and destroying Row-Group spatial locality.
     - **Uniform 4-Column BBox Schema**: All spatial polygon/facility tables must include `bbox_minx`, `bbox_miny`, `bbox_maxx`, `bbox_maxy` (`DOUBLE`) to allow downstream engines to execute pushdown pruning without decompressing geometries.
     - **Row Group Sizing**: Retain `ROW_GROUP_SIZE 5000` (or `50000` for high-volume layers) to maintain fine spatial chunking.

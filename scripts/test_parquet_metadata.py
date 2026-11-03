@@ -164,6 +164,13 @@ class TestSqlTemplateMetadata(unittest.TestCase):
                 f"{sql_rel} must sort by bounded ST_Hilbert with ST_Extent(ST_Extent_Agg(...)) for accurate spatial clustering",
             )
 
+    def test_hilbert_sort_uses_point_on_surface_not_centroid(self):
+        # A planar ST_Centroid of antimeridian-split geometries (e.g. Taveuni, FJ) lands far from the feature.
+        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
+            content = read_file(os.path.join(REPO_ROOT, sql_rel))
+            self.assertRegex(content, r"ST_Hilbert\(ST_PointOnSurface\(geom\)")
+            self.assertNotRegex(content, r"ST_Hilbert\(ST_Centroid\(")
+
 
 if __name__ == "__main__":
     unittest.main()

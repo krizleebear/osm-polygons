@@ -1562,7 +1562,7 @@ stages:
                   FROM fcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
-                ORDER BY ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
+                ORDER BY ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
               ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
                 KV_METADATA {
                   'source': 'OpenStreetMap',
@@ -1615,7 +1615,7 @@ stages:
                   FROM lcombined
                   WHERE country_code = '${cc}'
                 ) WHERE rn = 1
-                ORDER BY ST_Hilbert(ST_Centroid(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
+                ORDER BY ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
               ) TO '${lout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
                 KV_METADATA {
                   'source': 'OpenStreetMap',
