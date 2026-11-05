@@ -5,7 +5,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-from filter_places import process_place_feature, PLACE_WHITELIST, EXCLUDED_PLACES
+from filter_places import parse_population, process_place_feature, PLACE_WHITELIST, EXCLUDED_PLACES
 
 def place_feat(properties, coordinates=[11.5755, 48.1374]):
     return {
@@ -83,6 +83,12 @@ class TestExportPlaces(unittest.TestCase):
 
         feat_lat = place_feat({"place": "hamlet", "name": "Test"}, coordinates=[11.0, 95.0])
         self.assertIsNone(process_place_feature(feat_lat))
+
+    def test_population_never_concatenates_ranges(self):
+        for raw in ["30000-22000", "100;200", "1.5", "12 34", "many", "", "2000000001"]:
+            self.assertIsNone(parse_population(raw), raw)
+        for raw, exp in [("42", 42), ("303,419", 303419), ("1.234.567", 1234567), ("22 000", 22000), (" ~5000", 5000), (7, 7), ("22000-30000", 26000), ("22 000 \u2013 30 000", 26000), ("1,000-2,001", 1500)]:
+            self.assertEqual(parse_population(raw), exp, raw)
 
     def test_population_parsing(self):
         feat = place_feat({"place": "city", "name": "Graz", "population": "303,419"})

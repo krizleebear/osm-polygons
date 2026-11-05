@@ -10,6 +10,7 @@ names, multilingual alt_names, wikidata, and population.
 import sys
 import os
 import json
+import re
 import argparse
 
 PLACE_WHITELIST = {
@@ -24,6 +25,49 @@ EXCLUDED_PLACES = {
 }
 
 ALT_NAME_TAG_PREFIXES = ("name:", "alt_name", "official_name", "loc_name", "int_name", "short_name", "reg_name", "old_name")
+
+_POP_PLAIN_RE = re.compile(r"^\d+$")
+_POP_GROUPED_RE = re.compile(r"^\d{1,3}(?:[,.\s\u00a0\u202f'\u2019_]\d{3})+$")
+MAX_PLAUSIBLE_POPULATION = 2_000_000_000
+
+
+_POP_RANGE_RE = re.compile(r"^(.+?)\s*[-\u2013\u2014]\s*(.+)$")
+
+
+def _parse_single_population(text):
+    """Parse one plain or thousands-grouped integer; return None otherwise."""
+    text = text.strip().lstrip("~\u2248").strip()
+    if _POP_PLAIN_RE.match(text):
+        return int(text)
+    if _POP_GROUPED_RE.match(text):
+        return int(re.sub(r"\D", "", text))
+    return None
+
+
+def parse_population(raw):
+    """Parse an OSM population tag strictly into an integer, or None.
+
+    Accepts plain integers ("42"), thousands-grouped integers ("303,419",
+    "1.234.567", "22 000") and ranges ("22000-30000"), for which the rounded
+    midpoint is returned. Lists ("100;200"), decimals, free text, inverted
+    ranges and implausible values yield None. Digits are never concatenated
+    across separators, which previously turned "22000-30000" into 2200030000.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    value = _parse_single_population(text)
+    if value is None:
+        m = _POP_RANGE_RE.match(text)
+        if m:
+            low = _parse_single_population(m.group(1))
+            high = _parse_single_population(m.group(2))
+            if low is not None and high is not None and low <= high:
+                value = (low + high) // 2
+    if value is None or value > MAX_PLAUSIBLE_POPULATION:
+        return None
+    return value
+
 
 def process_place_feature(data, continent="", country_code=""):
     if not isinstance(data, dict) or data.get("type") != "Feature":
@@ -85,15 +129,7 @@ def process_place_feature(data, continent="", country_code=""):
         if wikidata.lower() in ("none", "null", ""):
             wikidata = None
 
-    raw_pop = props.get("population")
-    population = None
-    if raw_pop is not None:
-        try:
-            pop_clean = "".join(c for c in str(raw_pop) if c.isdigit())
-            if pop_clean:
-                population = int(pop_clean)
-        except (ValueError, TypeError):
-            population = None
+    population = parse_population(props.get("population"))
 
     # Collect multilingual and alternative names
     alt_names = {}
