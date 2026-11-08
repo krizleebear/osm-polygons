@@ -56,8 +56,9 @@ COPY (
             postal_code,
             name,
             CASE
-                WHEN ST_NPoints(geom_raw) > 50000
-                THEN ST_SimplifyPreserveTopology(geom_raw, 0.00005)
+                WHEN ST_NPoints(geom_raw) > 25000 THEN ST_SimplifyPreserveTopology(geom_raw, 0.0005)
+                WHEN ST_NPoints(geom_raw) > 5000  THEN ST_SimplifyPreserveTopology(geom_raw, 0.0001)
+                WHEN ST_NPoints(geom_raw) > 1000  THEN ST_SimplifyPreserveTopology(geom_raw, 0.00005)
                 ELSE geom_raw
             END AS geom,
             tags,
