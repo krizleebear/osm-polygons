@@ -22,10 +22,10 @@ python3 -m unittest discover -s scripts -p "test_*.py"
 echo "[3/4] Validating Azure DevOps YAML pipeline syntax in Docker..."
 if command -v docker &> /dev/null; then
   docker run --rm -v "$(pwd)":/workspace -w /workspace python:3-alpine sh -c \
-    "pip install -q pyyaml && python3 scripts/validate_azure_yaml.py polygon-export-pipeline.yml && python3 scripts/validate_azure_yaml.py polygon-release-pipeline.yml"
+    "pip install -q pyyaml && python3 scripts/validate_azure_yaml.py polygon-export-pipeline.yml && python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml"
 else
   python3 scripts/validate_azure_yaml.py polygon-export-pipeline.yml
-  python3 scripts/validate_azure_yaml.py polygon-release-pipeline.yml
+  python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml
 fi
 
 # 4. Dry-run Release Stats Script

@@ -28,7 +28,7 @@ def validate_pipeline(filepath):
 if __name__ == "__main__":
     target_files = sys.argv[1:] if len(sys.argv) > 1 else [
         "polygon-export-pipeline.yml",
-        "polygon-release-pipeline.yml"
+        "osm-download-pipeline.yml"
     ]
     all_passed = True
     for fp in target_files:

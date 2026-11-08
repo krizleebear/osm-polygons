@@ -31,7 +31,7 @@ parameters:
   type: string
   default: 'auto'
 - name: releaseTitle
-  displayName: 'GitHub Release Title (use "auto" for default title)'
+  displayName: 'GitHub Release Title (use "auto" for tag name e.g. v3.8.20261018.1)'
   type: string
   default: 'auto'
 - name: isDraft
@@ -68,7 +68,6 @@ stages:
         set -euo pipefail
         echo "=== 1. Validating Azure Pipelines YAML Syntax ==="
         python3 scripts/validate_azure_yaml.py polygon-export-pipeline.yml
-        python3 scripts/validate_azure_yaml.py polygon-release-pipeline.yml
         python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml
 
         echo "=== 2. Running Python Unit Test Suite ==="
@@ -1973,7 +1972,7 @@ stages:
 
           RELEASE_TITLE="$PARAM_RELEASE_TITLE"
           if [ "$RELEASE_TITLE" = "auto" ] || [ -z "$RELEASE_TITLE" ]; then
-            RELEASE_TITLE="OSM Administrative Polygons, Places & Facilities GeoParquet Release $RELEASE_TAG"
+            RELEASE_TITLE="$RELEASE_TAG"
           fi
 
           echo "[INFO] Release Tag  : $RELEASE_TAG"
