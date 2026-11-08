@@ -6,6 +6,7 @@ INSTALL spatial;
 LOAD spatial;
 INSTALL json;
 LOAD json;
+SET geometry_always_xy = true;
 
 -- Load country -> continent/name mapping from SSOT (scripts/countries.json)
 CREATE TEMP TABLE countries_meta AS
@@ -79,7 +80,7 @@ COPY (
         ST_YMax(geom) AS bbox_maxy,
         ST_X(ST_PointOnSurface(geom)) AS center_lon,
         ST_Y(ST_PointOnSurface(geom)) AS center_lat,
-        ST_Area_Spheroid(ST_FlipCoordinates(geom)) AS area_m2,
+        ST_Area_Spheroid(geom) AS area_m2,
         tags,
         geom
     FROM raw_postal_codes
