@@ -142,7 +142,49 @@ stages:
 
     strategy:
       matrix:
+        # Longest-running heavy regions prioritized first to maximize parallel throughput
+        us:
+          OSM_REGION: 'us'
+          PBF_URL: 'https://download.geofabrik.de/north-america/us-latest.osm.pbf'
+          COUNTRY_CODE: 'US'
+        canada:
+          OSM_REGION: 'canada'
+          PBF_URL: 'https://download.geofabrik.de/north-america/canada-latest.osm.pbf'
+          COUNTRY_CODE: 'CA'
+        russia:
+          OSM_REGION: 'russia'
+          PBF_URL: 'https://download.geofabrik.de/russia-latest.osm.pbf'
+          COUNTRY_CODE: 'RU'
         #TODO: populate matrix config programatically
+        germany:
+          OSM_REGION: 'germany'
+          PBF_URL: 'https://download.geofabrik.de/europe/germany-latest.osm.pbf'
+          COUNTRY_CODE: 'DE'
+        france:
+          OSM_REGION: 'france'
+          PBF_URL: 'https://download.geofabrik.de/europe/france-latest.osm.pbf'
+          COUNTRY_CODE: 'FR'
+        norway:
+          OSM_REGION: 'norway'
+          PBF_URL: 'https://download.geofabrik.de/europe/norway-latest.osm.pbf'
+          COUNTRY_CODE: 'NO'
+        china:
+          OSM_REGION: 'china'
+          PBF_URL: 'https://download.geofabrik.de/asia/china-latest.osm.pbf'
+          COUNTRY_CODE: 'CN'
+        brazil:
+          OSM_REGION: 'brazil'
+          PBF_URL: 'https://download.geofabrik.de/south-america/brazil-latest.osm.pbf'
+          COUNTRY_CODE: 'BR'
+        japan:
+          OSM_REGION: 'japan'
+          PBF_URL: 'https://download.geofabrik.de/asia/japan-latest.osm.pbf'
+          COUNTRY_CODE: 'JP'
+        great-britain:
+          OSM_REGION: 'great-britain'
+          PBF_URL: 'https://download.geofabrik.de/europe/great-britain-latest.osm.pbf'
+          COUNTRY_CODE: 'GB'
+        # Remaining regions
         algeria:
           OSM_REGION: 'algeria'
           PBF_URL: 'https://download.geofabrik.de/africa/algeria-latest.osm.pbf'
@@ -387,10 +429,6 @@ stages:
           OSM_REGION: 'cambodia'
           PBF_URL: 'https://download.geofabrik.de/asia/cambodia-latest.osm.pbf'
           COUNTRY_CODE: 'KH'
-        china:
-          OSM_REGION: 'china'
-          PBF_URL: 'https://download.geofabrik.de/asia/china-latest.osm.pbf'
-          COUNTRY_CODE: 'CN'
         gcc-states:
           OSM_REGION: 'gcc-states'
           PBF_URL: 'https://download.geofabrik.de/asia/gcc-states-latest.osm.pbf'
@@ -415,10 +453,6 @@ stages:
           OSM_REGION: 'israel-and-palestine'
           PBF_URL: 'https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf'
           COUNTRY_CODE: 'IL'
-        japan:
-          OSM_REGION: 'japan'
-          PBF_URL: 'https://download.geofabrik.de/asia/japan-latest.osm.pbf'
-          COUNTRY_CODE: 'JP'
         jordan:
           OSM_REGION: 'jordan'
           PBF_URL: 'https://download.geofabrik.de/asia/jordan-latest.osm.pbf'
@@ -563,10 +597,6 @@ stages:
           OSM_REGION: 'nicaragua'
           PBF_URL: 'https://download.geofabrik.de/central-america/nicaragua-latest.osm.pbf'
           COUNTRY_CODE: 'NI'
-        canada:
-          OSM_REGION: 'canada'
-          PBF_URL: 'https://download.geofabrik.de/north-america/canada-latest.osm.pbf'
-          COUNTRY_CODE: 'CA'
         greenland:
           OSM_REGION: 'greenland'
           PBF_URL: 'https://download.geofabrik.de/north-america/greenland-latest.osm.pbf'
@@ -575,10 +605,6 @@ stages:
           OSM_REGION: 'mexico'
           PBF_URL: 'https://download.geofabrik.de/north-america/mexico-latest.osm.pbf'
           COUNTRY_CODE: 'MX'
-        us:
-          OSM_REGION: 'us'
-          PBF_URL: 'https://download.geofabrik.de/north-america/us-latest.osm.pbf'
-          COUNTRY_CODE: 'US'
         argentina:
           OSM_REGION: 'argentina'
           PBF_URL: 'https://download.geofabrik.de/south-america/argentina-latest.osm.pbf'
@@ -587,10 +613,6 @@ stages:
           OSM_REGION: 'bolivia'
           PBF_URL: 'https://download.geofabrik.de/south-america/bolivia-latest.osm.pbf'
           COUNTRY_CODE: 'BO'
-        brazil:
-          OSM_REGION: 'brazil'
-          PBF_URL: 'https://download.geofabrik.de/south-america/brazil-latest.osm.pbf'
-          COUNTRY_CODE: 'BR'
         chile:
           OSM_REGION: 'chile'
           PBF_URL: 'https://download.geofabrik.de/south-america/chile-latest.osm.pbf'
@@ -688,22 +710,10 @@ stages:
           OSM_REGION: 'finland'
           PBF_URL: 'https://download.geofabrik.de/europe/finland-latest.osm.pbf'
           COUNTRY_CODE: 'FI'
-        france:
-          OSM_REGION: 'france'
-          PBF_URL: 'https://download.geofabrik.de/europe/france-latest.osm.pbf'
-          COUNTRY_CODE: 'FR'
         georgia:
           OSM_REGION: 'georgia'
           PBF_URL: 'https://download.geofabrik.de/europe/georgia-latest.osm.pbf'
           COUNTRY_CODE: 'GE'
-        germany:
-          OSM_REGION: 'germany'
-          PBF_URL: 'https://download.geofabrik.de/europe/germany-latest.osm.pbf'
-          COUNTRY_CODE: 'DE'
-        great-britain:
-          OSM_REGION: 'great-britain'
-          PBF_URL: 'https://download.geofabrik.de/europe/great-britain-latest.osm.pbf'
-          COUNTRY_CODE: 'GB'
         greece:
           OSM_REGION: 'greece'
           PBF_URL: 'https://download.geofabrik.de/europe/greece-latest.osm.pbf'
@@ -772,10 +782,6 @@ stages:
           OSM_REGION: 'netherlands'
           PBF_URL: 'https://download.geofabrik.de/europe/netherlands-latest.osm.pbf'
           COUNTRY_CODE: 'NL'
-        norway:
-          OSM_REGION: 'norway'
-          PBF_URL: 'https://download.geofabrik.de/europe/norway-latest.osm.pbf'
-          COUNTRY_CODE: 'NO'
         poland:
           OSM_REGION: 'poland'
           PBF_URL: 'https://download.geofabrik.de/europe/poland-latest.osm.pbf'
@@ -788,10 +794,6 @@ stages:
           OSM_REGION: 'romania'
           PBF_URL: 'https://download.geofabrik.de/europe/romania-latest.osm.pbf'
           COUNTRY_CODE: 'RO'
-        russia:
-          OSM_REGION: 'russia'
-          PBF_URL: 'https://download.geofabrik.de/russia-latest.osm.pbf'
-          COUNTRY_CODE: 'RU'
         serbia:
           OSM_REGION: 'serbia'
           PBF_URL: 'https://download.geofabrik.de/europe/serbia-latest.osm.pbf'
@@ -1045,161 +1047,7 @@ stages:
     container: osm2parquet
     strategy:
       matrix:
-        africa:
-          CONTINENT: 'africa'
-          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
-          ARTIFACT_PATTERNS: |
-            *-algeria/**
-            *-angola/**
-            *-benin/**
-            *-botswana/**
-            *-burkina-faso/**
-            *-burundi/**
-            *-cameroon/**
-            *-cape-verde/**
-            *-central-african-republic/**
-            *-chad/**
-            *-comores/**
-            *-congo-brazzaville/**
-            *-congo-democratic-republic/**
-            *-djibouti/**
-            *-egypt/**
-            *-equatorial-guinea/**
-            *-eritrea/**
-            *-ethiopia/**
-            *-gabon/**
-            *-ghana/**
-            *-guinea/**
-            *-guinea-bissau/**
-            *-ivory-coast/**
-            *-kenya/**
-            *-lesotho/**
-            *-liberia/**
-            *-libya/**
-            *-madagascar/**
-            *-malawi/**
-            *-mali/**
-            *-mauritania/**
-            *-mauritius/**
-            *-morocco/**
-            *-mozambique/**
-            *-namibia/**
-            *-niger/**
-            *-nigeria/**
-            *-rwanda/**
-            *-saint-helena-ascension-and-tristan-da-cunha/**
-            *-sao-tome-and-principe/**
-            *-senegal-and-gambia/**
-            *-seychelles/**
-            *-sierra-leone/**
-            *-somalia/**
-            *-south-africa/**
-            *-south-sudan/**
-            *-sudan/**
-            *-swaziland/**
-            *-tanzania/**
-            *-togo/**
-            *-tunisia/**
-            *-uganda/**
-            *-zambia/**
-            *-zimbabwe/**
-        asia:
-          CONTINENT: 'asia'
-          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkey turkmenistan uzbekistan vietnam yemen'
-          ARTIFACT_PATTERNS: |
-            *-afghanistan/**
-            *-armenia/**
-            *-azerbaijan/**
-            *-bangladesh/**
-            *-bhutan/**
-            *-cambodia/**
-            *-china/**
-            *-gcc-states/**
-            *-india/**
-            *-indonesia/**
-            *-iran/**
-            *-iraq/**
-            *-israel-and-palestine/**
-            *-japan/**
-            *-jordan/**
-            *-kazakhstan/**
-            *-kyrgyzstan/**
-            *-laos/**
-            *-lebanon/**
-            *-malaysia-singapore-brunei/**
-            *-maldives/**
-            *-mongolia/**
-            *-myanmar/**
-            *-nepal/**
-            *-north-korea/**
-            *-pakistan/**
-            *-philippines/**
-            *-south-korea/**
-            *-sri-lanka/**
-            *-syria/**
-            *-taiwan/**
-            *-tajikistan/**
-            *-thailand/**
-            *-turkey/**
-            *-turkmenistan/**
-            *-uzbekistan/**
-            *-vietnam/**
-            *-yemen/**
-        australia_oceania:
-          CONTINENT: 'australia-oceania'
-          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea polynesie-francaise'
-          ARTIFACT_PATTERNS: |
-            *-australia/**
-            *-fiji/**
-            *-new-caledonia/**
-            *-new-zealand/**
-            *-papua-new-guinea/**
-            *-polynesie-francaise/**
-        central_america:
-          CONTINENT: 'central-america'
-          REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
-          ARTIFACT_PATTERNS: |
-            *-bahamas/**
-            *-belize/**
-            *-cuba/**
-            *-guatemala/**
-            *-haiti-and-domrep/**
-            *-jamaica/**
-            *-nicaragua/**
-        north_america:
-          CONTINENT: 'north-america'
-          REGIONS: 'greenland mexico'
-          ARTIFACT_PATTERNS: |
-            *-greenland/**
-            *-mexico/**
-        canada:
-          CONTINENT: 'canada'
-          REGIONS: 'canada'
-          ARTIFACT_PATTERNS: '*-canada/**'
-        us:
-          CONTINENT: 'us'
-          REGIONS: 'us'
-          ARTIFACT_PATTERNS: '*-us/**'
-        russia:
-          CONTINENT: 'russia'
-          REGIONS: 'russia'
-          ARTIFACT_PATTERNS: '*-russia/**'
-        south_america:
-          CONTINENT: 'south-america'
-          REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
-          ARTIFACT_PATTERNS: |
-            *-argentina/**
-            *-bolivia/**
-            *-brazil/**
-            *-chile/**
-            *-colombia/**
-            *-ecuador/**
-            *-guyana/**
-            *-paraguay/**
-            *-peru/**
-            *-suriname/**
-            *-uruguay/**
-            *-venezuela/**
+        # Longest-running continents/regions prioritized first to maximize parallel throughput
         europe:
           CONTINENT: 'europe'
           REGIONS: 'albania andorra austria azores belarus belgium bosnia-herzegovina bulgaria canary-islands croatia cyprus czech-republic denmark estonia faroe-islands finland france guadeloupe martinique guyane reunion mayotte georgia germany great-britain greece hungary iceland ireland-and-northern-ireland isle-of-man italy kosovo latvia liechtenstein lithuania luxembourg macedonia malta moldova monaco montenegro netherlands norway poland portugal romania serbia slovakia slovenia spain sweden switzerland ukraine'
@@ -1258,6 +1106,161 @@ stages:
             *-switzerland/**
             *-ukraine/**
 
+        asia:
+          CONTINENT: 'asia'
+          REGIONS: 'afghanistan armenia azerbaijan bangladesh bhutan cambodia china gcc-states india indonesia iran iraq israel-and-palestine japan jordan kazakhstan kyrgyzstan laos lebanon malaysia-singapore-brunei maldives mongolia myanmar nepal north-korea pakistan philippines south-korea sri-lanka syria taiwan tajikistan thailand turkey turkmenistan uzbekistan vietnam yemen'
+          ARTIFACT_PATTERNS: |
+            *-afghanistan/**
+            *-armenia/**
+            *-azerbaijan/**
+            *-bangladesh/**
+            *-bhutan/**
+            *-cambodia/**
+            *-china/**
+            *-gcc-states/**
+            *-india/**
+            *-indonesia/**
+            *-iran/**
+            *-iraq/**
+            *-israel-and-palestine/**
+            *-japan/**
+            *-jordan/**
+            *-kazakhstan/**
+            *-kyrgyzstan/**
+            *-laos/**
+            *-lebanon/**
+            *-malaysia-singapore-brunei/**
+            *-maldives/**
+            *-mongolia/**
+            *-myanmar/**
+            *-nepal/**
+            *-north-korea/**
+            *-pakistan/**
+            *-philippines/**
+            *-south-korea/**
+            *-sri-lanka/**
+            *-syria/**
+            *-taiwan/**
+            *-tajikistan/**
+            *-thailand/**
+            *-turkey/**
+            *-turkmenistan/**
+            *-uzbekistan/**
+            *-vietnam/**
+            *-yemen/**
+        africa:
+          CONTINENT: 'africa'
+          REGIONS: 'algeria angola benin botswana burkina-faso burundi cameroon cape-verde central-african-republic chad comores congo-brazzaville congo-democratic-republic djibouti egypt equatorial-guinea eritrea ethiopia gabon ghana guinea guinea-bissau ivory-coast kenya lesotho liberia libya madagascar malawi mali mauritania mauritius morocco mozambique namibia niger nigeria rwanda saint-helena-ascension-and-tristan-da-cunha sao-tome-and-principe senegal-and-gambia seychelles sierra-leone somalia south-africa south-sudan sudan swaziland tanzania togo tunisia uganda zambia zimbabwe'
+          ARTIFACT_PATTERNS: |
+            *-algeria/**
+            *-angola/**
+            *-benin/**
+            *-botswana/**
+            *-burkina-faso/**
+            *-burundi/**
+            *-cameroon/**
+            *-cape-verde/**
+            *-central-african-republic/**
+            *-chad/**
+            *-comores/**
+            *-congo-brazzaville/**
+            *-congo-democratic-republic/**
+            *-djibouti/**
+            *-egypt/**
+            *-equatorial-guinea/**
+            *-eritrea/**
+            *-ethiopia/**
+            *-gabon/**
+            *-ghana/**
+            *-guinea/**
+            *-guinea-bissau/**
+            *-ivory-coast/**
+            *-kenya/**
+            *-lesotho/**
+            *-liberia/**
+            *-libya/**
+            *-madagascar/**
+            *-malawi/**
+            *-mali/**
+            *-mauritania/**
+            *-mauritius/**
+            *-morocco/**
+            *-mozambique/**
+            *-namibia/**
+            *-niger/**
+            *-nigeria/**
+            *-rwanda/**
+            *-saint-helena-ascension-and-tristan-da-cunha/**
+            *-sao-tome-and-principe/**
+            *-senegal-and-gambia/**
+            *-seychelles/**
+            *-sierra-leone/**
+            *-somalia/**
+            *-south-africa/**
+            *-south-sudan/**
+            *-sudan/**
+            *-swaziland/**
+            *-tanzania/**
+            *-togo/**
+            *-tunisia/**
+            *-uganda/**
+            *-zambia/**
+            *-zimbabwe/**
+        us:
+          CONTINENT: 'us'
+          REGIONS: 'us'
+          ARTIFACT_PATTERNS: '*-us/**'
+        canada:
+          CONTINENT: 'canada'
+          REGIONS: 'canada'
+          ARTIFACT_PATTERNS: '*-canada/**'
+        south_america:
+          CONTINENT: 'south-america'
+          REGIONS: 'argentina bolivia brazil chile colombia ecuador guyana paraguay peru suriname uruguay venezuela'
+          ARTIFACT_PATTERNS: |
+            *-argentina/**
+            *-bolivia/**
+            *-brazil/**
+            *-chile/**
+            *-colombia/**
+            *-ecuador/**
+            *-guyana/**
+            *-paraguay/**
+            *-peru/**
+            *-suriname/**
+            *-uruguay/**
+            *-venezuela/**
+        russia:
+          CONTINENT: 'russia'
+          REGIONS: 'russia'
+          ARTIFACT_PATTERNS: '*-russia/**'
+        australia_oceania:
+          CONTINENT: 'australia-oceania'
+          REGIONS: 'australia fiji new-caledonia new-zealand papua-new-guinea polynesie-francaise'
+          ARTIFACT_PATTERNS: |
+            *-australia/**
+            *-fiji/**
+            *-new-caledonia/**
+            *-new-zealand/**
+            *-papua-new-guinea/**
+            *-polynesie-francaise/**
+        central_america:
+          CONTINENT: 'central-america'
+          REGIONS: 'bahamas belize cuba guatemala haiti-and-domrep jamaica nicaragua'
+          ARTIFACT_PATTERNS: |
+            *-bahamas/**
+            *-belize/**
+            *-cuba/**
+            *-guatemala/**
+            *-haiti-and-domrep/**
+            *-jamaica/**
+            *-nicaragua/**
+        north_america:
+          CONTINENT: 'north-america'
+          REGIONS: 'greenland mexico'
+          ARTIFACT_PATTERNS: |
+            *-greenland/**
+            *-mexico/**
     steps:
     - task: Bash@3
       target: host
