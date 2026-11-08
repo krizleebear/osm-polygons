@@ -1,0 +1,93 @@
+#!/bin/bash
+set -euo pipefail
+
+# Convert OSM Postal Codes stream to GeoParquet using DuckDB
+# Usage: ./scripts/convert_postal_codes_to_parquet.sh <COUNTRY_CODE> <INPUT_STREAM> <OUTPUT_PARQUET>
+# continent is resolved at runtime via scripts/countries.json (SSOT)
+
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <COUNTRY_CODE> <INPUT_STREAM> <OUTPUT_PARQUET>" >&2
+    exit 1
+fi
+
+COUNTRY_CODE="$1"
+INPUT_STREAM="$2"
+OUTPUT_PARQUET="$3"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SQL_TEMPLATE="${SCRIPT_DIR}/export_postal_codes.sql"
+COUNTRIES_JSON="${SCRIPT_DIR}/countries.json"
+
+if [ ! -f "$INPUT_STREAM" ]; then
+    echo "ERROR: Input file '$INPUT_STREAM' not found." >&2
+    exit 1
+fi
+
+if [ ! -s "$INPUT_STREAM" ]; then
+    echo "WARNING: Input file '$INPUT_STREAM' is empty. Skipping Parquet conversion." >&2
+    exit 0
+fi
+
+if [ ! -f "$SQL_TEMPLATE" ]; then
+    echo "ERROR: SQL template '$SQL_TEMPLATE' not found." >&2
+    exit 1
+fi
+
+if [ ! -f "$COUNTRIES_JSON" ]; then
+    echo "ERROR: SSOT file '$COUNTRIES_JSON' not found." >&2
+    exit 1
+fi
+
+echo "============================================================"
+echo " Converting Postal Codes to GeoParquet"
+echo " Country Code: $COUNTRY_CODE"
+echo " Input:        $INPUT_STREAM ($(wc -l < "$INPUT_STREAM") features, $(du -h "$INPUT_STREAM" | cut -f1))"
+echo " Output:       $OUTPUT_PARQUET"
+echo " SSOT:         $COUNTRIES_JSON"
+echo "============================================================"
+
+TMP_SQL="$(mktemp /tmp/export_postal_codes_XXXXXX.sql)"
+trap 'rm -f "$TMP_SQL"' EXIT
+
+EXPORTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+DIRNAME="$(dirname "$INPUT_STREAM")"
+BASENAME="$(basename "$INPUT_STREAM")"
+PREFIX="${BASENAME%%.*}"
+META_FILE="${DIRNAME}/${PREFIX}.meta.json"
+
+OSM_DATA_TIMESTAMP="${4:-${OSM_DATA_TIMESTAMP:-}}"
+if [ -z "$OSM_DATA_TIMESTAMP" ] && [ -f "$META_FILE" ]; then
+    OSM_DATA_TIMESTAMP=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1])).get('osm_data_timestamp', ''))" "$META_FILE" 2>/dev/null || true)
+fi
+if [ -z "$OSM_DATA_TIMESTAMP" ]; then
+    OSM_DATA_TIMESTAMP="$EXPORTED_AT"
+fi
+
+sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
+    -e "s|__INPUT_JSONL__|${INPUT_STREAM}|g" \
+    -e "s|__OUTPUT_PARQUET__|${OUTPUT_PARQUET}|g" \
+    -e "s|__COUNTRIES_JSON__|${COUNTRIES_JSON}|g" \
+    -e "s|__EXPORTED_AT__|${EXPORTED_AT}|g" \
+    -e "s|__OSM_DATA_TIMESTAMP__|${OSM_DATA_TIMESTAMP}|g" \
+    "$SQL_TEMPLATE" > "$TMP_SQL"
+
+duckdb < "$TMP_SQL"
+
+if [ ! -s "$OUTPUT_PARQUET" ]; then
+    echo "ERROR: Parquet conversion failed or output '$OUTPUT_PARQUET' is empty." >&2
+    exit 1
+fi
+
+echo "============================================================"
+echo " OSM Postal Codes GeoParquet Summary: $OUTPUT_PARQUET"
+duckdb -c "
+SELECT
+    COUNT(*) AS total_postal_codes,
+    COUNT(DISTINCT postal_code) AS distinct_postal_codes,
+    COUNT(name) AS with_name,
+    ROUND(SUM(area_m2) / 1e6, 2) AS total_area_km2
+FROM read_parquet('${OUTPUT_PARQUET}');
+"
+echo " Size: $(du -h "$OUTPUT_PARQUET" | cut -f1) (Compressed ZSTD)"
+echo "============================================================"

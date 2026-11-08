@@ -23,6 +23,7 @@ SQL_TEMPLATES = (
     "scripts/export_places.sql",
     "scripts/export_facilities.sql",
     "scripts/export_landuse.sql",
+    "scripts/export_postal_codes.sql",
 )
 
 REQUIRED_METADATA_KEYS = (
@@ -42,8 +43,8 @@ REQUIRED_METADATA_KEYS = (
     "osm_data_timestamp",
 )
 
-# Shell variables holding the per-country output paths of the four merges.
-MERGE_TARGET_VARS = ("${out}", "${pout}", "${fout}", "${lout}")
+# Shell variables holding the per-country output paths of the five merges.
+MERGE_TARGET_VARS = ("${out}", "${pout}", "${fout}", "${lout}", "${pcout}")
 
 
 def copy_options_for_target(script, target):
@@ -139,6 +140,7 @@ class TestSqlTemplateMetadata(unittest.TestCase):
             "scripts/convert_places_to_parquet.sh",
             "scripts/convert_facilities_to_parquet.sh",
             "scripts/convert_landuse_to_parquet.sh",
+            "scripts/convert_postal_codes_to_parquet.sh",
         )
         for rel in converters:
             content = read_file(os.path.join(REPO_ROOT, rel))
@@ -148,7 +150,7 @@ class TestSqlTemplateMetadata(unittest.TestCase):
             )
 
     def test_facilities_and_landuse_project_bbox_columns(self):
-        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
+        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql", "scripts/export_postal_codes.sql"):
             content = read_file(os.path.join(REPO_ROOT, sql_rel))
             for col in ("bbox_minx", "bbox_miny", "bbox_maxx", "bbox_maxy"):
                 self.assertIn(
@@ -157,7 +159,7 @@ class TestSqlTemplateMetadata(unittest.TestCase):
                 )
 
     def test_facilities_and_landuse_sort_by_hilbert(self):
-        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
+        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql", "scripts/export_postal_codes.sql"):
             content = read_file(os.path.join(REPO_ROOT, sql_rel))
             self.assertRegex(
                 content, r"ORDER BY .*ST_Hilbert\(.*ST_Extent\(ST_Extent_Agg\(",
@@ -166,7 +168,7 @@ class TestSqlTemplateMetadata(unittest.TestCase):
 
     def test_hilbert_sort_uses_point_on_surface_not_centroid(self):
         # A planar ST_Centroid of antimeridian-split geometries (e.g. Taveuni, FJ) lands far from the feature.
-        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql"):
+        for sql_rel in ("scripts/export_facilities.sql", "scripts/export_landuse.sql", "scripts/export_postal_codes.sql"):
             content = read_file(os.path.join(REPO_ROOT, sql_rel))
             self.assertRegex(content, r"ST_Hilbert\(ST_PointOnSurface\(geom\)")
             self.assertNotRegex(content, r"ST_Hilbert\(ST_Centroid\(")

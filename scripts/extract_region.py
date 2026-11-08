@@ -133,6 +133,11 @@ LANDUSE_FILTER_RULES = [
     "r/landuse=residential,commercial,retail,farmyard,industrial,village_green,religious,construction,institutional",
 ]
 
+POSTAL_CODES_FILTER_RULES = [
+    "w/boundary=postal_code",
+    "r/boundary=postal_code",
+]
+
 
 def run_command(cmd, desc, stdin=None, stdout=None):
     """Execute an external command and raise RuntimeError on failure with diagnostic output."""
@@ -194,6 +199,7 @@ def extract_region(
     places_out,
     facilities_out=None,
     landuse_out=None,
+    postal_codes_out=None,
     meta_out=None,
     reference_polygons=None,
     postpass_candidates="scripts/postpass-candidates.json",
@@ -228,6 +234,7 @@ def extract_region(
     places_pbf = f"{region}.places.pbf"
     facilities_pbf = f"{region}.facilities.pbf" if facilities_out else None
     landuse_pbf = f"{region}.landuse.pbf" if landuse_out else None
+    postal_codes_pbf = f"{region}.postal-codes.pbf" if postal_codes_out else None
     parent_mapping_json = "./parent-mapping.json"
     raw_polygon_out = f"{polygon_out}.raw"
 
@@ -238,6 +245,7 @@ def extract_region(
             + PLACES_FILTER_RULES
             + (FACILITIES_FILTER_RULES if facilities_out else [])
             + (LANDUSE_FILTER_RULES if landuse_out else [])
+            + (POSTAL_CODES_FILTER_RULES if postal_codes_out else [])
         )
         cmd_combined = [
             "osmium", "tags-filter",
@@ -291,6 +299,15 @@ def extract_region(
                 combined_pbf,
             ] + LANDUSE_FILTER_RULES
             run_command(cmd_split_landuse, f"Split landuse from combined PBF")
+
+        if postal_codes_out and postal_codes_pbf:
+            cmd_split_postal_codes = [
+                "osmium", "tags-filter",
+                "--output", postal_codes_pbf,
+                "--overwrite",
+                combined_pbf,
+            ] + POSTAL_CODES_FILTER_RULES
+            run_command(cmd_split_postal_codes, f"Split postal codes from combined PBF")
 
         if os.path.exists(combined_pbf):
             os.remove(combined_pbf)
@@ -397,9 +414,26 @@ def extract_region(
             if os.path.exists(landuse_pbf):
                 os.remove(landuse_pbf)
 
+        # Step 10: Export postal codes via streaming pipe (if requested)
+        if postal_codes_out and postal_codes_pbf:
+            t_postal = time.time()
+            print(f"[EXTRACT] Starting: Stream export postal codes -> {postal_codes_out} ...", flush=True)
+            postal_pipe_cmd = (
+                f"osmium export {postal_codes_pbf} --output-format=geojsonseq --overwrite --config=osmium-export-config.json "
+                f"| python3 scripts/filter_postal_codes.py --country-code {country_code} "
+                f"> {postal_codes_out}"
+            )
+            res_postal = subprocess.run(["bash", "-c", postal_pipe_cmd], text=True)
+            if res_postal.returncode != 0:
+                raise RuntimeError(f"Postal codes streaming export pipeline failed with exit code {res_postal.returncode}")
+            print(f"[EXTRACT] Finished: Postal codes export ({time.time() - t_postal:.2f}s)", flush=True)
+
+            if os.path.exists(postal_codes_pbf):
+                os.remove(postal_codes_pbf)
+
     finally:
         # Cleanup any leftover intermediate files
-        for tmp in (combined_pbf, admins_pbf, places_pbf, facilities_pbf, landuse_pbf, raw_polygon_out):
+        for tmp in (combined_pbf, admins_pbf, places_pbf, facilities_pbf, landuse_pbf, postal_codes_pbf, raw_polygon_out):
             if tmp and os.path.exists(tmp):
                 try:
                     os.remove(tmp)
@@ -409,12 +443,14 @@ def extract_region(
     total_time = time.time() - t_start
     print("=" * 60)
     print(f" Region Export Complete: {region} ({country_code}) in {total_time:.2f}s")
-    print(f"  - Polygons Output:   {polygon_out} ({os.path.getsize(polygon_out) / (1024*1024):.2f} MB)")
-    print(f"  - Places Output:     {places_out} ({os.path.getsize(places_out) / (1024*1024):.2f} MB)")
+    print(f"  - Polygons Output:     {polygon_out} ({os.path.getsize(polygon_out) / (1024*1024):.2f} MB)")
+    print(f"  - Places Output:       {places_out} ({os.path.getsize(places_out) / (1024*1024):.2f} MB)")
     if facilities_out and os.path.exists(facilities_out):
-        print(f"  - Facilities Output: {facilities_out} ({os.path.getsize(facilities_out) / (1024*1024):.2f} MB)")
+        print(f"  - Facilities Output:   {facilities_out} ({os.path.getsize(facilities_out) / (1024*1024):.2f} MB)")
     if landuse_out and os.path.exists(landuse_out):
-        print(f"  - Landuse Output:    {landuse_out} ({os.path.getsize(landuse_out) / (1024*1024):.2f} MB)")
+        print(f"  - Landuse Output:      {landuse_out} ({os.path.getsize(landuse_out) / (1024*1024):.2f} MB)")
+    if postal_codes_out and os.path.exists(postal_codes_out):
+        print(f"  - Postal Codes Output: {postal_codes_out} ({os.path.getsize(postal_codes_out) / (1024*1024):.2f} MB)")
     print("=" * 60)
 
 
@@ -427,6 +463,7 @@ if __name__ == "__main__":
     parser.add_argument("--places-out", required=True, help="Output .places.jsonl file")
     parser.add_argument("--facilities-out", default=None, help="Optional output .facilities.jsonl file")
     parser.add_argument("--landuse-out", default=None, help="Optional output .landuse.jsonl file")
+    parser.add_argument("--postal-codes-out", default=None, help="Optional output .postal-codes.jsonl file")
     parser.add_argument("--meta-out", default=None, help="Optional output .meta.json file")
     parser.add_argument("--reference-polygons", default=None, help="Optional path to reference-polygons.geojsonseq")
     parser.add_argument("--postpass-candidates", default="scripts/postpass-candidates.json", help="Path to candidates JSON")
@@ -442,6 +479,7 @@ if __name__ == "__main__":
         places_out=args.places_out,
         facilities_out=args.facilities_out,
         landuse_out=args.landuse_out,
+        postal_codes_out=args.postal_codes_out,
         meta_out=args.meta_out,
         reference_polygons=args.reference_polygons,
         postpass_candidates=args.postpass_candidates,

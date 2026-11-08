@@ -109,7 +109,10 @@ jobs:
         # 4. Per-country OSM Landuse GeoParquet files
         find downloads -name "osm-landuse-*.parquet" -exec mv {} release-assets/ \;
 
-        # 5. Unified Metadata & Validation Artifacts
+        # 5. Per-country OSM Postal Codes GeoParquet files
+        find downloads -name "osm-postal-codes-*.parquet" -exec mv {} release-assets/ \;
+
+        # 6. Unified Metadata & Validation Artifacts
         if [ -d "downloads/metadata" ]; then
           find downloads/metadata -type f -exec mv {} release-assets/ \;
         fi
@@ -177,6 +180,13 @@ jobs:
             "generated_at": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
             "base_url": base_url,
             "file_pattern": file_pattern,
+            "file_patterns": {
+                "admin_polygons": "admin-polygons-{cc}.parquet",
+                "places": "osm-places-{cc}.parquet",
+                "facilities": "osm-facilities-{cc}.parquet",
+                "landuse": "osm-landuse-{cc}.parquet",
+                "postal_codes": "osm-postal-codes-{cc}.parquet"
+            },
             "countries": countries_list
         }
 
@@ -200,6 +210,7 @@ jobs:
         - **OSM Place-Nodes Companion Dataset (\`osm-places-{CC}.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
         - **OSM Facilities Companion Dataset (\`osm-facilities-{CC}.parquet\`):** Critical infrastructure, facility footprints, and navigational access points (motorways with heading order, junctions, service areas, airports, shopping malls, universities, hospitals, stadiums, train stations, exhibition centres, theme parks, zoos, ferry terminals, building entrances, gates, barriers, parking entrances, and emergency ward entrances).
         - **OSM Landuse Companion Dataset (\`osm-landuse-{CC}.parquet\`):** Built-up residential, commercial, retail, farmyard, and settlement landuse polygons for settlement synthesis and fine-grained spatial coverage.
+        - **OSM Postal Codes Companion Dataset (\`osm-postal-codes-{CC}.parquet\`):** Dedicated \`boundary=postal_code\` polygon boundaries with exact geodesic ellipsoidal area (\`area_m2\`) and bounded Hilbert spatial clustering.
         - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
         ### Querying Multiple Countries with DuckDB

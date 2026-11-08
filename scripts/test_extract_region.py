@@ -15,6 +15,7 @@ from extract_region import (
     PLACES_FILTER_RULES,
     LANDUSE_FILTER_RULES,
     FACILITIES_FILTER_RULES,
+    POSTAL_CODES_FILTER_RULES,
 )
 
 
@@ -25,6 +26,7 @@ class TestExtractRegion(unittest.TestCase):
         self.assertTrue(len(PLACES_FILTER_RULES) >= 1)
         self.assertTrue(len(LANDUSE_FILTER_RULES) >= 1)
         self.assertTrue(len(FACILITIES_FILTER_RULES) >= 10)
+        self.assertEqual(POSTAL_CODES_FILTER_RULES, ["w/boundary=postal_code", "r/boundary=postal_code"])
         self.assertIn("boundary=administrative", ADMIN_FILTER_RULES[0])
         self.assertTrue(any("residential" in r and "farmyard" in r for r in LANDUSE_FILTER_RULES))
         self.assertTrue(any("highway=pedestrian" in r for r in FACILITIES_FILTER_RULES))

@@ -10,8 +10,10 @@ import sys
 
 from validate_parquet import (
     find_parquet_files,
+    find_postal_code_parquet_files,
     check_duplicate_files,
     inspect_parquet_file,
+    inspect_postal_code_parquet_file,
     validate_parquets
 )
 
@@ -62,9 +64,10 @@ class TestValidateParquet(unittest.TestCase):
         self.assertEqual(res["meta_keys"], ["source"])
 
 
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
     @patch("validate_parquet.find_parquet_files")
     @patch("validate_parquet.inspect_parquet_file")
-    def test_validate_parquets_summary(self, mock_inspect, mock_find):
+    def test_validate_parquets_summary(self, mock_inspect, mock_find, _mock_find_pc):
         mock_find.return_value = ["admin-polygons-DE.parquet", "admin-polygons-FR.parquet"]
         mock_inspect.side_effect = [
             {"country_code": "DE", "path": "admin-polygons-DE.parquet", "error": None, "total_rows": 100, "l2_count": 1, "null_geom_count": 0, "dupe_feature_count": 0, "populated_levels": [2, 4, 6], "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"]},
@@ -92,9 +95,10 @@ class TestValidateParquet(unittest.TestCase):
         self.assertEqual(res["ac_name_corrupt_count"], 3)
         self.assertEqual(res["ac_names_corrupt_count"], 4)
 
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
     @patch("validate_parquet.find_parquet_files")
     @patch("validate_parquet.inspect_parquet_file")
-    def test_validate_parquets_warns_on_corrupt_admin_centre_names(self, mock_inspect, mock_find):
+    def test_validate_parquets_warns_on_corrupt_admin_centre_names(self, mock_inspect, mock_find, _mock_find_pc):
         mock_find.return_value = ["admin-polygons-JP.parquet"]
         mock_inspect.side_effect = [
             {"country_code": "JP", "path": "admin-polygons-JP.parquet", "error": None,
@@ -113,6 +117,70 @@ class TestValidateParquet(unittest.TestCase):
         # Encoding corruption must be reported as a non-breaking warning (rule: transparent audits).
         self.assertIn("suspected OPL encoding corruption", output)
         self.assertIn("Corrupted Admin-Centre Names:   1", output)
+        self.assertEqual(exit_code, 0)
+
+    @patch("subprocess.run")
+    def test_inspect_postal_code_parquet_file_ok(self, mock_run):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = (
+            '[{"total_rows": 8250, "null_or_empty_geom_count": 0, "invalid_geom_count": 0, '
+            '"invalid_de_format_count": 0, "dupe_feature_count": 0, '
+            '"meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"]}]'
+        )
+        mock_run.return_value = mock_proc
+
+        res = inspect_postal_code_parquet_file("path/to/osm-postal-codes-DE.parquet")
+        self.assertEqual(res["country_code"], "DE")
+        self.assertEqual(res["total_rows"], 8250)
+        self.assertEqual(res["null_or_empty_geom_count"], 0)
+        self.assertEqual(res["invalid_geom_count"], 0)
+        self.assertEqual(res["invalid_de_format_count"], 0)
+        self.assertEqual(res["dupe_feature_count"], 0)
+        self.assertIsNone(res["error"])
+
+    @patch("validate_parquet.find_postal_code_parquet_files")
+    @patch("validate_parquet.inspect_postal_code_parquet_file")
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_postal_codes_checks(self, mock_inspect, mock_find, mock_inspect_pc, mock_find_pc):
+        mock_find.return_value = ["admin-polygons-DE.parquet"]
+        mock_inspect.return_value = {
+            "country_code": "DE",
+            "path": "admin-polygons-DE.parquet",
+            "error": None,
+            "total_rows": 100,
+            "l2_count": 1,
+            "null_geom_count": 0,
+            "dupe_feature_count": 0,
+            "populated_levels": [2, 4, 6],
+            "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+        }
+        mock_find_pc.return_value = ["osm-postal-codes-DE.parquet"]
+        mock_inspect_pc.return_value = {
+            "country_code": "DE",
+            "path": "osm-postal-codes-DE.parquet",
+            "error": None,
+            "total_rows": 7500,
+            "null_or_empty_geom_count": 1,
+            "invalid_geom_count": 2,
+            "invalid_de_format_count": 3,
+            "dupe_feature_count": 1,
+            "meta_keys": ["source"],
+        }
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        self.assertIn("Postal codes DE has fewer than 8000 polygons", output)
+        self.assertIn("violating DE 5-digit postal_code format", output)
+        self.assertIn("NULL/empty and 2 invalid geometry record(s)", output)
+        self.assertIn("duplicate OSM feature(s)", output)
+        self.assertIn("missing required metadata key(s)", output)
         self.assertEqual(exit_code, 0)
 
 

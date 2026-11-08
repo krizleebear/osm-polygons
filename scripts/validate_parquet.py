@@ -33,6 +33,12 @@ def find_parquet_files(base_dir):
     return sorted(glob.glob(pattern, recursive=True))
 
 
+def find_postal_code_parquet_files(base_dir):
+    """Find all osm-postal-codes-*.parquet files recursively."""
+    pattern = os.path.join(base_dir, "**", "osm-postal-codes-*.parquet")
+    return sorted(glob.glob(pattern, recursive=True))
+
+
 def check_duplicate_files(files):
     """Check if the same country parquet file was emitted multiple times (e.g. across continents)."""
     seen = {}
@@ -126,6 +132,73 @@ def inspect_parquet_file(file_path):
             "meta_keys": [],
         }
 
+
+def inspect_postal_code_parquet_file(file_path):
+    """Query a single osm-postal-codes-*.parquet file for quality metrics using duckdb CLI."""
+    cc = os.path.basename(file_path).replace("osm-postal-codes-", "").replace(".parquet", "")
+
+    sql = f"""
+    INSTALL spatial; LOAD spatial;
+    SELECT
+        count(*) AS total_rows,
+        count(*) FILTER (WHERE geom IS NULL OR ST_IsEmpty(geom)) AS null_or_empty_geom_count,
+        count(*) FILTER (WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom) AND NOT ST_IsValid(geom)) AS invalid_geom_count,
+        count(*) FILTER (
+            WHERE country_code = 'DE'
+              AND (postal_code IS NULL OR NOT regexp_matches(postal_code, '^[0-9]{{5}}(;[0-9]{{5}})*$'))
+        ) AS invalid_de_format_count,
+        (SELECT count(*) FROM (
+            SELECT osm_type, osm_id, count(*)
+            FROM read_parquet('{file_path}')
+            GROUP BY osm_type, osm_id HAVING count(*) > 1
+        )) AS dupe_feature_count,
+        (SELECT list(k) FROM (SELECT key::VARCHAR AS k FROM parquet_kv_metadata('{file_path}'))) AS meta_keys
+    FROM read_parquet('{file_path}');
+    """
+
+    cmd = ["duckdb", "-json", "-c", sql]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": res.stderr.strip(),
+            "total_rows": 0,
+            "null_or_empty_geom_count": 0,
+            "invalid_geom_count": 0,
+            "invalid_de_format_count": 0,
+            "dupe_feature_count": 0,
+            "meta_keys": [],
+        }
+
+    try:
+        data = json.loads(res.stdout)
+        if not data:
+            raise ValueError("Empty output")
+        row = data[0]
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": None,
+            "total_rows": int(row.get("total_rows", 0)),
+            "null_or_empty_geom_count": int(row.get("null_or_empty_geom_count", 0)),
+            "invalid_geom_count": int(row.get("invalid_geom_count", 0)),
+            "invalid_de_format_count": int(row.get("invalid_de_format_count", 0)),
+            "dupe_feature_count": int(row.get("dupe_feature_count", 0)),
+            "meta_keys": [str(x) for x in row.get("meta_keys", []) if x is not None],
+        }
+    except Exception as e:
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": f"JSON parse error: {e}",
+            "total_rows": 0,
+            "null_or_empty_geom_count": 0,
+            "invalid_geom_count": 0,
+            "invalid_de_format_count": 0,
+            "dupe_feature_count": 0,
+            "meta_keys": [],
+        }
 
 
 def validate_parquets(base_dir, fail_on_error=False):
@@ -222,6 +295,57 @@ def validate_parquets(base_dir, fail_on_error=False):
             print(f"##vso[task.logissue type=warning]Country {cc} ({path}) is missing required metadata key(s): {missing_str}")
             missing_metadata.append((cc, path, missing_str))
 
+    # 3. Validate osm-postal-codes-*.parquet files if present
+    postal_code_files = find_postal_code_parquet_files(base_dir)
+    postal_code_issues = []
+    if postal_code_files:
+        print(f"\nFound {len(postal_code_files)} postal codes parquet file(s).")
+        duplicate_pc_files = check_duplicate_files(postal_code_files)
+        if duplicate_pc_files:
+            for basename, path1, path2 in duplicate_pc_files:
+                print(f"##vso[task.logissue type=error]Duplicate postal codes parquet file '{basename}' emitted in multiple paths: {path1} and {path2}")
+                postal_code_issues.append((basename, f"duplicate file in {path1} and {path2}"))
+            if fail_on_error:
+                return 1
+
+        required_meta = {"source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"}
+        for pc_path in postal_code_files:
+            pc_metrics = inspect_postal_code_parquet_file(pc_path)
+            cc = pc_metrics["country_code"]
+
+            if pc_metrics["error"]:
+                print(f"##vso[task.logissue type=error]Failed to inspect postal codes {cc} ({pc_path}): {pc_metrics['error']}")
+                errors.append((cc, pc_path, pc_metrics["error"]))
+                postal_code_issues.append((cc, pc_path, "error"))
+                continue
+
+            if pc_metrics["total_rows"] == 0:
+                print(f"##vso[task.logissue type=warning]Postal codes {cc} ({pc_path}) is EMPTY (0 rows)!")
+                postal_code_issues.append((cc, pc_path, "empty"))
+
+            if cc == "DE" and pc_metrics["total_rows"] < 8000:
+                print(f"##vso[task.logissue type=warning]Postal codes DE has fewer than 8000 polygons ({pc_metrics['total_rows']} rows in {pc_path})!")
+                postal_code_issues.append((cc, pc_path, f"DE rows {pc_metrics['total_rows']} < 8000"))
+
+            if pc_metrics["invalid_de_format_count"] > 0:
+                print(f"##vso[task.logissue type=warning]Postal codes {cc} ({pc_path}) has {pc_metrics['invalid_de_format_count']} record(s) violating DE 5-digit postal_code format!")
+                postal_code_issues.append((cc, pc_path, f"invalid DE format: {pc_metrics['invalid_de_format_count']}"))
+
+            if pc_metrics["null_or_empty_geom_count"] > 0 or pc_metrics["invalid_geom_count"] > 0:
+                print(f"##vso[task.logissue type=warning]Postal codes {cc} ({pc_path}) has {pc_metrics['null_or_empty_geom_count']} NULL/empty and {pc_metrics['invalid_geom_count']} invalid geometry record(s)!")
+                postal_code_issues.append((cc, pc_path, "geometry validity"))
+
+            if pc_metrics["dupe_feature_count"] > 0:
+                print(f"##vso[task.logissue type=warning]Postal codes {cc} ({pc_path}) contains {pc_metrics['dupe_feature_count']} duplicate OSM feature(s)!")
+                postal_code_issues.append((cc, pc_path, f"duplicates: {pc_metrics['dupe_feature_count']}"))
+
+            present_meta = set(pc_metrics.get("meta_keys", []))
+            missing_meta = required_meta - present_meta
+            if missing_meta:
+                missing_str = ", ".join(sorted(missing_meta))
+                print(f"##vso[task.logissue type=warning]Postal codes {cc} ({pc_path}) is missing required metadata key(s): {missing_str}")
+                postal_code_issues.append((cc, pc_path, f"missing metadata: {missing_str}"))
+
     # Summary table
     print("\n" + "=" * 60)
     print(" === GEOPARQUET QUALITY & INTEGRITY SUMMARY ===")
@@ -235,6 +359,9 @@ def validate_parquets(base_dir, fail_on_error=False):
     print(f" NULL Geometries Detected:       {len(null_geoms)}")
     print(f" Corrupted Admin-Centre Names:   {len(corrupt_names)}")
     print(f" Missing Metadata Headers:       {len(missing_metadata)}")
+    if postal_code_files:
+        print(f" Postal Code Parquets Checked:   {len(postal_code_files)}")
+        print(f" Postal Code Issues Detected:    {len(postal_code_issues)}")
     print(f" Extraction Errors:              {len(errors)}")
     print("=" * 60)
 
@@ -247,6 +374,7 @@ def validate_parquets(base_dir, fail_on_error=False):
         or len(null_geoms) > 0
         or len(corrupt_names) > 0
         or len(missing_metadata) > 0
+        or len(postal_code_issues) > 0
         or len(errors) > 0
     )
 

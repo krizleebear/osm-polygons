@@ -962,6 +962,7 @@ stages:
           PLACES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).places.jsonl"
           FACILITIES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).facilities.jsonl"
           LANDUSE_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).landuse.jsonl"
+          POSTAL_CODES_JSONL="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).postal-codes.jsonl"
           META_JSON="${EXPORT_DIR}/$(COUNTRY_CODE)_$(OSM_REGION).meta.json"
 
           python3 scripts/extract_region.py \
@@ -972,6 +973,7 @@ stages:
             --places-out "${PLACES_JSONL}" \
             --facilities-out "${FACILITIES_JSONL}" \
             --landuse-out "${LANDUSE_JSONL}" \
+            --postal-codes-out "${POSTAL_CODES_JSONL}" \
             --meta-out "${META_JSON}" \
             ${REF_ARG}
 
@@ -1335,7 +1337,7 @@ stages:
           find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" \) || true
 
           # Prune export directories belonging to other continents to conserve runner disk space
-          for dir in export-* admin-polygons-* places-* facilities-* landuse-*; do
+          for dir in export-* admin-polygons-* places-* facilities-* landuse-* postal-codes-*; do
             [ -d "$dir" ] || continue
             keep=false
             for region in $(REGIONS); do
@@ -1350,10 +1352,10 @@ stages:
           done
 
           echo "=== Retained region directories for continent '$(CONTINENT)' ==="
-          find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" -o -name "places-*" -o -name "facilities-*" -o -name "landuse-*" \) || true
+          find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" -o -name "places-*" -o -name "facilities-*" -o -name "landuse-*" -o -name "postal-codes-*" \) || true
 
-          chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh scripts/convert_facilities_to_parquet.sh scripts/convert_landuse_to_parquet.sh
-          mkdir -p temp_parquet temp_places_parquet temp_facilities_parquet temp_landuse_parquet parquet
+          chmod +x scripts/convert_to_parquet.sh scripts/convert_places_to_parquet.sh scripts/convert_facilities_to_parquet.sh scripts/convert_landuse_to_parquet.sh scripts/convert_postal_codes_to_parquet.sh
+          mkdir -p temp_parquet temp_places_parquet temp_facilities_parquet temp_landuse_parquet temp_postal_codes_parquet parquet
 
           for region in $(REGIONS); do
             while IFS= read -r file; do
@@ -1402,8 +1404,19 @@ stages:
               rm -f "$file"
             done < <(find . -type f \( -name "*_${region}.landuse.jsonl" -o -name "${region}.landuse.jsonl" \))
 
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              [ -s "$file" ] || continue
+              filename=$(basename "$file")
+              matrix_cc=$(echo "$filename" | cut -d'_' -f1)
+              postal_codes_out="temp_postal_codes_parquet/${filename%.jsonl}.parquet"
+              echo "Processing postal codes $file -> $postal_codes_out ..."
+              ./scripts/convert_postal_codes_to_parquet.sh "$matrix_cc" "$file" "$postal_codes_out"
+              rm -f "$file"
+            done < <(find . -type f \( -name "*_${region}.postal-codes.jsonl" -o -name "${region}.postal-codes.jsonl" \))
+
             # Clean up region directory after all stream types are processed
-            find . -maxdepth 2 -type d \( -name "export-*-${region}" -o -name "export-${region}" -o -name "admin-polygons-*-${region}" -o -name "places-*-${region}" -o -name "facilities-*-${region}" -o -name "landuse-*-${region}" \) -exec rm -rf {} + 2>/dev/null || true
+            find . -maxdepth 2 -type d \( -name "export-*-${region}" -o -name "export-${region}" -o -name "admin-polygons-*-${region}" -o -name "places-*-${region}" -o -name "facilities-*-${region}" -o -name "landuse-*-${region}" -o -name "postal-codes-*-${region}" \) -exec rm -rf {} + 2>/dev/null || true
           done
 
           TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
@@ -1640,6 +1653,59 @@ stages:
             rm -rf temp_landuse_parquet
           fi
 
+          # per-country postal codes parquets
+          HAS_POSTAL_CODES=false
+          POSTAL_CODES_TEMP_COUNT=$(find temp_postal_codes_parquet -name "*.parquet" 2>/dev/null | wc -l)
+          if [ "$POSTAL_CODES_TEMP_COUNT" -gt 0 ]; then
+            duckdb -c "
+            LOAD spatial;
+            CREATE TABLE pccombined AS SELECT * FROM read_parquet('temp_postal_codes_parquet/*.parquet');
+            COPY (SELECT DISTINCT country_code AS cc FROM pccombined ORDER BY cc) TO '/tmp/postal_codes_ccs_$(CONTINENT).csv' (HEADER false);
+            "
+            while IFS= read -r cc; do
+              [ -n "$cc" ] || continue
+              pcout="parquet/osm-postal-codes-${cc}.parquet"
+              echo "Writing $pcout ..."
+              country_osm_ts=$(duckdb -no-init -noheader -list -c "
+                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
+                FROM parquet_kv_metadata('temp_postal_codes_parquet/*.parquet')
+                WHERE key = 'osm_data_timestamp';
+              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
+              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
+              duckdb -c "
+              LOAD spatial;
+              CREATE TABLE pccombined AS SELECT * FROM read_parquet('temp_postal_codes_parquet/*.parquet');
+              COPY (
+                SELECT * EXCLUDE (rn) FROM (
+                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY postal_code) AS rn
+                  FROM pccombined
+                  WHERE country_code = '${cc}'
+                ) WHERE rn = 1
+                ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
+              ) TO '${pcout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
+                KV_METADATA {
+                  'source': 'OpenStreetMap',
+                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+                  'dataset': 'OpenStreetMap Postal Codes',
+                  'attribution': '© OpenStreetMap contributors',
+                  'attribution_url': 'https://www.openstreetmap.org/copyright',
+                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
+                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+                  'schema': 'https://github.com/krizleebear/osm-polygons',
+                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
+                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+                  'country_code': '${cc}',
+                  'exported_at': '${EXPORTED_AT}',
+                  'osm_data_timestamp': '${country_osm_ts}'
+                }
+              );
+              "
+              HAS_POSTAL_CODES=true
+            done < /tmp/postal_codes_ccs_$(CONTINENT).csv
+            rm -rf temp_postal_codes_parquet
+          fi
+
           echo "=== Per-country GeoParquet files produced ==="
           ls -lh parquet/
 
@@ -1871,7 +1937,10 @@ stages:
           # 4. Per-country OSM Landuse GeoParquet files
           find downloads -name "osm-landuse-*.parquet" -exec mv {} release-assets/ \;
 
-          # 5. Unified Metadata & Validation Artifacts
+          # 5. Per-country OSM Postal Codes GeoParquet files
+          find downloads -name "osm-postal-codes-*.parquet" -exec mv {} release-assets/ \;
+
+          # 6. Unified Metadata & Validation Artifacts
           if [ -d "downloads/metadata" ]; then
             find downloads/metadata -type f -exec mv {} release-assets/ \;
           fi
@@ -1943,6 +2012,13 @@ stages:
               "generated_at": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
               "base_url": base_url,
               "file_pattern": file_pattern,
+              "file_patterns": {
+                  "admin_polygons": "admin-polygons-{cc}.parquet",
+                  "places": "osm-places-{cc}.parquet",
+                  "facilities": "osm-facilities-{cc}.parquet",
+                  "landuse": "osm-landuse-{cc}.parquet",
+                  "postal_codes": "osm-postal-codes-{cc}.parquet"
+              },
               "countries": countries_list
           }
 
@@ -1966,6 +2042,7 @@ stages:
           - **OSM Place-Nodes Companion Dataset (\`osm-places-{CC}.parquet\`):** Full coverage of point features for villages, hamlets, quarters, and suburbs.
           - **OSM Facilities Companion Dataset (\`osm-facilities-{CC}.parquet\`):** Critical infrastructure, facility footprints, and navigational access points (motorways with heading order, junctions, service areas, airports, shopping malls, universities, hospitals, stadiums, train stations, exhibition centres, theme parks, zoos, ferry terminals, building entrances, gates, barriers, parking entrances, and emergency ward entrances).
           - **OSM Landuse Companion Dataset (\`osm-landuse-{CC}.parquet\`):** Built-up residential, commercial, retail, farmyard, and settlement landuse polygons for settlement synthesis and fine-grained spatial coverage.
+          - **OSM Postal Codes Companion Dataset (\`osm-postal-codes-{CC}.parquet\`):** Dedicated \`boundary=postal_code\` polygon boundaries with exact geodesic ellipsoidal area (\`area_m2\`) and bounded Hilbert spatial clustering.
           - **Sub-Second SQL Queries via HTTP Range Requests:** Direct selective querying with DuckDB without downloading the entire dataset.
 
           ### Querying Multiple Countries with DuckDB
