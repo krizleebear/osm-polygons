@@ -954,6 +954,8 @@ stages:
           REF_ARG=""
           if [ -n "$REF_STREAM" ] && [ -s "$REF_STREAM" ]; then
             REF_ARG="--reference-polygons ${REF_STREAM}"
+          else
+            echo "##vso[task.logissue type=warning]admin-polygons-reference artifact not found or empty; skipping Postpass reference merge for $(COUNTRY_CODE)."
           fi
 
           EXPORT_DIR="export-$(COUNTRY_CODE)-$(OSM_REGION)"

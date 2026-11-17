@@ -643,15 +643,37 @@ jobs:
   displayName: 'Pre-fetch intact reference polygons from Postpass'
   timeoutInMinutes: 15
   steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download previous reference polygons cache (fallback)'
+    continueOnError: true
+    inputs:
+      buildType: 'specific'
+      project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+      definition: '9'
+      buildVersionToDownload: 'latest'
+      allowFailedBuilds: true
+      allowPartiallySucceededBuilds: true
+      itemPattern: 'admin-polygons-reference/**'
+      targetPath: '$(System.DefaultWorkingDirectory)/cached-reference'
+
   - task: Bash@3
     displayName: 'Fetch reference polygons from Postpass API'
     inputs:
       targetType: 'inline'
       script: |
         set -euo pipefail
+        CACHED_REF=$(find cached-reference -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
+        FALLBACK_ARG=""
+        if [ -n "$CACHED_REF" ] && [ -s "$CACHED_REF" ]; then
+          echo "[INFO] Found cached reference polygons fallback: ${CACHED_REF}"
+          FALLBACK_ARG="--fallback-reference ${CACHED_REF}"
+        else
+          echo "[INFO] No previous cached reference polygons found; running without cache fallback."
+        fi
         python3 scripts/fetch_postpass_polygons.py \
           --candidates scripts/postpass-candidates.json \
-          --out-dir reference-polygons
+          --out-dir reference-polygons \
+          ${FALLBACK_ARG}
         ls -la reference-polygons
 
   - task: PublishPipelineArtifact@1

@@ -40,6 +40,23 @@ def load_candidates(candidates_path):
     return data.get("candidates", [])
 
 
+def load_cached_reference(reference_path):
+    """Load previously cached reference polygons keyed by integer osm_id."""
+    cached = {}
+    if not reference_path or not os.path.exists(reference_path):
+        return cached
+    with open(reference_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            feat = json.loads(line)
+            osm_id = feat.get("id") or feat.get("properties", {}).get("osm_id")
+            if osm_id is not None and feat.get("geometry"):
+                cached[int(osm_id)] = feat
+    return cached
+
+
 def query_postpass_polygon(rel_id, timeout=20):
     """Query the indexed postpass_polygon table for a relation."""
     sql = f"""
@@ -107,11 +124,20 @@ def main():
         default=3,
         help="Number of retries per relation on failure",
     )
+    parser.add_argument(
+        "--fallback-reference",
+        default=None,
+        help="Optional path to previously cached reference-polygons.geojsonseq for fallback on Postpass failure",
+    )
     args = parser.parse_args()
 
     candidates = load_candidates(args.candidates)
     if not candidates:
         sys.exit(f"ERROR: No candidates found in {args.candidates}")
+
+    cached_refs = load_cached_reference(args.fallback_reference)
+    if cached_refs:
+        print(f"Loaded {len(cached_refs)} cached fallback polygons from {args.fallback_reference}.")
 
     os.makedirs(args.out_dir, exist_ok=True)
     geojsonseq_path = os.path.join(args.out_dir, "reference-polygons.geojsonseq")
@@ -121,6 +147,7 @@ def main():
 
     success_features = []
     manifest = []
+    fallback_count = 0
 
     for item in candidates:
         rel_id = item["osm_id"]
@@ -129,6 +156,7 @@ def main():
         lvl = item.get("admin_level", "?")
 
         feature = None
+        source = "postpass"
         for attempt in range(1, args.retry_count + 1):
             try:
                 t0 = time.time()
@@ -152,9 +180,17 @@ def main():
                 time.sleep(2)
 
         if not feature:
-            sys.exit(
-                f"ERROR: Failed to fetch reference polygon for Rel {rel_id} ({name}, {country}) after {args.retry_count} attempts."
-            )
+            if int(rel_id) in cached_refs:
+                feature = cached_refs[int(rel_id)]
+                source = "cached_fallback"
+                fallback_count += 1
+                print(
+                    f"##vso[task.logissue type=warning][{country}] Postpass fetch failed for Rel {rel_id} ({name}); falling back to cached reference polygon."
+                )
+            else:
+                sys.exit(
+                    f"ERROR: Failed to fetch reference polygon for Rel {rel_id} ({name}, {country}) after {args.retry_count} attempts, and no cached fallback was available."
+                )
 
         success_features.append(feature)
         manifest.append(
@@ -164,6 +200,7 @@ def main():
                 "country": country,
                 "admin_level": lvl,
                 "geometry_type": feature["geometry"].get("type"),
+                "source": source,
             }
         )
 
@@ -177,12 +214,18 @@ def main():
         json.dump(
             {
                 "total_count": len(manifest),
+                "fallback_count": fallback_count,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "candidates": manifest,
             },
             f,
             ensure_ascii=False,
             indent=2,
+        )
+
+    if fallback_count > 0:
+        print(
+            f"##vso[task.logissue type=warning]Postpass fallback active: {fallback_count}/{len(success_features)} reference polygons were served from the previous cache."
         )
 
     size_mb = os.path.getsize(geojsonseq_path) / (1024 * 1024)
