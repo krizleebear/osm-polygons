@@ -11,9 +11,11 @@ import sys
 from validate_parquet import (
     find_parquet_files,
     find_postal_code_parquet_files,
+    find_layer_parquet_files,
     check_duplicate_files,
     inspect_parquet_file,
     inspect_postal_code_parquet_file,
+    inspect_companion_parquet_file,
     validate_parquets
 )
 
@@ -181,6 +183,84 @@ class TestValidateParquet(unittest.TestCase):
         self.assertIn("NULL/empty and 2 invalid geometry record(s)", output)
         self.assertIn("duplicate OSM feature(s)", output)
         self.assertIn("missing required metadata key(s)", output)
+        self.assertEqual(exit_code, 0)
+
+    @patch("subprocess.run")
+    def test_inspect_companion_parquet_file_ok(self, mock_run):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = (
+            '[{"total_rows": 420, "null_or_empty_geom_count": 0, "dupe_feature_count": 0, '
+            '"meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"]}]'
+        )
+        mock_run.return_value = mock_proc
+
+        res = inspect_companion_parquet_file("path/to/osm-places-DE.parquet", "osm-places", has_osm_type=False)
+        self.assertEqual(res["country_code"], "DE")
+        self.assertEqual(res["total_rows"], 420)
+        self.assertEqual(res["null_or_empty_geom_count"], 0)
+        self.assertEqual(res["dupe_feature_count"], 0)
+        self.assertIsNone(res["error"])
+        # Places table groups duplicates by osm_id only
+        sql_arg = mock_run.call_args[0][0][3]
+        self.assertIn("GROUP BY osm_id HAVING", sql_arg)
+
+    @patch("validate_parquet.find_layer_parquet_files")
+    @patch("validate_parquet.inspect_companion_parquet_file")
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_companion_layers(
+        self, mock_inspect, mock_find, _mock_find_pc, mock_inspect_comp, mock_find_layer
+    ):
+        mock_find.return_value = ["admin-polygons-DE.parquet"]
+        mock_inspect.return_value = {
+            "country_code": "DE",
+            "path": "admin-polygons-DE.parquet",
+            "error": None,
+            "total_rows": 100,
+            "l2_count": 1,
+            "null_geom_count": 0,
+            "dupe_feature_count": 0,
+            "populated_levels": [2, 4, 6],
+            "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+        }
+        # Called for admin-polygons, postal-codes (mocked separately), then places, facilities, landuse
+        mock_find_layer.side_effect = [
+            ["osm-places-DE.parquet"],
+            ["osm-facilities-DE.parquet"],
+            [],
+        ]
+        mock_inspect_comp.side_effect = [
+            {
+                "country_code": "DE",
+                "path": "osm-places-DE.parquet",
+                "error": None,
+                "total_rows": 500,
+                "null_or_empty_geom_count": 0,
+                "dupe_feature_count": 0,
+                "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+            },
+            {
+                "country_code": "DE",
+                "path": "osm-facilities-DE.parquet",
+                "error": None,
+                "total_rows": 0,
+                "null_or_empty_geom_count": 2,
+                "dupe_feature_count": 1,
+                "meta_keys": ["source"],
+            },
+        ]
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        self.assertIn("osm-places Parquets Checked:  1 (Issues: 0)", output)
+        self.assertIn("osm-facilities Parquets Checked:  1 (Issues: 4)", output)
         self.assertEqual(exit_code, 0)
 
 

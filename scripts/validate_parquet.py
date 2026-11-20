@@ -27,16 +27,26 @@ import sys
 
 
 
+def find_layer_parquet_files(base_dir, pattern):
+    """Find all parquet files matching a filename glob pattern recursively."""
+    return sorted(glob.glob(os.path.join(base_dir, "**", pattern), recursive=True))
+
+
 def find_parquet_files(base_dir):
     """Find all admin-polygons-*.parquet files recursively."""
-    pattern = os.path.join(base_dir, "**", "admin-polygons-*.parquet")
-    return sorted(glob.glob(pattern, recursive=True))
+    return find_layer_parquet_files(base_dir, "admin-polygons-*.parquet")
 
 
 def find_postal_code_parquet_files(base_dir):
     """Find all osm-postal-codes-*.parquet files recursively."""
-    pattern = os.path.join(base_dir, "**", "osm-postal-codes-*.parquet")
-    return sorted(glob.glob(pattern, recursive=True))
+    return find_layer_parquet_files(base_dir, "osm-postal-codes-*.parquet")
+
+
+COMPANION_LAYERS = [
+    ("osm-places", "osm-places-*.parquet", False),
+    ("osm-facilities", "osm-facilities-*.parquet", True),
+    ("osm-landuse", "osm-landuse-*.parquet", True),
+]
 
 
 def check_duplicate_files(files):
@@ -201,6 +211,64 @@ def inspect_postal_code_parquet_file(file_path):
         }
 
 
+def inspect_companion_parquet_file(file_path, prefix, has_osm_type=True):
+    """Query a companion layer parquet file (places, facilities, landuse) using duckdb CLI."""
+    cc = os.path.basename(file_path).replace(f"{prefix}-", "").replace(".parquet", "")
+    dupe_cols = "osm_type, osm_id" if has_osm_type else "osm_id"
+
+    sql = f"""
+    INSTALL spatial; LOAD spatial;
+    SELECT
+        count(*) AS total_rows,
+        count(*) FILTER (WHERE geom IS NULL OR ST_IsEmpty(geom)) AS null_or_empty_geom_count,
+        (SELECT count(*) FROM (
+            SELECT {dupe_cols}, count(*)
+            FROM read_parquet('{file_path}')
+            GROUP BY {dupe_cols} HAVING count(*) > 1
+        )) AS dupe_feature_count,
+        (SELECT list(k) FROM (SELECT key::VARCHAR AS k FROM parquet_kv_metadata('{file_path}'))) AS meta_keys
+    FROM read_parquet('{file_path}');
+    """
+
+    cmd = ["duckdb", "-json", "-c", sql]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": res.stderr.strip(),
+            "total_rows": 0,
+            "null_or_empty_geom_count": 0,
+            "dupe_feature_count": 0,
+            "meta_keys": [],
+        }
+
+    try:
+        data = json.loads(res.stdout)
+        if not data:
+            raise ValueError("Empty output")
+        row = data[0]
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": None,
+            "total_rows": int(row.get("total_rows", 0)),
+            "null_or_empty_geom_count": int(row.get("null_or_empty_geom_count", 0)),
+            "dupe_feature_count": int(row.get("dupe_feature_count", 0)),
+            "meta_keys": [str(x) for x in row.get("meta_keys", []) if x is not None],
+        }
+    except Exception as e:
+        return {
+            "country_code": cc,
+            "path": file_path,
+            "error": f"JSON parse error: {e}",
+            "total_rows": 0,
+            "null_or_empty_geom_count": 0,
+            "dupe_feature_count": 0,
+            "meta_keys": [],
+        }
+
+
 def validate_parquets(base_dir, fail_on_error=False):
     files = find_parquet_files(base_dir)
     print(f"=== GeoParquet Validation Suite ===")
@@ -346,6 +414,58 @@ def validate_parquets(base_dir, fail_on_error=False):
                 print(f"##vso[task.logissue type=warning]Postal codes {cc} ({pc_path}) is missing required metadata key(s): {missing_str}")
                 postal_code_issues.append((cc, pc_path, f"missing metadata: {missing_str}"))
 
+    # 4. Validate companion layers (osm-places, osm-facilities, osm-landuse) if present
+    companion_stats = []
+    companion_issues = []
+    required_meta = {"source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"}
+    for prefix, pattern, has_osm_type in COMPANION_LAYERS:
+        layer_files = find_layer_parquet_files(base_dir, pattern)
+        if not layer_files:
+            continue
+        print(f"\nFound {len(layer_files)} {prefix} parquet file(s).")
+        duplicate_layer_files = check_duplicate_files(layer_files)
+        if duplicate_layer_files:
+            for basename, path1, path2 in duplicate_layer_files:
+                print(f"##vso[task.logissue type=error]Duplicate {prefix} parquet file '{basename}' emitted in multiple paths: {path1} and {path2}")
+                duplicate_files.append((basename, path1, path2))
+                companion_issues.append((prefix, basename, "duplicate file"))
+            if fail_on_error:
+                return 1
+
+        layer_issue_count = 0
+        for l_path in layer_files:
+            l_metrics = inspect_companion_parquet_file(l_path, prefix, has_osm_type=has_osm_type)
+            cc = l_metrics["country_code"]
+
+            if l_metrics["error"]:
+                print(f"##vso[task.logissue type=error]Failed to inspect {prefix} {cc} ({l_path}): {l_metrics['error']}")
+                errors.append((cc, l_path, l_metrics["error"]))
+                layer_issue_count += 1
+                continue
+
+            if l_metrics["total_rows"] == 0:
+                print(f"##vso[task.logissue type=warning]{prefix} {cc} ({l_path}) is EMPTY (0 rows)!")
+                layer_issue_count += 1
+
+            if l_metrics["null_or_empty_geom_count"] > 0:
+                print(f"##vso[task.logissue type=warning]{prefix} {cc} ({l_path}) has {l_metrics['null_or_empty_geom_count']} NULL/empty geometry record(s)!")
+                layer_issue_count += 1
+
+            if l_metrics["dupe_feature_count"] > 0:
+                print(f"##vso[task.logissue type=warning]{prefix} {cc} ({l_path}) contains {l_metrics['dupe_feature_count']} duplicate OSM feature(s)!")
+                layer_issue_count += 1
+
+            present_meta = set(l_metrics.get("meta_keys", []))
+            missing_meta = required_meta - present_meta
+            if missing_meta:
+                missing_str = ", ".join(sorted(missing_meta))
+                print(f"##vso[task.logissue type=warning]{prefix} {cc} ({l_path}) is missing required metadata key(s): {missing_str}")
+                layer_issue_count += 1
+
+        if layer_issue_count > 0:
+            companion_issues.append((prefix, layer_issue_count))
+        companion_stats.append((prefix, len(layer_files), layer_issue_count))
+
     # Summary table
     print("\n" + "=" * 60)
     print(" === GEOPARQUET QUALITY & INTEGRITY SUMMARY ===")
@@ -362,6 +482,8 @@ def validate_parquets(base_dir, fail_on_error=False):
     if postal_code_files:
         print(f" Postal Code Parquets Checked:   {len(postal_code_files)}")
         print(f" Postal Code Issues Detected:    {len(postal_code_issues)}")
+    for prefix, count, issues in companion_stats:
+        print(f" {prefix} Parquets Checked:  {count} (Issues: {issues})")
     print(f" Extraction Errors:              {len(errors)}")
     print("=" * 60)
 
@@ -375,6 +497,7 @@ def validate_parquets(base_dir, fail_on_error=False):
         or len(corrupt_names) > 0
         or len(missing_metadata) > 0
         or len(postal_code_issues) > 0
+        or len(companion_issues) > 0
         or len(errors) > 0
     )
 

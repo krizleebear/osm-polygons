@@ -1728,50 +1728,76 @@ stages:
         script: |
           rm -rf $(System.DefaultWorkingDirectory)/*
 
-  # Aggregates validation artifacts and export metadata AFTER the per-country
-  # parquet matrix completes. Runs on a host pool (no heavy container needed).
-  - job: package
-    displayName: 'Bundle validation artifacts & export metadata'
-    dependsOn: parquet
-    timeoutInMinutes: 120
-    workspace:
-      clean: all
-    container: osm2parquet
+# ---------------------------------------------------------------------------
+# Stage 4: Validate, Package Metadata & Publish GitHub Release (single download)
+# ---------------------------------------------------------------------------
+- stage: release
+  displayName: 'Validate, Package & Publish Release'
+  dependsOn: parquet
+  condition: succeeded('parquet')
+  jobs:
+  - job: release
+    displayName: 'Validate GeoParquets, Bundle Metadata & Create GitHub Release'
+    timeoutInMinutes: 360
+    pool:
+      vmImage: 'ubuntu-latest'
     steps:
     - checkout: self
 
+    - task: Bash@3
+      displayName: 'Reclaim runner host disk space'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "[INFO] Disk space before cleanup:"
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache \
+            /usr/share/swift \
+            /usr/lib/jvm \
+            /usr/local/julia \
+            /usr/share/miniconda \
+            /usr/local/share/powershell \
+            /opt/microsoft/powershell \
+            /usr/local/share/vcpkg \
+            /usr/local/share/chromium \
+            /usr/share/google-chrome \
+            /opt/google/chrome \
+            /usr/share/firefox \
+            2>/dev/null || true
+          sudo apt-get clean 2>/dev/null || true
+          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* 2>/dev/null || true
+          echo "[INFO] Disk space after cleanup:"
+          df -h /
 
     - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download all per-country parquet artifacts for duplicate check'
+      displayName: 'Download all per-country GeoParquet & validation artifacts'
       inputs:
         buildType: 'current'
-        itemPattern: 'parquet-*/**'
-        targetPath: '$(System.DefaultWorkingDirectory)/parquet-check'
+        itemPattern: |
+          parquet-*/**
+          export-*/**/validation.json
+          validation-*/**
+        targetPath: '$(System.DefaultWorkingDirectory)/downloads'
 
     - task: Bash@3
-      enabled: true
-      displayName: 'Validate per-country GeoParquet datasets'
+      displayName: 'Validate all per-country GeoParquet datasets'
       continueOnError: true
       inputs:
         targetType: 'inline'
         script: |
-          python3 scripts/validate_parquet.py parquet-check/
-
-    - task: DownloadPipelineArtifact@2
-      enabled: true
-      displayName: 'Download all validation artifacts'
-      continueOnError: true
-      inputs:
-        buildType: 'current'
-        buildVersionToDownload: 'latest'
-        itemPattern: |
-          export-*/**/validation.json
-          validation-*/**
-        targetPath: '$(System.DefaultWorkingDirectory)/validation-artifacts'
+          docker run --rm \
+            -v "$(System.DefaultWorkingDirectory):/work" \
+            -w /work \
+            ghcr.io/krizleebear/osm2parquet:v1.0.6 \
+            python3 scripts/validate_parquet.py downloads/
 
     - task: Bash@3
-      enabled: true
       displayName: 'Bundle validation artifacts & generate export metadata'
       inputs:
         targetType: 'inline'
@@ -1780,8 +1806,8 @@ stages:
 
           # Collect all validation.json files into a single directory and archive
           mkdir -p validation
-          if [ -d "validation-artifacts" ]; then
-            find validation-artifacts -type f -name "validation.json" | while IFS= read -r vfile; do
+          if [ -d "downloads" ]; then
+            find downloads -type f -name "validation.json" | while IFS= read -r vfile; do
               [ -s "$vfile" ] || continue
               vdir=$(basename "$(dirname "$vfile")")
               cp "$vfile" "validation/${vdir}-validation.json" || true
@@ -1799,9 +1825,13 @@ stages:
 
           # Generate global admin levels coverage summary from all per-country parquet datasets
           echo "=== Generating Administrative Levels Coverage Summary ==="
-          python3 scripts/generate_admin_levels_summary.py parquet-check/ \
-            --out-md admin-levels-summary.md \
-            --out-json admin-levels-summary.json || true
+          docker run --rm \
+            -v "$(System.DefaultWorkingDirectory):/work" \
+            -w /work \
+            ghcr.io/krizleebear/osm2parquet:v1.0.6 \
+            python3 scripts/generate_admin_levels_summary.py downloads/ \
+              --out-md admin-levels-summary.md \
+              --out-json admin-levels-summary.json || true
 
           # Extract and parse export metadata
           EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -1842,7 +1872,6 @@ stages:
           fi
 
     - task: PublishPipelineArtifact@1
-      enabled: true
       displayName: 'Store build metadata & validation reports'
       condition: succeeded()
       continueOnError: true
@@ -1851,75 +1880,9 @@ stages:
         artifact: 'metadata'
         publishLocation: 'pipeline'
 
-
-    - task: Bash@3
-      displayName: 'Cleanup workspace'
-      condition: always()
-      inputs:
-        targetType: 'inline'
-        script: |
-          rm -rf $(System.DefaultWorkingDirectory)/*
-
-# ---------------------------------------------------------------------------
-# Stage 4: Publish GitHub Release (optional, driven by parameter)
-# ---------------------------------------------------------------------------
-- stage: release
-  displayName: 'Publish GitHub Release'
-  dependsOn: parquet
-  condition: and(succeeded('parquet'), ${{ eq(parameters.publishGitHubRelease, true) }})
-  jobs:
-  - job: release
-    displayName: 'Create GitHub Release with GeoParquet Assets'
-    timeoutInMinutes: 360
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - checkout: self
-
-    - task: Bash@3
-      displayName: 'Reclaim runner host disk space'
-      inputs:
-        targetType: 'inline'
-        script: |
-          echo "[INFO] Disk space before cleanup:"
-          df -h /
-          sudo systemctl stop docker 2>/dev/null || true
-          sudo rm -rf \
-            /var/lib/docker \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /usr/local/.ghcup \
-            /usr/local/share/boost \
-            /opt/hostedtoolcache \
-            /usr/share/swift \
-            /usr/lib/jvm \
-            /usr/local/julia \
-            /usr/share/miniconda \
-            /usr/local/share/powershell \
-            /opt/microsoft/powershell \
-            /usr/local/share/vcpkg \
-            /usr/local/share/chromium \
-            /usr/share/google-chrome \
-            /opt/google/chrome \
-            /usr/share/firefox \
-            2>/dev/null || true
-          sudo apt-get clean 2>/dev/null || true
-          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* 2>/dev/null || true
-          echo "[INFO] Disk space after cleanup:"
-          df -h /
-
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download per-country GeoParquet and metadata build artifacts'
-      inputs:
-        buildType: 'current'
-        itemPattern: |
-          parquet-*/**
-          metadata/**
-        targetPath: '$(System.DefaultWorkingDirectory)/downloads'
-
     - task: Bash@3
       displayName: 'Prepare Release Assets, index.json & Traceability Metadata'
+      condition: and(succeeded(), ${{ eq(parameters.publishGitHubRelease, true) }})
       env:
         PARAM_RELEASE_TAG: '${{ parameters.releaseTag }}'
         PARAM_RELEASE_TITLE: '${{ parameters.releaseTitle }}'
@@ -1945,8 +1908,8 @@ stages:
           find downloads -name "osm-postal-codes-*.parquet" -exec mv {} release-assets/ \;
 
           # 6. Unified Metadata & Validation Artifacts
-          if [ -d "downloads/metadata" ]; then
-            find downloads/metadata -type f -exec mv {} release-assets/ \;
+          if [ -d "metadata" ]; then
+            cp metadata/* release-assets/ 2>/dev/null || true
           fi
 
           # Reclaim runner disk space immediately by removing downloaded temp folders
@@ -2119,6 +2082,7 @@ stages:
 
     - task: GitHubRelease@1
       displayName: 'Create GitHub Release'
+      condition: and(succeeded(), ${{ eq(parameters.publishGitHubRelease, true) }})
       inputs:
         gitHubConnection: '3c34db30-d57b-42e2-a970-857bd932c6c0'
         repositoryName: '$(Build.Repository.Name)'
@@ -2139,3 +2103,11 @@ stages:
         assetUploadMode: 'delete'
         isDraft: ${{ parameters.isDraft }}
         isPreRelease: ${{ parameters.isPreRelease }}
+
+    - task: Bash@3
+      displayName: 'Cleanup workspace'
+      condition: always()
+      inputs:
+        targetType: 'inline'
+        script: |
+          rm -rf $(System.DefaultWorkingDirectory)/*
