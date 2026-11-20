@@ -14,7 +14,25 @@ pool:
   vmImage: 'ubuntu-latest'
 
 jobs:
+- job: preflight
+  displayName: 'Preflight: validate YAML, 4-way sync & live Geofabrik URLs'
+  timeoutInMinutes: 5
+  steps:
+  - checkout: self
+  - bash: |
+      set -euo pipefail
+      echo "=== 1. Validating Azure Pipelines YAML Syntax ==="
+      python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml
+
+      echo "=== 2. Running Pipeline Sync & URL Unit Tests ==="
+      PYTHONPATH=scripts python3 -m unittest scripts/test_pipeline_sync.py
+
+      echo "=== 3. Verifying all PBF_URLs against live Geofabrik index-v1-nogeom.json ==="
+      python3 scripts/validate_geofabrik_urls.py osm-download-pipeline.yml
+    displayName: 'Fast-fail preflight: YAML, sync & live Geofabrik URL check'
+
 - job: download
+  dependsOn: preflight
   timeoutInMinutes: 120
   strategy:
     matrix:
