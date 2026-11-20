@@ -430,6 +430,14 @@
       11
     ]
   },
+  "CK": {
+    "continent": "australia-oceania",
+    "name": "Cook Islands",
+    "levels": [
+      3,
+      6
+    ]
+  },
   "CL": {
     "continent": "south-america",
     "name": "Chile",
@@ -488,6 +496,16 @@
       9,
       10,
       11
+    ]
+  },
+  "CR": {
+    "continent": "central-america",
+    "name": "Costa Rica",
+    "levels": [
+      2,
+      4,
+      6,
+      8
     ]
   },
   "CU": {
@@ -714,6 +732,14 @@
       11
     ]
   },
+  "FM": {
+    "continent": "australia-oceania",
+    "name": "Micronesia",
+    "levels": [
+      2,
+      4
+    ]
+  },
   "FO": {
     "continent": "europe",
     "name": "Faroe Islands",
@@ -786,7 +812,11 @@
   "GF": {
     "continent": "europe",
     "name": "French Guiana",
-    "levels": [3, 4, 8]
+    "levels": [
+      3,
+      4,
+      8
+    ]
   },
   "GH": {
     "continent": "africa",
@@ -837,7 +867,11 @@
   "GP": {
     "continent": "europe",
     "name": "Guadeloupe",
-    "levels": [3, 4, 8]
+    "levels": [
+      3,
+      4,
+      8
+    ]
   },
   "GQ": {
     "continent": "africa",
@@ -904,6 +938,15 @@
       9,
       10,
       11
+    ]
+  },
+  "HN": {
+    "continent": "central-america",
+    "name": "Honduras",
+    "levels": [
+      2,
+      4,
+      6
     ]
   },
   "HR": {
@@ -1163,6 +1206,13 @@
       11
     ]
   },
+  "KI": {
+    "continent": "australia-oceania",
+    "name": "Kiribati",
+    "levels": [
+      2
+    ]
+  },
   "KM": {
     "continent": "africa",
     "name": "Comoros",
@@ -1418,6 +1468,14 @@
       11
     ]
   },
+  "MH": {
+    "continent": "australia-oceania",
+    "name": "Marshall Islands",
+    "levels": [
+      2,
+      6
+    ]
+  },
   "MK": {
     "continent": "europe",
     "name": "North Macedonia",
@@ -1478,7 +1536,11 @@
   "MQ": {
     "continent": "europe",
     "name": "Martinique",
-    "levels": [3, 4, 8]
+    "levels": [
+      3,
+      4,
+      8
+    ]
   },
   "MR": {
     "continent": "africa",
@@ -1693,6 +1755,22 @@
       11
     ]
   },
+  "NR": {
+    "continent": "australia-oceania",
+    "name": "Nauru",
+    "levels": [
+      2,
+      6
+    ]
+  },
+  "NU": {
+    "continent": "australia-oceania",
+    "name": "Niue",
+    "levels": [
+      3,
+      6
+    ]
+  },
   "NZ": {
     "continent": "australia-oceania",
     "name": "New Zealand",
@@ -1713,6 +1791,16 @@
       2
     ]
   },
+  "PA": {
+    "continent": "central-america",
+    "name": "Panama",
+    "levels": [
+      2,
+      4,
+      6,
+      8
+    ]
+  },
   "PE": {
     "continent": "south-america",
     "name": "Peru",
@@ -1730,7 +1818,10 @@
   "PF": {
     "continent": "australia-oceania",
     "name": "French Polynesia",
-    "levels": [3, 6]
+    "levels": [
+      3,
+      6
+    ]
   },
   "PG": {
     "continent": "australia-oceania",
@@ -1794,6 +1885,22 @@
       11
     ]
   },
+  "PN": {
+    "continent": "australia-oceania",
+    "name": "Pitcairn Islands",
+    "levels": [
+      3
+    ]
+  },
+  "PR": {
+    "continent": "north-america",
+    "name": "Puerto Rico",
+    "levels": [
+      4,
+      6,
+      8
+    ]
+  },
   "PS": {
     "continent": "asia",
     "name": "Palestine"
@@ -1810,6 +1917,14 @@
       9,
       10,
       11
+    ]
+  },
+  "PW": {
+    "continent": "australia-oceania",
+    "name": "Palau",
+    "levels": [
+      2,
+      4
     ]
   },
   "PY": {
@@ -1837,7 +1952,11 @@
   "RE": {
     "continent": "europe",
     "name": "Reunion",
-    "levels": [3, 4, 8]
+    "levels": [
+      3,
+      4,
+      8
+    ]
   },
   "RO": {
     "continent": "europe",
@@ -1900,6 +2019,14 @@
     "name": "Saudi Arabia",
     "levels": [
       2
+    ]
+  },
+  "SB": {
+    "continent": "australia-oceania",
+    "name": "Solomon Islands",
+    "levels": [
+      2,
+      4
     ]
   },
   "SC": {
@@ -2067,6 +2194,15 @@
       7
     ]
   },
+  "SV": {
+    "continent": "central-america",
+    "name": "El Salvador",
+    "levels": [
+      2,
+      4,
+      6
+    ]
+  },
   "SY": {
     "continent": "asia",
     "name": "Syria",
@@ -2147,6 +2283,23 @@
       11
     ]
   },
+  "TK": {
+    "continent": "australia-oceania",
+    "name": "Tokelau",
+    "levels": [
+      3
+    ]
+  },
+  "TL": {
+    "continent": "asia",
+    "name": "East Timor",
+    "levels": [
+      2,
+      4,
+      6,
+      8
+    ]
+  },
   "TM": {
     "continent": "asia",
     "name": "Turkmenistan",
@@ -2176,6 +2329,14 @@
       11
     ]
   },
+  "TO": {
+    "continent": "australia-oceania",
+    "name": "Tonga",
+    "levels": [
+      2,
+      4
+    ]
+  },
   "TR": {
     "continent": "europe",
     "name": "Turkey",
@@ -2190,6 +2351,14 @@
       9,
       10,
       11
+    ]
+  },
+  "TV": {
+    "continent": "australia-oceania",
+    "name": "Tuvalu",
+    "levels": [
+      2,
+      4
     ]
   },
   "TW": {
@@ -2309,6 +2478,14 @@
       11
     ]
   },
+  "VI": {
+    "continent": "north-america",
+    "name": "US Virgin Islands",
+    "levels": [
+      4,
+      6
+    ]
+  },
   "VN": {
     "continent": "asia",
     "name": "Vietnam",
@@ -2321,6 +2498,30 @@
       9,
       10,
       11
+    ]
+  },
+  "VU": {
+    "continent": "australia-oceania",
+    "name": "Vanuatu",
+    "levels": [
+      2,
+      4
+    ]
+  },
+  "WF": {
+    "continent": "australia-oceania",
+    "name": "Wallis and Futuna",
+    "levels": [
+      3,
+      6
+    ]
+  },
+  "WS": {
+    "continent": "australia-oceania",
+    "name": "Samoa",
+    "levels": [
+      2,
+      4
     ]
   },
   "XK": {
@@ -2355,7 +2556,11 @@
   "YT": {
     "continent": "europe",
     "name": "Mayotte",
-    "levels": [3, 4, 8]
+    "levels": [
+      3,
+      4,
+      8
+    ]
   },
   "ZA": {
     "continent": "africa",
