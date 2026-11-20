@@ -1,155 +1,68 @@
 # AGENTS.md — Development Guidelines for `osm-polygons`
 
-To ensure consistent pipeline execution, full geographical coverage, and clean Git workflows in `osm-polygons`, developers and AI agents must adhere to the following rules:
+Guidelines and invariants for `osm-polygons`. Detailed runbooks live in `.agents/skills/` (`duckdb-geoparquet`, `azure-pipeline-ops`, `geofabrik-index-sync`).
 
 ---
 
-## Architecture & Project Relationships
+## Architecture & Pipeline Conventions (`polygon-export-pipeline.yml`)
 
-- **Upstream Dependency (`osm-tools`):**
-  `osm-polygons` relies on the Docker container built by `osm-tools` (`krizleebear/osm-tools:latest` or `mirror.gcr.io/krizleebear/osm-tools:latest`). This container provides `/simplify.sh` (powered by `CoverageSimplifier` in `osm-tools`).
-- **Data Flow:**
-  1. `osmium-tool` filters OSM PBF extracts into administrative boundary GeoJSON sequences (`.geojsonseq`).
-  2. `osm-tools` container runs `/simplify.sh` to produce topology-preserved simplified polygons.
-  3. Artifacts are bundled globally for downstream spatial geocoding indices.
-
----
-
-## Pipeline Architecture & Conventions (`polygon-export-pipeline.yml`)
-
-1. **Full Region Export Invariance:**
+1. **Upstream Dependency (`osm-tools`):**
+   - `osm-polygons` relies on `mirror.gcr.io/krizleebear/osm-tools:master-<SHA>` (providing `/simplify.sh` via `CoverageSimplifier`).
+   - Whenever `osm-tools` `master` changes, immediately update the commit SHA in `polygon-export-pipeline.yml` and `polygon-release-pipeline.yml`.
+2. **Full Region Export Invariance (4-Way Sync):**
    - Never disable or comment out region entries in the `export` job matrix unless explicitly instructed.
-   - The export matrix must retain all 169 region definitions across Africa, Asia, Europe, Oceania, Central America, North America, and South America following Geofabrik hierarchy.
-
-2. **Continental Simplification Partitioning:**
-   - Heavy simplification steps must be partitioned by continent / heavy regions in the `simplify` stage using matrix jobs (`africa`, `asia`, `france`, `germany`, `great_britain`, `ireland`, `europe_rest`, `australia_oceania`, `central_america`, `north_america`, `south_america`, `canada`, `us`, `russia`).
-   - Dedicated heavyweight jobs exist for `ireland` (over 65,000 features due to ~61,800 historic townlands mapped as `admin_level=10`), `great_britain` (~12,500 parishes/wards), `france` (~35,000 communes), `germany` (~11,000 municipalities), `canada`, `us`, and `russia` to prevent runner timeouts and pipeline bottlenecks.
-   - Each job filters its respective `REGIONS` list from the downloaded export artifacts and creates an archive (`simplified-$(CONTINENT).tar.gz`).
-
-
-3. **Global Artifact Packaging & Integrated GitHub Release:**
-   - The `parquet` stage converts boundaries to per-country GeoParquet datasets and bundles validation artifacts and export metadata.
-   - Features integrated `release` stage controlled via parameter `publishGitHubRelease` (default `true`) using SemVer build naming `v3.8.$(Date:yyyyMMdd)$(Rev:.r)`. Downloads per-country GeoParquet and metadata artifacts from the current run, generates `index.json`, and publishes directly to GitHub Releases.
-
-4. **Standalone Manual GitHub Release Pipeline (`polygon-release-pipeline.yml`):**
-   - Retained as a fallback pipeline triggered manually on-demand (`trigger: none`) to re-release from specific past build IDs without re-running data extraction.
-   - Downloads build artifacts from a specified or latest build, packages datasets, generates `index.json`, and publishes them as GitHub Release assets.
+   - Keep all configured region definitions (currently 197) synchronized across `polygon-export-pipeline.yml` (`export` matrix and `simplify` `REGIONS`/`ARTIFACT_PATTERNS`), `osm-download-pipeline.yml`, and `scripts/countries.json` (SSOT for `index.json` and expected `admin_level`s). See `geofabrik-index-sync` skill.
+3. **Continental Simplification Partitioning:**
+   - Partition `simplify` matrix jobs by continent / heavy regions (`africa`, `asia`, `france`, `germany`, `great_britain`, `ireland`, `europe_rest`, `australia_oceania`, `central_america`, `north_america`, `south_america`, `canada`, `us`, `russia`) to prevent runner timeouts.
+4. **2 GiB GitHub Release Limit & Partitioning:**
+   - GitHub Releases enforce a hard 2 GiB limit per asset; keep heavy regions (e.g. `russia`) partitioned into separate Parquet datasets (`admin-polygons-russia.parquet`).
+   - Integrated `release` stage (`v3.8.$(Date:yyyyMMdd)$(Rev:.r)`) and standalone `polygon-release-pipeline.yml` generate `index.json` from `scripts/countries.json`.
 
 ---
 
+## Spatial, DuckDB & Data Invariants
 
-## Git Workflow & Cleanliness
+*(See `duckdb-geoparquet` skill for SQL templates, metadata keys, and `httpfs` diagnostic queries.)*
 
-1. **Diff Verification against Remote:**
-   - Before committing or pushing, verify `git diff origin/master` to ensure no local test comments, commented-out matrix entries, or temporary scratch files are staged.
-2. **Conventional Commits:**
-   - Use conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`).
-3. **Container Registry Mirrors:**
-   - Preserve container registry mirror configurations (`mirror.gcr.io/krizleebear/...`) in pipeline definitions.
-4. **Feature Branch Pipeline Testing:**
-   - Azure DevOps pipelines can be triggered directly from feature branches. For major pipeline refactorings or matrix tests, work and test on a dedicated feature branch first before merging to `master`.
-5. **Transparent Failure Policy (No Hiding Errors / No Silent Fallbacks):**
-   - Pipeline scripts and processing stages must never mask missing input artifacts, swallow errors, or execute silent fallbacks to raw external URLs. If an expected upstream artifact or file is missing, the script must fail explicitly with a clear, diagnostic error message detailing the missing file, root cause, and remediation steps.
-6. **English Output Standard for CI/CD & Pipeline Logs:**
-   - All user-facing log outputs, diagnostic error messages, pipeline notices, and CLI reports must be written strictly in clear, professional English to maintain consistency across international developer environments and automated CI/CD runners.
-7. **Container Security & Dependency Invariance (No Root Elevation / No Runtime Package Install):**
-   - Pipeline steps and container configurations must strictly run unprivileged and must NEVER escalate to root permissions (`--user 0:0` or `sudo`) to bypass container limitations. All required execution binaries (e.g., Python 3) must be pre-packaged directly in the container image, and pipeline steps must never perform dynamic package installation (`apt-get install`).
-8. **Language Preference Hierarchy for Scripts & Tools:**
-   - Select implementation languages based on the available execution environment following the priority hierarchy: **Java > Python > Bash > others**. Do not introduce unapproved secondary languages (such as Perl) outside this hierarchy.
-9. **Local Clean-Room Container Verification:**
-   - Before committing pipeline modifications or scripts, verify execution inside the local Docker container environment to prevent missing-dependency failures in CI runners.
-10. **Workspace Boundary Scoping:**
-   - Limit all grep and file searches strictly to active workspace directories (`osm-polygons`, `osm-tools`, `docker-osmium-tool`) without traversing parent directories.
-11. **Mandatory Pipeline YAML Syntax Pre-Verification:**
-   - Before committing modifications to pipeline definition files (`.yml`), validate full YAML structural parsing inside Docker using `scripts/validate_azure_yaml.py` (`docker run --rm -v $(pwd):/workspace -w /workspace python:3-alpine sh -c "pip install -q pyyaml && python3 scripts/validate_azure_yaml.py <pipeline.yml>"`). Commits with unverified YAML syntax are strictly prohibited.
-12. **Azure DevOps Job Container Entrypoint Safety:**
-   - Docker images intended for Azure DevOps job containers (`container: <image>`) must NOT define an exec-form `ENTRYPOINT` that exits on unknown arguments (such as `ENTRYPOINT ["/app/entrypoint.sh"]`), because Azure DevOps starts job containers with `sleep infinity`. Use `CMD ["/bin/bash"]` in the Dockerfile and invoke processing scripts explicitly in pipeline steps.
-13. **Docker Schema 2 Manifest Requirement for `mirror.gcr.io`**:
-    - Container images pushed to Docker Hub for `mirror.gcr.io` consumption must be built in Docker Schema 2 format (`application/vnd.docker.distribution.manifest.v2+json`) using standard `docker build` or `docker buildx build --provenance=false`. Modern OCI attestation/provenance blobs cause `unknown blob` 404 errors on `mirror.gcr.io`.
-14. **DuckDB Script Template Substitution Invariant:**
-    - DuckDB `COPY ... TO` statements require string literal paths. Do not attempt `getvariable()` inside `COPY TO`. Use `sed` token substitution (`__INPUT_PBF__`, `__OUTPUT_PARQUET__`) on SQL templates before piping into `duckdb`.
-15. **Azure DevOps Parameter Condition Syntax**:
-    - In Azure DevOps task/job `condition:` expressions, template parameters MUST be wrapped in `${{ eq(parameters.name, value) }}`. Raw `parameters.name` references outside `${{ }}` trigger `Unrecognized value: 'parameters'` errors.
-    - In Bash scripts, handle both `"false"` and `"False"` because template expansion converts boolean false to `"False"`.
-16. **Packaging Stage Dependency Safety (`condition: succeeded('simplify')`):**
-    - Packaging and bundling stages (such as `stage: package`) that aggregate artifacts from upstream parallel matrix jobs MUST use `condition: succeeded('<stage>')` (e.g. `succeeded('simplify')`). Using parameterless `succeeded()` causes the stage to be skipped if any upstream stage (such as `export`) was skipped via conditional parameters (`reuseExportArtifacts`). Never use `condition: always()` on final bundling stages, as cancellation or upstream failure would trigger incomplete artifact archiving.
-17. **Upstream Container Image Synchronization:**
-    - Whenever modifications or optimizations are made to `osm-tools` and committed/pushed to `master`, downstream pipeline definitions (especially `resources.containers.osm-tools` in `polygon-export-pipeline.yml` and fallback commit definitions in `polygon-release-pipeline.yml`) MUST immediately and proactively be updated to reference the new commit SHA (`mirror.gcr.io/krizleebear/osm-tools:master-<SHA>`). Never leave downstream pipelines pointing to stale container versions.
-18. **GeoJSONSeq Verification & Profiling with DuckDB:**
-    - Use DuckDB's native vectorised `read_ndjson()` for fast ad-hoc inspection and quality verification on `.geojsonseq` stream files (e.g. `SELECT json_extract_string(properties, '$.admin_level') AS lvl, count(*) FROM read_ndjson('<file>.geojsonseq') GROUP BY 1`).
-19. **GitHub Release 2 GiB Asset Size Limit & GeoParquet Partitioning:**
-    - GitHub Releases enforce a strict hard limit of 2 GiB (2,147,483,648 bytes) per uploaded asset. Continental GeoParquet datasets (such as Europe with detailed sub-divisions) must be partitioned by heavy regions (e.g. isolating `russia` into `admin-polygons-russia.parquet`) to keep individual files safely under 2.0 GiB.
-20. **Azure DevOps String Parameter Defaults (`latest` / `auto`):**
-    - In Azure DevOps manual run dialogs, string parameters treat empty string values as invalid/required in the UI modal. String parameters (like `specificBuildId` or `exportBuildId`) must default to `'latest'` or `'auto'`, and conditions must support `'latest'`, `'auto'`, and custom build IDs.
-21. **Osmium Export ID Configuration Invariant:**
-    - `osmium export` omits `@id` attributes by default unless `--config=osmium-export-config.json` is explicitly passed. All place node and polygon export steps must provide the config to preserve `osm_id`.
-22. **Direct DuckDB JSONL Stream Conversion:**
-    - When converting structured `.places.jsonl` files to GeoParquet, stream directly using DuckDB `read_json()` / `read_json_auto()` without intermediate redundant Python filtering passes.
-23. **Evidence-Based Issue Analysis & Remote DuckDB Diagnostics:**
-    - Never assume an issue is fixed or make claims based solely on commit history, code reviews, or theoretical assumptions. Always gather concrete empirical evidence by directly querying the live release artifacts or test outputs.
-    - Use DuckDB with `httpfs` to query remote GitHub Release assets directly (`duckdb -c "INSTALL httpfs; LOAD httpfs; SELECT ... FROM 'https://github.com/.../releases/download/.../....parquet'"`).
-    - When reporting or investigating anomalies across upstream/downstream boundaries, provide reproducible SQL queries against the exact release dataset to eliminate ambiguity and immediately isolate root causes.
-24. **Long-Form CLI Parameters & Download Resilience Invariant:**
-    - Always use explicit, readable long-form parameters in pipeline scripts (e.g., `--continue-at -` instead of `-C -`).
-    - Large external file downloads (such as Geofabrik PBF extracts) must specify stall timeouts (`--speed-limit 10240 --speed-time 30`), resume capabilities (`--continue-at -`), and emit lightweight background progress heartbeats to prevent silent runner hangs.
-25. **Non-Breaking Pipeline Quality Audits (`##vso[task.logissue type=warning]`):**
-    - Post-processing data audits (such as Level 2 completeness checks, feature deduplication verifications, or empty dataset checks) should emit native Azure DevOps warning annotations (`echo "##vso[task.logissue type=warning]..."`) and run with `continueOnError: true` unless hard-failing is strictly required. This highlights anomalies prominently in the Azure DevOps run summary without breaking long-running packaging pipelines.
-26. **Modular & Testable Validation Tooling:**
-    - Complex verification steps must never be written as long inline Bash loops inside pipeline YAML. Implement them as dedicated, standalone CLI tools in Python (e.g. `scripts/validate_parquet.py`) with accompanying unit test suites (`scripts/test_*.py`) runnable in the local Docker environment.
-27. **Country-Specific Ground Truth Hierarchy Invariant:**
-    - Administrative level completeness must be verified against the official OSM mapping standards defined per country in `scripts/countries.json` (`levels`). Never assume all sovereign nations define `admin_level=4` (e.g. Iceland, Cyprus, Kosovo, Latvia, and Jamaica officially use `admin_level=5` as their primary subnational level).
-28. **1-Pass PBF Extraction & Pipeline Performance Invariant:**
-    - Large raw PBF files (such as Brazil, Germany, USA 3-5 GB) must be scanned only ONCE. Use a single combined `osmium tags-filter` pass to extract both admin boundaries and place nodes into a combined compact PBF, delete the heavy raw input PBF immediately, and perform downstream splits and hierarchy scans (`scripts/extract_region.py`) on the small extract.
-29. **Multi-Extract Feature Deduplication Invariant:**
-    - When consolidating multiple regional Geofabrik extracts into a single per-country GeoParquet file (e.g. Spain + Canary Islands), DuckDB consolidation queries must deduplicate shared parent boundaries using `ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level)` for polygons, and `ROW_NUMBER() OVER (PARTITION BY osm_id ORDER BY place_type)` for place nodes.
-30. **Guaranteed Artifact Existence Invariant:**
-    - Azure DevOps `PublishPipelineArtifact` tasks fail with runner warnings if the target file does not exist on disk. Export jobs and post-processing steps must ensure all declared artifact targets (such as `validation.json`) exist (touching empty fallback files if necessary) to keep build results 100% clean and green.
-31. **Fast-Fail CI Preflight Invariant:**
-    - Never launch long-running or matrix-heavy pipeline stages without an initial fast (<30s) preflight stage (`stage: preflight`). The preflight stage must validate pipeline YAML parsing (`scripts/validate_azure_yaml.py`) and run the full Python unit test suite (`PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'`). All downstream stages (`export`, `parquet`, `package`) must declare `dependsOn: preflight` to fail immediately on script regressions before runner compute is consumed.
-32. **Azure DevOps Pipeline CLI Automation (`scripts/azure_pipeline.py`):**
-    - Use `scripts/azure_pipeline.py` to trigger, inspect, and manage Azure DevOps pipeline builds:
-      - Queue new build: `python3 scripts/azure_pipeline.py run --branch <branch_name> [--reuse-export] [--build-id <ID>]`
-      - Check build status & timeline: `python3 scripts/azure_pipeline.py status <build_id>`
-      - Cancel running build: `python3 scripts/azure_pipeline.py cancel <build_id>`
-    - Authentication is automatically read from `AZURE_DEVOPS_PAT` in `.env` or environment variables.
-33. **Stream File Format Conventions (`.geojsonseq` vs `.jsonl`):**
-    - `*.admin-polygons.geojsonseq`: Strictly adheres to RFC 8142 (GeoJSON Text Sequences) where each line is a full standard GeoJSON Feature object (`{"type": "Feature", "geometry": {...}, "properties": {...}}`). Designed for direct consumption by spatial tools (GDAL/OGR, QGIS, `CoverageSimplifier`).
-    - `*.places.jsonl` and `*.facilities.jsonl`: Formatted as newline-delimited flattened tabular records (`{"osm_id": ..., "country_code": ..., "name": ..., "geom_json": "...", "tags": "..."}`). Designed as high-throughput, columnar-ready ETL streams for direct vectorized ingestion via DuckDB `read_json(columns={...})`. Tabular JSONL streams must retain `.jsonl` and never be misnamed `.geojsonseq` as they lack GeoJSON Feature envelope wrappers.
-34. **Explanation Preceding Git Actions Invariant (Explain First, Commit Second):**
-    - The agent must always first present a clear, comprehensive explanation of the diagnosis, the rationale, and the exact changes in the visible response text before requesting permission or attempting to execute `git commit`, `git push`, or pipeline triggers. Never trigger permission prompts for Git actions without the user having seen the complete explanatory context first.
-35. **Parquet Provenance & License Metadata Invariant:**
-    - All GeoParquet files produced by export pipelines (`export_parquet.sql`, `export_places.sql`, `export_facilities.sql`, `export_landuse.sql`) MUST embed standard provenance, copyright, and licensing metadata in the Parquet file footer via DuckDB's `KV_METADATA` option.
-    - Required metadata keys:
-      - `source`: `OpenStreetMap`
-      - `origin`: `OpenStreetMap (https://www.openstreetmap.org)`
-      - `dataset`: Canonical dataset title (e.g. `OpenStreetMap Administrative Polygons`, `OpenStreetMap Places`, `OpenStreetMap Facilities`, `OpenStreetMap Landuse`)
-      - `attribution`: `© OpenStreetMap contributors`
-      - `attribution_url`: `https://www.openstreetmap.org/copyright`
-      - `license`: `ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)`
-      - `license_url`: `https://opendatacommons.org/licenses/odbl/`
-      - `copyright`: `Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)`
-      - `schema`: Canonical schema URL or repo reference
-      - `schema_url`: URL to schema documentation
-      - `compiler`: Generator project reference (e.g. `osm-polygons (https://github.com/krizleebear/osm-polygons)`)
-      - `country_code`: 2-letter ISO code or territory identifier (e.g. `DE`, `US`)
-      - `exported_at`: ISO-8601 UTC timestamp (e.g. `YYYY-MM-DDTHH:MM:SSZ`)
-      - `osm_data_timestamp`: ISO-8601 UTC timestamp of OSM PBF replication/data cutoff (e.g. `YYYY-MM-DDTHH:MM:SSZ`)
-    - Any intermediate or post-processing re-write of Parquet files (such as country_code remapping) must preserve these metadata keys.
-36. **Devcontainer Git `safe.directory` Whitelist:**
-    - The devcontainer bind-mounts the repository at `/app` and mounts the host `~/.gitconfig` **read-only**. Git can therefore abort with `fatal: detected dubious ownership in repository at '/app'`; `git config --global` cannot fix this (read-only host file) and `safe.directory` is intentionally ignored in the repository-local `.git/config`.
-    - The whitelist is baked into the devcontainer image via `.devcontainer/Dockerfile` (`git config --system --add safe.directory /app`), effective after the next image rebuild. For sessions running an older image, use a per-invocation override (`git -c safe.directory=/app <command>`) or export `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/app` for the current shell session.
-    - Never edit the host-mounted `~/.gitconfig` and never escalate to root (`sudo git config`) to silence this warning (see rule 7).
-37. **Geometric Complexity-Based Simplification Invariant:**
-    - Geometry decimation and simplification must strictly be driven by intrinsic geometric complexity (e.g. vertex count / scale), never by semantic domain categories (`feature_class`, `area_type`). Small features retain full precision regardless of class; complex geometries are simplified progressively to bound file size while preserving topology.
-38. **Spatial JSON Streaming Buffer Headroom Invariant:**
-    - Spatial JSONL/GeoJSON ingestion queries must configure adequate line/object buffer headroom (`maximum_object_size`) well beyond engine defaults. Sprawling geographic multipolygons produce individual JSON features exceeding dozens of megabytes that cause pipeline failures under default engine thresholds.
-39. **DuckDB Bounded ST_Hilbert Spatial Sorting & Row Group Pruning Invariant:**
-    - All polygon, linestring, and facility export queries (`export_facilities.sql`, `export_landuse.sql`, and downstream per-country consolidation merges in `polygon-export-pipeline.yml`) MUST order features using bounded Hilbert indexing:
-      `ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))`
-    - **Dateline-Safe Anchors**: Never use planar `ST_Centroid` for place anchors or Hilbert keys: geometries split at the antimeridian (e.g. Taveuni, FJ, `relation/3237101`) get centroids far from the feature. Use `ST_PointOnSurface`; downstream consumers needing a place anchor must compute `ST_PointOnSurface(geom)` themselves.
-    - **Never call unbounded `ST_Hilbert(geom)`**: Omitting the bounding box forces DuckDB to scale to the universal Float32 domain (-3.4e38..+3.4e38), corrupting bit-interleaving for geographic coordinates and destroying Row-Group spatial locality.
-    - **Uniform 4-Column BBox Schema**: All spatial polygon/facility tables must include `bbox_minx`, `bbox_miny`, `bbox_maxx`, `bbox_maxy` (`DOUBLE`) to allow downstream engines to execute pushdown pruning without decompressing geometries.
-    - **Row Group Sizing**: Retain `ROW_GROUP_SIZE 5000` (or `50000` for high-volume layers) to maintain fine spatial chunking.
+1. **Bounded Hilbert Sorting & Dateline-Safe Anchors:**
+   - All polygon, linestring, and facility exports MUST sort with bounded Hilbert indexing:
+     `ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))`
+   - **Never call unbounded `ST_Hilbert(geom)`** (corrupts Float32 bit-interleaving and Row-Group locality).
+   - **Never use `ST_Centroid` for anchors or Hilbert keys** (antimeridian-split features like Taveuni get misplaced centroids; always use `ST_PointOnSurface`).
+2. **Uniform BBox Schema, Row Groups & Provenance:**
+   - Include `bbox_minx`, `bbox_miny`, `bbox_maxx`, `bbox_maxy` (`DOUBLE`) and `ROW_GROUP_SIZE 5000` (or `50000` for high-volume layers).
+   - Embed standard OSM/ODbL provenance keys in Parquet `KV_METADATA` on all exports and post-processing rewrites.
+3. **DuckDB Template & Buffer Rules:**
+   - Use `sed` token substitution (`__INPUT_PBF__`, `__OUTPUT_PARQUET__`) for `COPY ... TO` paths (never `getvariable()`).
+   - Configure generous `maximum_object_size` headroom for sprawling multipolygons in JSONL/GeoJSON ingestion.
+   - Deduplicate multi-extract consolidations via `ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level)` (polygons) and `PARTITION BY osm_id` (places).
+4. **Osmium & PBF Extraction Rules:**
+   - Scan large raw PBFs only ONCE (combined `osmium tags-filter` for admin boundaries + place nodes, then delete raw PBF immediately).
+   - Always pass `--config=osmium-export-config.json` to `osmium export` so `osm_id` is preserved.
+   - Drive geometry simplification strictly by intrinsic geometric complexity (vertex count/scale), never by semantic domain categories (`feature_class`, `area_type`).
+5. **Stream Formats & Country Ground Truth:**
+   - `*.admin-polygons.geojsonseq`: RFC 8142 GeoJSON Feature objects. `*.places.jsonl` / `*.facilities.jsonl`: flattened tabular JSONL for direct DuckDB `read_json()` ingestion (never misname `.jsonl` as `.geojsonseq`).
+   - Verify `admin_level` completeness against `scripts/countries.json` (`levels`), not hardcoded L4 assumptions (e.g. `IS`, `CY`, `XK`, `LV`, `JM` use L5).
 
+---
 
+## Git, Security & CI Verification
 
+*(See `azure-pipeline-ops` skill for `azure_pipeline.py`, YAML conditions, and Docker/mirror rules.)*
+
+1. **Pre-Commit Verification (Mandatory):**
+   - Validate pipeline YAML before committing:
+     `python3 scripts/validate_azure_yaml.py <pipeline.yml>` (or via Docker `python:3-alpine` + `pyyaml`).
+   - Run full unit tests:
+     `PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'`
+   - Verify scripts/changes inside the local Docker container environment; keep complex validation in standalone testable Python CLIs (`scripts/validate_*.py`), not long inline Bash loops.
+2. **Git Workflow & Explain-First Rule:**
+   - Check `git diff origin/master` before committing; use Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`); test major pipeline refactors on feature branches first.
+   - **Explain First, Commit Second:** Always present the diagnosis, rationale, and exact changes in visible response text before requesting/running `git commit`, `git push`, or pipeline triggers.
+   - **Devcontainer `safe.directory`:** Use `git -c safe.directory=/app <command>` if Git reports dubious ownership; never edit host-mounted `~/.gitconfig` or use `sudo`.
+3. **Runtime, Security & Logging Standards:**
+   - Never escalate to root (`--user 0:0`, `sudo`) or install packages at runtime (`apt-get install`).
+   - **Transparent Failure Policy:** Never mask missing artifacts, swallow errors, or silently fall back to external URLs; fail explicitly with clear English diagnostics.
+   - **Language Hierarchy:** **Java > Python > Bash > others** (no unapproved languages like Perl).
+   - Limit searches/greps strictly to active workspace directories (`osm-polygons`, `osm-tools`, `docker-osmium-tool`).
+   - Prefer long-form CLI flags (`--continue-at -`) and evidence-based diagnostics (`duckdb` + `httpfs` against live releases) over assumptions.
