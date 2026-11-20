@@ -263,6 +263,75 @@ class TestValidateParquet(unittest.TestCase):
         self.assertIn("osm-facilities Parquets Checked:  1 (Issues: 4)", output)
         self.assertEqual(exit_code, 0)
 
+    @patch("validate_parquet.find_layer_parquet_files", return_value=[])
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_fails_on_missing_expected_l2(self, mock_inspect, mock_find, _mock_pc, _mock_layer):
+        mock_find.return_value = ["admin-polygons-BE.parquet"]
+        mock_inspect.return_value = {
+            "country_code": "BE",
+            "path": "admin-polygons-BE.parquet",
+            "error": None,
+            "total_rows": 100,
+            "l2_count": 0,
+            "null_geom_count": 0,
+            "dupe_feature_count": 0,
+            "populated_levels": [4, 6],
+            "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+        }
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        self.assertIn("type=error]Country BE", output)
+        self.assertEqual(exit_code, 1)
+
+    @patch("validate_parquet.find_layer_parquet_files", return_value=[])
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_allows_territories_without_expected_l2(self, mock_inspect, mock_find, _mock_pc, _mock_layer):
+        mock_find.return_value = ["admin-polygons-GF.parquet", "admin-polygons-HK.parquet"]
+        mock_inspect.side_effect = [
+            {
+                "country_code": "GF",
+                "path": "admin-polygons-GF.parquet",
+                "error": None,
+                "total_rows": 50,
+                "l2_count": 0,
+                "null_geom_count": 0,
+                "dupe_feature_count": 0,
+                "populated_levels": [3, 4, 8],
+                "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+            },
+            {
+                "country_code": "HK",
+                "path": "admin-polygons-HK.parquet",
+                "error": None,
+                "total_rows": 20,
+                "l2_count": 0,
+                "null_geom_count": 0,
+                "dupe_feature_count": 0,
+                "populated_levels": [3],
+                "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+            },
+        ]
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        self.assertNotIn("type=error]", output)
+        self.assertEqual(exit_code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

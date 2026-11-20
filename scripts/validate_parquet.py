@@ -302,6 +302,7 @@ def validate_parquets(base_dir, fail_on_error=False):
 
     # 2. Inspect all files
     missing_l2 = []
+    missing_expected_l2 = []
     missing_expected_levels = []
     duplicate_features = []
     empty_files = []
@@ -327,8 +328,10 @@ def validate_parquets(base_dir, fail_on_error=False):
         expected_lvls = countries_meta.get(cc, {}).get("levels", [])
         if metrics["l2_count"] == 0:
             missing_l2.append((cc, path))
-            # Only warn if 2 is officially declared in countries.json (autonomous territories like HK, NC, MO start at L3/L4)
-            if not expected_lvls or 2 in expected_lvls:
+            if 2 in expected_lvls:
+                print(f"##vso[task.logissue type=error]Country {cc} ({path}) has NO admin_level=2 polygon!")
+                missing_expected_l2.append((cc, path))
+            elif not expected_lvls:
                 print(f"##vso[task.logissue type=warning]Country {cc} ({path}) has NO admin_level=2 polygon!")
         if expected_lvls:
             populated = set(metrics.get("populated_levels", []))
@@ -506,7 +509,12 @@ def validate_parquets(base_dir, fail_on_error=False):
         return 0
     else:
         print("RESULT: Completed with issues reported above.")
-        return 1 if (fail_on_error and (len(duplicate_files) > 0 or len(errors) > 0)) else 0
+        critical_failure = (
+            len(duplicate_files) > 0
+            or len(errors) > 0
+            or len(missing_expected_l2) > 0
+        )
+        return 1 if (fail_on_error and critical_failure) else 0
 
 
 if __name__ == "__main__":

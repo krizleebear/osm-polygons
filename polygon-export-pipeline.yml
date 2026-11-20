@@ -1787,7 +1787,6 @@ stages:
 
     - task: Bash@3
       displayName: 'Validate all per-country GeoParquet datasets'
-      continueOnError: true
       inputs:
         targetType: 'inline'
         script: |
@@ -1795,7 +1794,7 @@ stages:
             -v "$(System.DefaultWorkingDirectory):/work" \
             -w /work \
             ghcr.io/krizleebear/osm2parquet:v1.0.6 \
-            python3 scripts/validate_parquet.py downloads/
+            python3 scripts/validate_parquet.py downloads/ --fail-on-error
 
     - task: Bash@3
       displayName: 'Bundle validation artifacts & generate export metadata'
