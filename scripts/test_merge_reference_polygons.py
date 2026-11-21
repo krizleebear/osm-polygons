@@ -124,6 +124,76 @@ class TestMergeReferencePolygons(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0]["properties"]["name"], "Monaco")  # Replaced with reference name
 
+    def test_replace_osmium_at_id_relation_and_ignore_way_collision(self):
+        orig_stream = [
+            {
+                "type": "Feature",
+                "properties": {"@type": "relation", "@id": 1001, "name": "Old Monaco", "admin_level": "2"},
+                "geometry": {"type": "Polygon", "coordinates": []},
+            },
+            {
+                "type": "Feature",
+                "properties": {"@type": "way", "@id": 1001, "name": "Border Way", "admin_level": "2"},
+                "geometry": {"type": "Polygon", "coordinates": []},
+            },
+        ]
+        with open(self.stream_file, "w") as f:
+            for feat in orig_stream:
+                f.write(json.dumps(feat) + "\n")
+
+        output_file = os.path.join(self.temp_dir.name, "out_at_id.geojsonseq")
+        import io, sys
+        from contextlib import redirect_stdout
+        orig_argv = sys.argv
+        try:
+            sys.argv = [
+                "merge_reference_polygons.py",
+                self.stream_file,
+                "--reference", self.reference_file,
+                "--candidates", self.candidates_file,
+                "--country-code", "MC",
+                "--out", output_file,
+            ]
+            with redirect_stdout(io.StringIO()):
+                main()
+        finally:
+            sys.argv = orig_argv
+
+        with open(output_file, "r") as f:
+            lines = [json.loads(line) for line in f if line.strip()]
+
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0]["properties"]["name"], "Monaco")
+        self.assertEqual(lines[1]["properties"]["@type"], "way")
+        self.assertEqual(lines[1]["properties"]["name"], "Border Way")
+
+    def test_merge_is_idempotent(self):
+        with open(self.stream_file, "w") as f:
+            f.write(json.dumps({"type": "Feature", "id": 5001, "properties": {"osm_id": 5001, "admin_level": "8"}}) + "\n")
+
+        import io, sys
+        from contextlib import redirect_stdout
+        orig_argv = sys.argv
+        try:
+            for _ in range(2):
+                sys.argv = [
+                    "merge_reference_polygons.py",
+                    self.stream_file,
+                    "--reference", self.reference_file,
+                    "--candidates", self.candidates_file,
+                    "--country-code", "MC",
+                ]
+                with redirect_stdout(io.StringIO()):
+                    main()
+        finally:
+            sys.argv = orig_argv
+
+        with open(self.stream_file, "r") as f:
+            lines = [json.loads(line) for line in f if line.strip()]
+
+        self.assertEqual(len(lines), 2)
+        self.assertEqual([feat["properties"]["osm_id"] for feat in lines], [5001, 1001])
+
 
 
 if __name__ == "__main__":

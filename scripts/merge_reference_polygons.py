@@ -37,6 +37,28 @@ def load_candidates(candidates_path, country_code):
     }
 
 
+def extract_osm_id(feat):
+    """Extract integer OSM ID from Postpass or osmium-export GeoJSON features."""
+    props = feat.get("properties") or {}
+    for raw in (feat.get("id"), props.get("osm_id"), props.get("@id"), props.get("id")):
+        if raw is not None and raw != "":
+            try:
+                return int(abs(int(raw)))
+            except (ValueError, TypeError):
+                continue
+    return None
+
+
+def is_relation_feature(feat):
+    """Return True when feature represents an OSM relation (or omits element type)."""
+    props = feat.get("properties") or {}
+    raw_type = props.get("@type")
+    if raw_type is None:
+        raw_type = props.get("osm_type")
+    elem_type = str(raw_type or "").strip().lower()
+    return elem_type in ("", "relation", "r")
+
+
 def load_reference_features(reference_path, candidate_ids):
     """Load matching reference GeoJSON features from reference-polygons.geojsonseq."""
     ref_map = {}
@@ -49,9 +71,9 @@ def load_reference_features(reference_path, candidate_ids):
             if not line:
                 continue
             feat = json.loads(line)
-            osm_id = feat.get("id") or feat.get("properties", {}).get("osm_id")
-            if osm_id is not None and int(osm_id) in candidate_ids:
-                ref_map[int(osm_id)] = feat
+            osm_id = extract_osm_id(feat)
+            if osm_id is not None and osm_id in candidate_ids:
+                ref_map[osm_id] = feat
     return ref_map
 
 
@@ -118,9 +140,9 @@ def main():
                 continue
             total_stream_count += 1
             feat = json.loads(line)
-            osm_id = feat.get("id") or feat.get("properties", {}).get("osm_id")
-            if osm_id is not None and int(osm_id) in ref_features:
-                rel_id = int(osm_id)
+            osm_id = extract_osm_id(feat)
+            if is_relation_feature(feat) and osm_id is not None and osm_id in ref_features:
+                rel_id = osm_id
                 seen_ids.add(rel_id)
                 # Replace with the intact reference feature (preserving any extra stream tags if present)
                 ref_feat = ref_features[rel_id]

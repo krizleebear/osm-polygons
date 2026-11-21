@@ -179,6 +179,19 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
         self.assertEqual(len(errs_mismatch), 1)
         self.assertIn("URL mismatch", errs_mismatch[0])
 
+    def test_parquet_stage_fetches_missing_postpass_candidates_and_merges(self):
+        parquet_stage = self.export_text.split("- stage: parquet", 1)[1].split("- stage: release", 1)[0]
+        self.assertIn("- job: fetch_reference", parquet_stage)
+        self.assertIn("scripts/fetch_postpass_polygons.py", parquet_stage)
+        self.assertIn("--reuse-cached", parquet_stage)
+        self.assertRegex(parquet_stage, r"- job: parquet\s+dependsOn: fetch_reference")
+        self.assertIn("targetPath: '$(System.DefaultWorkingDirectory)/reference-polygons'", parquet_stage)
+        self.assertIn("scripts/merge_reference_polygons.py", parquet_stage)
+        self.assertLess(
+            parquet_stage.index("scripts/merge_reference_polygons.py"),
+            parquet_stage.index("./scripts/convert_to_parquet.sh"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

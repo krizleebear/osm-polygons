@@ -118,6 +118,89 @@ class TestFetchPostpassPolygons(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 fetch_postpass_polygons.main()
 
+    def test_reuse_cached_fetches_only_missing_candidates(self):
+        candidates_file = os.path.join(self.temp_dir.name, "two_candidates.json")
+        with open(candidates_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "candidates": [
+                    {"osm_id": 1124039, "country": "MC", "admin_level": 2, "name": "Monaco"},
+                    {"osm_id": 2186665, "country": "TO", "admin_level": 2, "name": "Tonga"},
+                ]
+            }, f)
+
+        cache_file = os.path.join(self.temp_dir.name, "cached.geojsonseq")
+        cached_mc = {
+            "type": "Feature",
+            "id": 1124039,
+            "properties": {"osm_id": 1124039, "name": "Monaco", "admin_level": "2", "ISO3166-1": "MC"},
+            "geometry": {"type": "MultiPolygon", "coordinates": [[[[7.4, 43.7], [7.5, 43.7], [7.5, 43.8], [7.4, 43.7]]]]},
+        }
+        with open(cache_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(cached_mc) + "\n")
+
+        to_raw = {
+            "type": "Feature",
+            "properties": {
+                "osm_type": "R",
+                "osm_id": 2186665,
+                "tags": {"ISO3166-1": "TO", "admin_level": "2", "name": "Tonga"},
+            },
+            "geometry": {"type": "MultiPolygon", "coordinates": [[[[-175.3, -21.2], [-175.1, -21.2], [-175.1, -21.1], [-175.3, -21.2]]]]},
+        }
+
+        out_dir = os.path.join(self.temp_dir.name, "out_reuse")
+        stdout_buf = io.StringIO()
+        with patch.object(fetch_postpass_polygons, "query_postpass_polygon", return_value=to_raw) as mock_query, \
+             patch.object(sys, "argv", [
+                 "fetch_postpass_polygons.py",
+                 "--candidates", candidates_file,
+                 "--out-dir", out_dir,
+                 "--reuse-cached",
+                 "--fallback-reference", cache_file,
+             ]), \
+             redirect_stdout(stdout_buf):
+            fetch_postpass_polygons.main()
+
+        mock_query.assert_called_once_with(2186665)
+        output = stdout_buf.getvalue()
+        self.assertNotIn("##vso[task.logissue type=warning]", output)
+        self.assertIn("CACHED (Rel 1124039", output)
+
+        with open(os.path.join(out_dir, "manifest.json"), "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        self.assertEqual(manifest["total_count"], 2)
+        self.assertEqual(manifest["reused_count"], 1)
+        self.assertEqual(manifest["fetched_count"], 1)
+        self.assertEqual(manifest["fallback_count"], 0)
+
+    def test_multiple_fallback_references_priority(self):
+        cache1 = os.path.join(self.temp_dir.name, "cache1.geojsonseq")
+        cache2 = os.path.join(self.temp_dir.name, "cache2.geojsonseq")
+        with open(cache1, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "Feature",
+                "id": 1124039,
+                "properties": {"osm_id": 1124039, "name": "Monaco Primary"},
+                "geometry": {"type": "MultiPolygon", "coordinates": []},
+            }) + "\n")
+        with open(cache2, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "Feature",
+                "id": 1124039,
+                "properties": {"osm_id": 1124039, "name": "Monaco Secondary"},
+                "geometry": {"type": "MultiPolygon", "coordinates": []},
+            }) + "\n")
+            f.write(json.dumps({
+                "type": "Feature",
+                "id": 2186665,
+                "properties": {"osm_id": 2186665, "name": "Tonga Secondary"},
+                "geometry": {"type": "MultiPolygon", "coordinates": []},
+            }) + "\n")
+
+        loaded = fetch_postpass_polygons.load_cached_references([cache1, cache2])
+        self.assertEqual(loaded[1124039]["properties"]["name"], "Monaco Primary")
+        self.assertEqual(loaded[2186665]["properties"]["name"], "Tonga Secondary")
+
 
 if __name__ == "__main__":
     unittest.main()

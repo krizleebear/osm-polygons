@@ -967,21 +967,6 @@ stages:
           df -h /
 
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download reference fallback polygons from download pipeline (definition 9)'
-      enabled: true
-      continueOnError: true
-      inputs:
-        buildType: 'specific'
-        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
-        definition: '9'
-        buildVersionToDownload: 'latest'
-        allowFailedBuilds: true
-        allowPartiallySucceededBuilds: true
-        itemPattern: 'admin-polygons-reference/**'
-        targetPath: '$(System.DefaultWorkingDirectory)'
-
-
-    - task: DownloadPipelineArtifact@2
       displayName: 'Download OSM PBF from download pipeline'
       enabled: true
       inputs:
@@ -1045,13 +1030,6 @@ stages:
             fi
             echo "[INFO] Direct download complete: $(du -h "$INPUT_PBF" | cut -f1)"
           fi
-          REF_STREAM=$(find admin-polygons-reference -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
-          REF_ARG=""
-          if [ -n "$REF_STREAM" ] && [ -s "$REF_STREAM" ]; then
-            REF_ARG="--reference-polygons ${REF_STREAM}"
-          else
-            echo "##vso[task.logissue type=warning]admin-polygons-reference artifact not found or empty; skipping Postpass reference merge for $(COUNTRY_CODE)."
-          fi
 
           EXPORT_DIR="export-$(COUNTRY_CODE)-$(OSM_REGION)"
           mkdir -p "${EXPORT_DIR}"
@@ -1072,8 +1050,7 @@ stages:
             --facilities-out "${FACILITIES_JSONL}" \
             --landuse-out "${LANDUSE_JSONL}" \
             --postal-codes-out "${POSTAL_CODES_JSONL}" \
-            --meta-out "${META_JSON}" \
-            ${REF_ARG}
+            --meta-out "${META_JSON}"
 
           if [ -f "validation.json" ]; then
             cp validation.json "${EXPORT_DIR}/validation.json"
@@ -1136,7 +1113,75 @@ stages:
 
 
   jobs:
+  - job: fetch_reference
+    displayName: 'Prepare Postpass reference polygons (fetch missing only)'
+    timeoutInMinutes: 15
+    workspace:
+      clean: all
+    steps:
+    - checkout: self
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download cached reference polygons from download pipeline (definition 9)'
+      continueOnError: true
+      inputs:
+        buildType: 'specific'
+        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+        definition: '9'
+        buildVersionToDownload: 'latest'
+        allowFailedBuilds: true
+        allowPartiallySucceededBuilds: true
+        itemPattern: 'admin-polygons-reference/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/cached-reference-download'
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download cached reference polygons from previous polygon build'
+      continueOnError: true
+      inputs:
+        buildType: 'specific'
+        project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
+        definition: '4'
+        buildVersionToDownload: 'latest'
+        tags: 'has-reference-polygons'
+        allowFailedBuilds: true
+        allowPartiallySucceededBuilds: true
+        itemPattern: 'admin-polygons-reference/**'
+        targetPath: '$(System.DefaultWorkingDirectory)/cached-reference-polygon'
+
+    - task: Bash@3
+      displayName: 'Fetch missing reference polygons from Postpass API'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -euo pipefail
+          CACHE_ARGS=()
+          DL_REF=$(find cached-reference-download -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
+          if [ -n "$DL_REF" ] && [ -s "$DL_REF" ]; then
+            echo "[INFO] Found download-pipeline reference cache: ${DL_REF}"
+            CACHE_ARGS+=(--fallback-reference "$DL_REF")
+          fi
+          POLY_REF=$(find cached-reference-polygon -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
+          if [ -n "$POLY_REF" ] && [ -s "$POLY_REF" ]; then
+            echo "[INFO] Found polygon-pipeline reference cache: ${POLY_REF}"
+            CACHE_ARGS+=(--fallback-reference "$POLY_REF")
+          fi
+          python3 scripts/fetch_postpass_polygons.py \
+            --candidates scripts/postpass-candidates.json \
+            --out-dir reference-polygons \
+            --reuse-cached \
+            ${CACHE_ARGS[@]+"${CACHE_ARGS[@]}"}
+          echo "##vso[build.addbuildtag]has-reference-polygons"
+          ls -lh reference-polygons
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish unified reference polygons artifact'
+      inputs:
+        targetPath: 'reference-polygons'
+        artifact: 'admin-polygons-reference'
+        publishLocation: 'pipeline'
+
   - job: parquet
+    dependsOn: fetch_reference
     timeoutInMinutes: 120
     workspace:
       clean: all
@@ -1441,6 +1486,13 @@ stages:
         itemPattern: $(ARTIFACT_PATTERNS)
         targetPath: '$(System.DefaultWorkingDirectory)'
 
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download unified Postpass reference polygons'
+      inputs:
+        buildType: 'current'
+        artifact: 'admin-polygons-reference'
+        targetPath: '$(System.DefaultWorkingDirectory)/reference-polygons'
+
     - task: Bash@3
       displayName: 'Convert exported GeoJSON streams to GeoParquet'
       inputs:
@@ -1453,6 +1505,13 @@ stages:
           # Single provenance timestamp for all per-country GeoParquet merges below
           # (DuckDB COPY ... TO requires a literal value, see AGENTS.md rule 35).
           EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          REF_STREAM=$(find reference-polygons -name "reference-polygons.geojsonseq" 2>/dev/null | head -n 1 || true)
+          if [ -z "$REF_STREAM" ] || [ ! -s "$REF_STREAM" ]; then
+            echo "ERROR: Reference polygons artifact not found or empty in reference-polygons/!" >&2
+            exit 1
+          fi
+          echo "[INFO] Using Postpass reference polygons: ${REF_STREAM}"
 
           echo "=== Downloaded region directories ==="
           find . -maxdepth 2 -type d \( -name "export-*" -o -name "admin-polygons-*" \) || true
@@ -1481,10 +1540,14 @@ stages:
           for region in $(REGIONS); do
             while IFS= read -r file; do
               [ -n "$file" ] || continue
-              [ -s "$file" ] || continue
               filename=$(basename "$file")
               # matrix_cc is the primary country code from the export job filename prefix
               matrix_cc=$(echo "$filename" | cut -d'_' -f1)
+              python3 scripts/merge_reference_polygons.py "$file" \
+                --reference "$REF_STREAM" \
+                --candidates scripts/postpass-candidates.json \
+                --country-code "$matrix_cc"
+              [ -s "$file" ] || continue
               parquet_out="temp_parquet/${filename%.geojsonseq}.parquet"
               echo "Processing polygons $file -> $parquet_out ..."
               # continent and country_code are derived inside convert_to_parquet.sh from features + countries.json

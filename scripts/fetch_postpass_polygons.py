@@ -57,6 +57,20 @@ def load_cached_reference(reference_path):
     return cached
 
 
+def load_cached_references(reference_paths):
+    """Load cached reference polygons from multiple paths in priority order."""
+    cached = {}
+    if not reference_paths:
+        return cached
+    for path in reference_paths:
+        if not path:
+            continue
+        for osm_id, feat in load_cached_reference(path).items():
+            if osm_id not in cached:
+                cached[osm_id] = feat
+    return cached
+
+
 def query_postpass_polygon(rel_id, timeout=20):
     """Query the indexed postpass_polygon table for a relation."""
     sql = f"""
@@ -126,8 +140,15 @@ def main():
     )
     parser.add_argument(
         "--fallback-reference",
-        default=None,
-        help="Optional path to previously cached reference-polygons.geojsonseq for fallback on Postpass failure",
+        action="append",
+        default=[],
+        help="Optional path(s) to previously cached reference-polygons.geojsonseq for reuse or fallback on Postpass failure",
+    )
+    parser.add_argument(
+        "--reuse-cached",
+        action="store_true",
+        default=False,
+        help="Reuse matching polygons directly from --fallback-reference caches and query Postpass only for missing candidates",
     )
     args = parser.parse_args()
 
@@ -135,9 +156,10 @@ def main():
     if not candidates:
         sys.exit(f"ERROR: No candidates found in {args.candidates}")
 
-    cached_refs = load_cached_reference(args.fallback_reference)
+    cached_refs = load_cached_references(args.fallback_reference)
     if cached_refs:
-        print(f"Loaded {len(cached_refs)} cached fallback polygons from {args.fallback_reference}.")
+        sources = ", ".join(p for p in args.fallback_reference if p)
+        print(f"Loaded {len(cached_refs)} cached reference polygons from: {sources}")
 
     os.makedirs(args.out_dir, exist_ok=True)
     geojsonseq_path = os.path.join(args.out_dir, "reference-polygons.geojsonseq")
@@ -147,6 +169,8 @@ def main():
 
     success_features = []
     manifest = []
+    reused_count = 0
+    fetched_count = 0
     fallback_count = 0
 
     for item in candidates:
@@ -157,30 +181,39 @@ def main():
 
         feature = None
         source = "postpass"
-        for attempt in range(1, args.retry_count + 1):
-            try:
-                t0 = time.time()
-                raw_feat = query_postpass_polygon(rel_id)
-                dt = time.time() - t0
-                if raw_feat and raw_feat.get("geometry"):
-                    feature = format_feature(raw_feat, item)
-                    geom_type = feature["geometry"].get("type")
+        if args.reuse_cached and int(rel_id) in cached_refs:
+            feature = cached_refs[int(rel_id)]
+            source = "cached"
+            reused_count += 1
+            print(
+                f"[{country}] CACHED (Rel {rel_id}, Lvl {lvl}, {name}) -> reused from reference cache"
+            )
+        else:
+            for attempt in range(1, args.retry_count + 1):
+                try:
+                    t0 = time.time()
+                    raw_feat = query_postpass_polygon(rel_id)
+                    dt = time.time() - t0
+                    if raw_feat and raw_feat.get("geometry"):
+                        feature = format_feature(raw_feat, item)
+                        geom_type = feature["geometry"].get("type")
+                        print(
+                            f"[{country}] OK (Rel {rel_id}, Lvl {lvl}, {name}) -> {geom_type} ({dt:.2f}s)"
+                        )
+                        break
+                    else:
+                        print(
+                            f"[{country}] Warn: Rel {rel_id} returned empty from postpass_polygon (attempt {attempt}/{args.retry_count})"
+                        )
+                except Exception as e:
                     print(
-                        f"[{country}] OK (Rel {rel_id}, Lvl {lvl}, {name}) -> {geom_type} ({dt:.2f}s)"
+                        f"[{country}] Attempt {attempt}/{args.retry_count} failed for Rel {rel_id}: {e}"
                     )
-                    break
-                else:
-                    print(
-                        f"[{country}] Warn: Rel {rel_id} returned empty from postpass_polygon (attempt {attempt}/{args.retry_count})"
-                    )
-            except Exception as e:
-                print(
-                    f"[{country}] Attempt {attempt}/{args.retry_count} failed for Rel {rel_id}: {e}"
-                )
-                time.sleep(2)
+                    time.sleep(2)
 
-        if not feature:
-            if int(rel_id) in cached_refs:
+            if feature:
+                fetched_count += 1
+            elif int(rel_id) in cached_refs:
                 feature = cached_refs[int(rel_id)]
                 source = "cached_fallback"
                 fallback_count += 1
@@ -214,6 +247,8 @@ def main():
         json.dump(
             {
                 "total_count": len(manifest),
+                "reused_count": reused_count,
+                "fetched_count": fetched_count,
                 "fallback_count": fallback_count,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "candidates": manifest,
@@ -230,7 +265,8 @@ def main():
 
     size_mb = os.path.getsize(geojsonseq_path) / (1024 * 1024)
     print(
-        f"\nSUCCESS: Successfully exported {len(success_features)} reference polygons to {geojsonseq_path} ({size_mb:.2f} MB)"
+        f"\nSUCCESS: Successfully exported {len(success_features)} reference polygons to {geojsonseq_path} "
+        f"({size_mb:.2f} MB; reused={reused_count}, fetched={fetched_count}, fallback={fallback_count})"
     )
 
 
