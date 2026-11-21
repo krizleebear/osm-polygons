@@ -296,30 +296,33 @@ class TestValidateParquet(unittest.TestCase):
     @patch("validate_parquet.find_parquet_files")
     @patch("validate_parquet.inspect_parquet_file")
     def test_validate_parquets_allows_territories_without_expected_l2(self, mock_inspect, mock_find, _mock_pc, _mock_layer):
-        mock_find.return_value = ["admin-polygons-GF.parquet", "admin-polygons-HK.parquet"]
+        territories = [
+            ("GF", [3, 4, 8]),
+            ("HK", [3]),
+            ("MO", [3]),
+            ("CC", [4]),
+            ("CX", [4]),
+            ("HM", [4]),
+            ("NF", [4]),
+            ("AW", [3]),
+            ("AX", [3]),
+            ("PM", [3]),
+        ]
+        required_meta = ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"]
+        mock_find.return_value = [f"admin-polygons-{cc}.parquet" for cc, _ in territories]
         mock_inspect.side_effect = [
             {
-                "country_code": "GF",
-                "path": "admin-polygons-GF.parquet",
-                "error": None,
-                "total_rows": 50,
-                "l2_count": 0,
-                "null_geom_count": 0,
-                "dupe_feature_count": 0,
-                "populated_levels": [3, 4, 8],
-                "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
-            },
-            {
-                "country_code": "HK",
-                "path": "admin-polygons-HK.parquet",
+                "country_code": cc,
+                "path": f"admin-polygons-{cc}.parquet",
                 "error": None,
                 "total_rows": 20,
                 "l2_count": 0,
                 "null_geom_count": 0,
                 "dupe_feature_count": 0,
-                "populated_levels": [3],
-                "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
-            },
+                "populated_levels": levels,
+                "meta_keys": required_meta,
+            }
+            for cc, levels in territories
         ]
 
         import io
@@ -330,7 +333,71 @@ class TestValidateParquet(unittest.TestCase):
         output = buf.getvalue()
 
         self.assertNotIn("type=error]", output)
+        self.assertNotIn("type=warning]", output)
         self.assertEqual(exit_code, 0)
+
+    @patch("validate_parquet.find_layer_parquet_files", return_value=[])
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_warns_for_unlisted_country_without_l2(self, mock_inspect, mock_find, _mock_pc, _mock_layer):
+        mock_find.return_value = ["admin-polygons-ZZ.parquet"]
+        mock_inspect.return_value = {
+            "country_code": "ZZ",
+            "path": "admin-polygons-ZZ.parquet",
+            "error": None,
+            "total_rows": 10,
+            "l2_count": 0,
+            "null_geom_count": 0,
+            "dupe_feature_count": 0,
+            "populated_levels": [4],
+            "meta_keys": ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"],
+        }
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        self.assertIn("type=warning]Country ZZ", output)
+        self.assertNotIn("type=error]", output)
+        self.assertEqual(exit_code, 0)
+
+    @patch("validate_parquet.find_layer_parquet_files", return_value=[])
+    @patch("validate_parquet.find_postal_code_parquet_files", return_value=[])
+    @patch("validate_parquet.find_parquet_files")
+    @patch("validate_parquet.inspect_parquet_file")
+    def test_validate_parquets_fails_on_missing_l2_for_new_sovereign_regions(self, mock_inspect, mock_find, _mock_pc, _mock_layer):
+        required_meta = ["source", "license", "attribution", "country_code", "exported_at", "osm_data_timestamp"]
+        ccs = ["TO", "HN", "PA"]
+        mock_find.return_value = [f"admin-polygons-{cc}.parquet" for cc in ccs]
+        mock_inspect.side_effect = [
+            {
+                "country_code": cc,
+                "path": f"admin-polygons-{cc}.parquet",
+                "error": None,
+                "total_rows": 50,
+                "l2_count": 0,
+                "null_geom_count": 0,
+                "dupe_feature_count": 0,
+                "populated_levels": [4, 6],
+                "meta_keys": required_meta,
+            }
+            for cc in ccs
+        ]
+
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = validate_parquets("some/dir", fail_on_error=True)
+        output = buf.getvalue()
+
+        for cc in ccs:
+            self.assertIn(f"type=error]Country {cc}", output)
+        self.assertEqual(exit_code, 1)
 
 
 if __name__ == "__main__":

@@ -125,13 +125,26 @@
       11
     ]
   },
+  "AW": {
+    "continent": "central-america",
+    "name": "Aruba",
+    "levels": [
+      3
+    ]
+  },
+  "AX": {
+    "continent": "europe",
+    "name": "Åland Islands",
+    "levels": [
+      3
+    ]
+  },
   "AZ": {
     "continent": "asia",
     "name": "Azerbaijan",
     "levels": [
       2,
       4,
-      5,
       6,
       7,
       8,
@@ -272,7 +285,6 @@
       2,
       3,
       4,
-      5,
       6,
       7,
       8,
@@ -360,6 +372,13 @@
       11
     ]
   },
+  "CC": {
+    "continent": "australia-oceania",
+    "name": "Cocos (Keeling) Islands",
+    "levels": [
+      4
+    ]
+  },
   "CD": {
     "continent": "africa",
     "name": "Democratic Republic of the Congo",
@@ -434,7 +453,8 @@
     "continent": "australia-oceania",
     "name": "Cook Islands",
     "levels": [
-      3,
+      2,
+      4,
       6
     ]
   },
@@ -534,6 +554,13 @@
       9,
       10,
       11
+    ]
+  },
+  "CX": {
+    "continent": "australia-oceania",
+    "name": "Christmas Island",
+    "levels": [
+      4
     ]
   },
   "CY": {
@@ -940,6 +967,20 @@
       11
     ]
   },
+  "HK": {
+    "continent": "asia",
+    "name": "Hong Kong",
+    "levels": [
+      3
+    ]
+  },
+  "HM": {
+    "continent": "australia-oceania",
+    "name": "Heard Island and McDonald Islands",
+    "levels": [
+      4
+    ]
+  },
   "HN": {
     "continent": "central-america",
     "name": "Honduras",
@@ -981,7 +1022,6 @@
     "name": "Hungary",
     "levels": [
       2,
-      4,
       5,
       6,
       7,
@@ -1533,6 +1573,13 @@
       11
     ]
   },
+  "MO": {
+    "continent": "asia",
+    "name": "Macau",
+    "levels": [
+      3
+    ]
+  },
   "MQ": {
     "continent": "europe",
     "name": "Martinique",
@@ -1688,6 +1735,13 @@
       11
     ]
   },
+  "NF": {
+    "continent": "australia-oceania",
+    "name": "Norfolk Island",
+    "levels": [
+      4
+    ]
+  },
   "NG": {
     "continent": "africa",
     "name": "Nigeria",
@@ -1767,8 +1821,8 @@
     "continent": "australia-oceania",
     "name": "Niue",
     "levels": [
-      3,
-      6
+      2,
+      8
     ]
   },
   "NZ": {
@@ -1885,11 +1939,18 @@
       11
     ]
   },
+  "PM": {
+    "continent": "north-america",
+    "name": "Saint Pierre and Miquelon",
+    "levels": [
+      3
+    ]
+  },
   "PN": {
     "continent": "australia-oceania",
     "name": "Pitcairn Islands",
     "levels": [
-      3
+      2
     ]
   },
   "PR": {
@@ -1898,7 +1959,10 @@
     "levels": [
       4,
       6,
-      8
+      7,
+      9,
+      10,
+      11
     ]
   },
   "PS": {
@@ -1964,7 +2028,6 @@
     "levels": [
       2,
       4,
-      5,
       7,
       8,
       9,
@@ -2287,7 +2350,7 @@
     "continent": "australia-oceania",
     "name": "Tokelau",
     "levels": [
-      3
+      2
     ]
   },
   "TL": {
@@ -2358,7 +2421,7 @@
     "name": "Tuvalu",
     "levels": [
       2,
-      4
+      8
     ]
   },
   "TW": {
