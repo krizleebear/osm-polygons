@@ -194,6 +194,137 @@ class TestMergeReferencePolygons(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertEqual([feat["properties"]["osm_id"] for feat in lines], [5001, 1001])
 
+    def test_replace_preserves_stream_enrichment_and_normalizes_r_type(self):
+        cands = os.path.join(self.temp_dir.name, "hn_cands.json")
+        refs = os.path.join(self.temp_dir.name, "hn_refs.geojsonseq")
+        stream = os.path.join(self.temp_dir.name, "hn_stream.geojsonseq")
+        with open(cands, "w") as f:
+            json.dump({
+                "candidates": [
+                    {"osm_id": 4627314, "country": "HN", "admin_level": 4, "name": "Choluteca"}
+                ]
+            }, f)
+        with open(refs, "w") as f:
+            f.write(json.dumps({
+                "type": "Feature",
+                "id": 4627314,
+                "properties": {
+                    "osm_type": "R",
+                    "osm_id": 4627314,
+                    "admin_level": "4",
+                    "ISO3166-2": "HN-CH",
+                    "name": "Choluteca",
+                },
+                "geometry": {"type": "MultiPolygon", "coordinates": []},
+            }) + "\n")
+        with open(stream, "w") as f:
+            f.write(json.dumps({
+                "type": "Feature",
+                "properties": {
+                    "@type": "relation",
+                    "@id": 4627314,
+                    "admin_level": "4",
+                    "area_type": "state",
+                    "name": "Choluteca",
+                    "center_lat": 13.3061,
+                    "center_lon": -87.1955,
+                    "admin_centre:name": "Choluteca",
+                    "parent_osm_id": 287670,
+                    "parent_name": "Honduras",
+                },
+                "geometry": {"type": "Polygon", "coordinates": []},
+            }) + "\n")
+
+        out = os.path.join(self.temp_dir.name, "hn_out.geojsonseq")
+        import io, sys
+        from contextlib import redirect_stdout
+        orig_argv = sys.argv
+        try:
+            sys.argv = [
+                "merge_reference_polygons.py", stream,
+                "--reference", refs, "--candidates", cands,
+                "--country-code", "HN", "--out", out,
+            ]
+            with redirect_stdout(io.StringIO()):
+                main()
+        finally:
+            sys.argv = orig_argv
+
+        with open(out, "r") as f:
+            lines = [json.loads(line) for line in f if line.strip()]
+        self.assertEqual(len(lines), 1)
+        props = lines[0]["properties"]
+        self.assertEqual(props["osm_type"], "relation")
+        self.assertEqual(props["@type"], "relation")
+        self.assertEqual(props["area_type"], "state")
+        self.assertEqual(props["center_lat"], 13.3061)
+        self.assertEqual(props["admin_centre:name"], "Choluteca")
+        self.assertEqual(props["parent_osm_id"], 287670)
+        self.assertEqual(props["parent_name"], "Honduras")
+
+    def test_insert_missing_l4_strips_bogus_iso1_and_infers_parent_from_stream_l2(self):
+        cands = os.path.join(self.temp_dir.name, "hn_insert_cands.json")
+        refs = os.path.join(self.temp_dir.name, "hn_insert_refs.geojsonseq")
+        stream = os.path.join(self.temp_dir.name, "hn_insert_stream.geojsonseq")
+        with open(cands, "w") as f:
+            json.dump({
+                "candidates": [
+                    {"osm_id": 4627314, "country": "HN", "admin_level": 4, "name": "Choluteca"}
+                ]
+            }, f)
+        with open(refs, "w") as f:
+            f.write(json.dumps({
+                "type": "Feature",
+                "id": 4627314,
+                "properties": {
+                    "osm_type": "R",
+                    "osm_id": 4627314,
+                    "admin_level": "4",
+                    "area_type": "administrative",
+                    "ISO3166-1": "HN",
+                    "ISO3166-2": "HN-CH",
+                    "name": "Choluteca",
+                },
+                "geometry": {"type": "MultiPolygon", "coordinates": []},
+            }) + "\n")
+        with open(stream, "w") as f:
+            f.write(json.dumps({
+                "type": "Feature",
+                "properties": {
+                    "@type": "relation",
+                    "@id": 287670,
+                    "admin_level": "2",
+                    "ISO3166-1": "HN",
+                    "name": "Honduras",
+                },
+                "geometry": {"type": "MultiPolygon", "coordinates": []},
+            }) + "\n")
+
+        out = os.path.join(self.temp_dir.name, "hn_insert_out.geojsonseq")
+        import io, sys
+        from contextlib import redirect_stdout
+        orig_argv = sys.argv
+        try:
+            sys.argv = [
+                "merge_reference_polygons.py", stream,
+                "--reference", refs, "--candidates", cands,
+                "--country-code", "HN", "--out", out,
+            ]
+            with redirect_stdout(io.StringIO()):
+                main()
+        finally:
+            sys.argv = orig_argv
+
+        with open(out, "r") as f:
+            lines = [json.loads(line) for line in f if line.strip()]
+        self.assertEqual(len(lines), 2)
+        l4_props = lines[1]["properties"]
+        self.assertEqual(l4_props["osm_type"], "relation")
+        self.assertEqual(l4_props["area_type"], "state")
+        self.assertNotIn("ISO3166-1", l4_props)
+        self.assertEqual(l4_props["parent_osm_id"], 287670)
+        self.assertEqual(l4_props["parent_name"], "Honduras")
+
 
 
 if __name__ == "__main__":

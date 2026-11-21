@@ -9,8 +9,12 @@ rewrite the per-region temp Parquet files and therefore must re-state the
 metadata instead of silently dropping it.
 """
 
+import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -172,6 +176,84 @@ class TestSqlTemplateMetadata(unittest.TestCase):
             content = read_file(os.path.join(REPO_ROOT, sql_rel))
             self.assertRegex(content, r"ST_Hilbert\(ST_PointOnSurface\(geom\)")
             self.assertNotRegex(content, r"ST_Hilbert\(ST_Centroid\(")
+
+
+class TestExportParquetNormalization(unittest.TestCase):
+
+    @unittest.skipUnless(shutil.which("duckdb"), "duckdb CLI required for end-to-end SQL check")
+    def test_export_parquet_filters_non_numeric_levels_non_admin_boundaries_and_normalizes_osm_type(self):
+        geom = {"type": "Polygon", "coordinates": [[[-87.2, 13.2], [-87.1, 13.2], [-87.1, 13.3], [-87.2, 13.2]]]}
+        features = [
+            {
+                "type": "Feature",
+                "id": 287670,
+                "geometry": geom,
+                "properties": {"osm_type": "R", "osm_id": 287670, "admin_level": "2", "area_type": "country", "ISO3166-1": "HN", "name": "Honduras"},
+            },
+            {
+                "type": "Feature",
+                "id": 4627314,
+                "geometry": geom,
+                "properties": {
+                    "osm_type": "R", "osm_id": 4627314, "admin_level": "4", "area_type": "state",
+                    "ISO3166-2": "HN-CH", "name": "Choluteca",
+                    "center_lat": 13.3061, "center_lon": -87.1955, "parent_osm_id": 287670, "parent_name": "Honduras",
+                },
+            },
+            # HN way/224755729 (non-numeric admin_level="suburb") -> must be dropped
+            {
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {"@type": "way", "@id": 224755729, "admin_level": "suburb", "boundary": "administrative", "name": "La San Miguel"},
+            },
+            # PR boundary=protected_area -> must be dropped
+            {
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {"@type": "way", "@id": 44106736, "admin_level": "7", "boundary": "protected_area", "place": "island", "name": "Isla Caja de Muertos"},
+            },
+            # CR boundary=place -> must be dropped
+            {
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {"@type": "relation", "@id": 21261577, "admin_level": "11", "boundary": "place", "place": "neighbourhood", "name": "Finca Marañon"},
+            },
+            # Valid island without explicit boundary tag -> must be kept as boundary='administrative'
+            {
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {"@type": "way", "@id": 777777, "admin_level": "7", "area_type": "island", "place": "island", "name": "Sample Island"},
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            in_seq = os.path.join(tmp, "HN_test.admin-polygons.geojsonseq")
+            out_pq = os.path.join(tmp, "HN_test.parquet")
+            with open(in_seq, "w", encoding="utf-8") as f:
+                for feat in features:
+                    f.write(json.dumps(feat) + "\n")
+
+            converter = os.path.join(REPO_ROOT, "scripts", "convert_to_parquet.sh")
+            res = subprocess.run([converter, "HN", in_seq, out_pq], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, res.stderr + res.stdout)
+
+            q = (
+                f"SELECT osm_id, osm_type, admin_level, area_type, boundary, iso3166_1, center_lat, parent_osm_id "
+                f"FROM read_parquet('{out_pq}') ORDER BY osm_id"
+            )
+            qres = subprocess.run(["duckdb", "-json", "-c", q], capture_output=True, text=True)
+            self.assertEqual(qres.returncode, 0, qres.stderr)
+            rows = {r["osm_id"]: r for r in json.loads(qres.stdout)}
+
+        self.assertEqual(set(rows.keys()), {287670, 777777, 4627314})
+        for osm_id, row in rows.items():
+            self.assertEqual(row["osm_type"], "relation" if osm_id != 777777 else "way")
+        self.assertEqual(rows[287670]["iso3166_1"], "HN")
+        self.assertIsNone(rows[4627314]["iso3166_1"])
+        self.assertEqual(rows[4627314]["area_type"], "state")
+        self.assertAlmostEqual(rows[4627314]["center_lat"], 13.3061, places=4)
+        self.assertEqual(rows[4627314]["parent_osm_id"], 287670)
+        self.assertEqual(rows[777777]["boundary"], "administrative")
 
 
 if __name__ == "__main__":

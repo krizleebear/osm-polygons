@@ -30,9 +30,14 @@ COPY (
         ) AS country_code,
         TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) AS admin_level,
         COALESCE(json_extract_string(properties, '$.area_type'), 'administrative') AS area_type,
-        COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') AS boundary,
-        TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.@id'), json_extract_string(properties, '$.id'), '0'), '[^0-9]', '', 'g') AS BIGINT) AS osm_id,
-        COALESCE(json_extract_string(properties, '$.@type'), json_extract_string(properties, '$.osm_type'), 'relation') AS osm_type,
+        LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) AS boundary,
+        TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.@id'), json_extract_string(properties, '$.id'), json_extract_string(properties, '$.osm_id'), '0'), '[^0-9]', '', 'g') AS BIGINT) AS osm_id,
+        CASE LOWER(COALESCE(json_extract_string(properties, '$.@type'), json_extract_string(properties, '$.osm_type'), 'relation'))
+            WHEN 'r' THEN 'relation'
+            WHEN 'w' THEN 'way'
+            WHEN 'n' THEN 'node'
+            ELSE LOWER(COALESCE(json_extract_string(properties, '$.@type'), json_extract_string(properties, '$.osm_type'), 'relation'))
+        END AS osm_type,
         COALESCE(json_extract_string(properties, '$.name'), json_extract_string(properties, '$.name:en'), json_extract_string(properties, '$.official_name'), '') AS name,
         json_extract_string(properties, '$.name:en') AS name_en,
         json_extract_string(properties, '$.wikidata') AS wikidata,
@@ -88,8 +93,8 @@ COPY (
                 columns={'properties': 'JSON', 'geometry': 'JSON'},
                 maximum_object_size=268435456,
                 ignore_errors=true)
-            WHERE json_extract_string(properties, '$.admin_level') IS NOT NULL
-              AND COALESCE(json_extract_string(properties, '$.boundary'), 'administrative') NOT IN ('maritime', 'census', 'electoral', 'political')
+            WHERE TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) BETWEEN 1 AND 12
+              AND LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) IN ('administrative', 'traditional', 'statistical', 'cadastral', 'local_authority', 'borough')
               AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
               AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
               AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')

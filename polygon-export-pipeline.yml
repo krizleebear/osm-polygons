@@ -1663,7 +1663,7 @@ stages:
             CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
             COPY (
               SELECT * EXCLUDE (rn) FROM (
-                SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level) AS rn
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level, (center_lat IS NULL), (parent_osm_id IS NULL), ST_Area(geom) DESC) AS rn
                 FROM combined
                 WHERE country_code = '${cc}'
               ) WHERE rn = 1

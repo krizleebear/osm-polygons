@@ -24,6 +24,43 @@ import json
 import os
 import sys
 
+try:
+    from filter_polygons import derive_area_type
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from filter_polygons import derive_area_type
+
+
+ENRICHMENT_KEYS = (
+    "area_type",
+    "center_lat",
+    "center_lon",
+    "admin_centre:lat",
+    "admin_centre:lon",
+    "admin_centre:osm_type",
+    "admin_centre:osm_id",
+    "admin_centre:source_id",
+    "admin_centre:name",
+    "admin_centre:names_json",
+    "admin_centre:wikidata",
+    "label:lat",
+    "label:lon",
+    "parent_osm_id",
+    "parent_iso3166_2",
+    "parent_name",
+    "admin_level_mapped",
+    "is_territorial_sea",
+)
+
+_OSM_TYPE_MAP = {
+    "r": "relation",
+    "relation": "relation",
+    "w": "way",
+    "way": "way",
+    "n": "node",
+    "node": "node",
+}
+
 
 def load_candidates(candidates_path, country_code):
     with open(candidates_path, "r", encoding="utf-8") as f:
@@ -57,6 +94,66 @@ def is_relation_feature(feat):
         raw_type = props.get("osm_type")
     elem_type = str(raw_type or "").strip().lower()
     return elem_type in ("", "relation", "r")
+
+
+def normalize_and_enrich_reference(ref_feat, candidate_meta, existing_feat=None, stream_l2_by_cc=None):
+    """Defensively normalize OSM identity/ISO fields and preserve stream/L2 enrichment."""
+    out = dict(ref_feat)
+    props = dict(ref_feat.get("properties") or {})
+    out["properties"] = props
+
+    osm_id = extract_osm_id(ref_feat)
+    if osm_id is None and candidate_meta and candidate_meta.get("osm_id") is not None:
+        osm_id = int(abs(int(candidate_meta["osm_id"])))
+    if osm_id is not None:
+        props["osm_id"] = osm_id
+        props["id"] = osm_id
+        props["@id"] = osm_id
+        out["id"] = osm_id
+
+    raw_type = str(props.get("@type") or props.get("osm_type") or "").strip().lower()
+    norm_type = _OSM_TYPE_MAP.get(raw_type, raw_type) if raw_type else "relation"
+    props["osm_type"] = norm_type
+    props["@type"] = norm_type
+
+    if not props.get("admin_level") and candidate_meta and "admin_level" in candidate_meta:
+        props["admin_level"] = str(candidate_meta["admin_level"])
+    level_str = str(props.get("admin_level") or "").strip()
+
+    cand_country = candidate_meta.get("country") if candidate_meta else None
+    if level_str != "2" and cand_country and props.get("ISO3166-1") == cand_country:
+        props.pop("ISO3166-1", None)
+
+    if existing_feat:
+        existing_props = existing_feat.get("properties") or {}
+        for key in ENRICHMENT_KEYS:
+            existing_val = existing_props.get(key)
+            if existing_val is None or existing_val == "":
+                continue
+            if key == "area_type":
+                if not props.get("area_type") or (
+                    props.get("area_type") == "administrative" and existing_val != "administrative"
+                ):
+                    props["area_type"] = existing_val
+            elif props.get(key) is None or props.get(key) == "":
+                props[key] = existing_val
+
+    if not props.get("area_type") or props.get("area_type") == "administrative":
+        props["area_type"] = derive_area_type(props, level_str)
+
+    if level_str != "2" and not props.get("parent_osm_id") and stream_l2_by_cc:
+        iso2 = str(props.get("ISO3166-2") or "").strip().upper()
+        cc = iso2.split("-", 1)[0] if "-" in iso2 else ""
+        if not cc and level_str == "4" and cand_country:
+            cc = str(cand_country).strip().upper()
+        if cc and cc in stream_l2_by_cc:
+            l2_id, l2_name = stream_l2_by_cc[cc]
+            if l2_id != osm_id:
+                props["parent_osm_id"] = l2_id
+                if l2_name and not props.get("parent_name"):
+                    props["parent_name"] = l2_name
+
+    return out
 
 
 def load_reference_features(reference_path, candidate_ids):
@@ -127,6 +224,7 @@ def main():
     out_path = args.out if args.out else args.stream + ".tmp"
 
     seen_ids = set()
+    stream_l2_by_cc = {}
     replaced_count = 0
     inserted_count = 0
     total_stream_count = 0
@@ -140,12 +238,23 @@ def main():
                 continue
             total_stream_count += 1
             feat = json.loads(line)
+            props = feat.get("properties") or {}
             osm_id = extract_osm_id(feat)
+
+            if is_relation_feature(feat) and osm_id is not None and str(props.get("admin_level") or "").strip() == "2":
+                iso1 = str(props.get("ISO3166-1") or "").strip().upper()
+                if iso1:
+                    stream_l2_by_cc[iso1] = (osm_id, str(props.get("name") or "").strip())
+
             if is_relation_feature(feat) and osm_id is not None and osm_id in ref_features:
                 rel_id = osm_id
                 seen_ids.add(rel_id)
-                # Replace with the intact reference feature (preserving any extra stream tags if present)
-                ref_feat = ref_features[rel_id]
+                ref_feat = normalize_and_enrich_reference(
+                    ref_features[rel_id],
+                    candidates[rel_id],
+                    existing_feat=feat,
+                    stream_l2_by_cc=stream_l2_by_cc,
+                )
                 out_fp.write(json.dumps(ref_feat, ensure_ascii=False) + "\n")
                 replaced_count += 1
                 print(
@@ -157,7 +266,11 @@ def main():
         # Insert candidates that were completely absent from the stream
         for rel_id in candidate_ids:
             if rel_id not in seen_ids:
-                ref_feat = ref_features[rel_id]
+                ref_feat = normalize_and_enrich_reference(
+                    ref_features[rel_id],
+                    candidates[rel_id],
+                    stream_l2_by_cc=stream_l2_by_cc,
+                )
                 out_fp.write(json.dumps(ref_feat, ensure_ascii=False) + "\n")
                 inserted_count += 1
                 print(

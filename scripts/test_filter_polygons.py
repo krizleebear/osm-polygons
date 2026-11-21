@@ -532,6 +532,67 @@ class TestFilterPolygons(unittest.TestCase):
         result = process_feature(gambia, country_code="SN")
         self.assertIsNotNone(result, "Gambia features in the SN composite extract must not be dropped")
 
+    def test_non_numeric_and_out_of_range_admin_level_dropped(self):
+        # Real-world case from HN: way/224755729 with admin_level="suburb"
+        hn_way = feat({
+            "@type": "way",
+            "@id": 224755729,
+            "boundary": "administrative",
+            "admin_level": "suburb",
+            "name": "La San Miguel",
+        })
+        self.assertIsNone(process_feature(hn_way))
+
+        for bad_lvl in ("0", "13", "-1", "abc", "4a", "²"):
+            with self.subTest(admin_level=bad_lvl):
+                self.assertIsNone(process_feature(feat({
+                    "@type": "relation",
+                    "boundary": "administrative",
+                    "admin_level": bad_lvl,
+                    "name": "Bad Level",
+                })))
+
+    def test_non_administrative_boundary_values_dropped(self):
+        # PR protected_area with place=island/islet & CR boundary=place with place=neighbourhood
+        pr_island = feat({
+            "@type": "way",
+            "@id": 44106736,
+            "boundary": "protected_area",
+            "admin_level": "7",
+            "place": "island",
+            "name": "Isla Caja de Muertos",
+        })
+        self.assertIsNone(process_feature(pr_island))
+
+        cr_place = feat({
+            "@type": "relation",
+            "@id": 21261577,
+            "boundary": "place",
+            "admin_level": "11",
+            "place": "neighbourhood",
+            "name": "Finca Marañon",
+        })
+        self.assertIsNone(process_feature(cr_place))
+
+        for bad_b in ("protected_area", "place", "forest", "forestry", "postal_code"):
+            with self.subTest(boundary=bad_b):
+                self.assertIsNone(process_feature(feat({
+                    "@type": "relation",
+                    "boundary": bad_b,
+                    "admin_level": "8",
+                    "name": "Non-Admin",
+                })))
+
+        for ok_b in ("administrative", "traditional", "statistical", "cadastral", "local_authority", "borough"):
+            with self.subTest(boundary=ok_b):
+                res = process_feature(feat({
+                    "@type": "relation",
+                    "boundary": ok_b,
+                    "admin_level": "10",
+                    "name": "Valid Admin",
+                }))
+                self.assertIsNotNone(res)
+
 
 if __name__ == "__main__":
     unittest.main()

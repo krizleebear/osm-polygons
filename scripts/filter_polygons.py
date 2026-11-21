@@ -37,7 +37,19 @@ MAINLAND_RELATION_IDS = {
     295438:  {"country": "PT", "default_name": "Portugal (Continental)"},
 }
 
-# Non-administrative boundary tag values that must be excluded:
+# Allowed administrative and sub-municipal boundary tag values
+# (missing/empty boundary is allowed for place/island polygons that synthesize admin_level):
+ALLOWED_BOUNDARY_VALUES = {
+    "",
+    "administrative",
+    "traditional",
+    "statistical",
+    "cadastral",
+    "local_authority",
+    "borough",
+}
+
+# Non-administrative border_type / boundary tag values that must be excluded:
 EXCLUDED_BOUNDARY_VALUES = {"political", "census", "historic"}
 
 # Countries known to lack native admin_level=4 relations, mapping fallback levels (e.g., level 6 -> 4)
@@ -371,9 +383,9 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
     if geometry_type not in ("Polygon", "MultiPolygon"):
         return None
 
-    # Exclude non-administrative boundaries (political, census, electoral districts)
+    # Exclude non-administrative boundaries (protected_area, place, forest, political, census, historic, etc.)
     boundary_val = str(props.get("boundary", "")).strip().lower()
-    if boundary_val in EXCLUDED_BOUNDARY_VALUES:
+    if boundary_val not in ALLOWED_BOUNDARY_VALUES:
         return None
 
     political_val = str(props.get("political", "")).strip().lower()
@@ -459,7 +471,7 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
         props["admin_level"] = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
         raw_level = DEFAULT_SUBMUNICIPAL_ADMIN_LEVEL
 
-    if not raw_level or raw_level == "None":
+    if not raw_level or not re.fullmatch(r"[0-9]+", raw_level) or not (1 <= int(raw_level) <= 12):
         return None
 
     # Semantic area_type derivation
