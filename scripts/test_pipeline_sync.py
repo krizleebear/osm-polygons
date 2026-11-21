@@ -181,7 +181,16 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
 
     def test_parquet_stage_fetches_missing_postpass_candidates_and_merges(self):
         parquet_stage = self.export_text.split("- stage: parquet", 1)[1].split("- stage: release", 1)[0]
+        fetch_job = parquet_stage.split("- job: fetch_reference", 1)[1].split("- job: parquet", 1)[0]
         self.assertIn("- job: fetch_reference", parquet_stage)
+        self.assertIn("scripts/resolve_reference_cache_build.py", fetch_job)
+        self.assertIn("SYSTEM_ACCESSTOKEN: $(System.AccessToken)", fetch_job)
+        self.assertIn("ne(variables['DL_REF_BUILD_ID'], '')", fetch_job)
+        self.assertIn("ne(variables['POLY_REF_BUILD_ID'], '')", fetch_job)
+        self.assertIn("pipelineId: '$(DL_REF_BUILD_ID)'", fetch_job)
+        self.assertIn("pipelineId: '$(POLY_REF_BUILD_ID)'", fetch_job)
+        self.assertIn("artifact: 'admin-polygons-reference'", fetch_job)
+        self.assertNotIn("tags: 'has-reference-polygons'", fetch_job)
         self.assertIn("scripts/fetch_postpass_polygons.py", parquet_stage)
         self.assertIn("--reuse-cached", parquet_stage)
         self.assertRegex(parquet_stage, r"- job: parquet\s+dependsOn: fetch_reference")
@@ -191,6 +200,15 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
             parquet_stage.index("scripts/merge_reference_polygons.py"),
             parquet_stage.index("./scripts/convert_to_parquet.sh"),
         )
+
+    def test_download_pipeline_reference_polygons_resolves_cached_build(self):
+        ref_job = self.download_text.split("- job: reference_polygons", 1)[1]
+        self.assertIn("- checkout: self", ref_job)
+        self.assertIn("scripts/resolve_reference_cache_build.py", ref_job)
+        self.assertIn("SYSTEM_ACCESSTOKEN: $(System.AccessToken)", ref_job)
+        self.assertIn("ne(variables['DL_REF_BUILD_ID'], '')", ref_job)
+        self.assertIn("pipelineId: '$(DL_REF_BUILD_ID)'", ref_job)
+        self.assertIn("artifact: 'admin-polygons-reference'", ref_job)
 
 
 if __name__ == "__main__":

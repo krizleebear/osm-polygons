@@ -1121,31 +1121,46 @@ stages:
     steps:
     - checkout: self
 
+    - task: Bash@3
+      displayName: 'Resolve latest builds with cached reference polygons'
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -euo pipefail
+          python3 scripts/resolve_reference_cache_build.py \
+            --collection-uri "$(System.CollectionUri)" \
+            --project "$(System.TeamProjectId)" \
+            --artifact "admin-polygons-reference" \
+            --exclude-build-id "$(Build.BuildId)" \
+            --target "DL_REF_BUILD_ID=9" \
+            --target "POLY_REF_BUILD_ID=4"
+
     - task: DownloadPipelineArtifact@2
       displayName: 'Download cached reference polygons from download pipeline (definition 9)'
+      condition: and(succeeded(), ne(variables['DL_REF_BUILD_ID'], ''))
       continueOnError: true
       inputs:
         buildType: 'specific'
         project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
         definition: '9'
-        buildVersionToDownload: 'latest'
-        allowFailedBuilds: true
-        allowPartiallySucceededBuilds: true
-        itemPattern: 'admin-polygons-reference/**'
+        buildVersionToDownload: 'specific'
+        pipelineId: '$(DL_REF_BUILD_ID)'
+        artifact: 'admin-polygons-reference'
         targetPath: '$(System.DefaultWorkingDirectory)/cached-reference-download'
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download cached reference polygons from previous polygon build'
+      condition: and(succeeded(), ne(variables['POLY_REF_BUILD_ID'], ''))
       continueOnError: true
       inputs:
         buildType: 'specific'
         project: 'f85b0393-1484-487a-b6d1-5120b54a70be'
         definition: '4'
-        buildVersionToDownload: 'latest'
-        tags: 'has-reference-polygons'
-        allowFailedBuilds: true
-        allowPartiallySucceededBuilds: true
-        itemPattern: 'admin-polygons-reference/**'
+        buildVersionToDownload: 'specific'
+        pipelineId: '$(POLY_REF_BUILD_ID)'
+        artifact: 'admin-polygons-reference'
         targetPath: '$(System.DefaultWorkingDirectory)/cached-reference-polygon'
 
     - task: Bash@3
