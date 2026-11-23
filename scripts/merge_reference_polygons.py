@@ -173,6 +173,16 @@ def normalize_and_enrich_reference(ref_feat, candidate_meta, existing_feat=None,
     return out
 
 
+def has_valid_polygonal_geometry(feat):
+    """Return True if feat carries a GeoJSON Polygon or MultiPolygon geometry."""
+    if not isinstance(feat, dict):
+        return False
+    geom = feat.get("geometry")
+    if not isinstance(geom, dict):
+        return False
+    return geom.get("type") in ("Polygon", "MultiPolygon") and geom.get("coordinates") is not None
+
+
 def load_reference_features(reference_path, candidate_ids):
     """Load matching reference GeoJSON features from reference-polygons.geojsonseq."""
     ref_map = {}
@@ -186,7 +196,7 @@ def load_reference_features(reference_path, candidate_ids):
                 continue
             feat = json.loads(line)
             osm_id = extract_osm_id(feat)
-            if osm_id is not None and osm_id in candidate_ids:
+            if osm_id is not None and osm_id in candidate_ids and has_valid_polygonal_geometry(feat):
                 ref_map[osm_id] = feat
     return ref_map
 

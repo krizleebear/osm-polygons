@@ -63,6 +63,16 @@ def load_candidates(candidates_path):
     return data.get("candidates", [])
 
 
+def has_valid_polygonal_geometry(feat):
+    """Return True if feat carries a GeoJSON Polygon or MultiPolygon geometry."""
+    if not isinstance(feat, dict):
+        return False
+    geom = feat.get("geometry")
+    if not isinstance(geom, dict):
+        return False
+    return geom.get("type") in ("Polygon", "MultiPolygon") and geom.get("coordinates") is not None
+
+
 def load_cached_reference(reference_path):
     """Load previously cached reference polygons keyed by integer osm_id."""
     cached = {}
@@ -76,7 +86,7 @@ def load_cached_reference(reference_path):
             feat = json.loads(line)
             props = feat.get("properties") or {}
             osm_id = feat.get("id") or props.get("osm_id") or props.get("@id")
-            if osm_id is not None and feat.get("geometry"):
+            if osm_id is not None and has_valid_polygonal_geometry(feat):
                 cached[int(abs(int(osm_id)))] = feat
     return cached
 
@@ -495,7 +505,7 @@ def main():
                     t0 = time.time()
                     raw_feat = query_postpass_polygon(rel_id)
                     dt = time.time() - t0
-                    if raw_feat and raw_feat.get("geometry"):
+                    if has_valid_polygonal_geometry(raw_feat):
                         feature = raw_feat
                         geom_type = feature["geometry"].get("type")
                         print(

@@ -224,6 +224,18 @@ class TestExportParquetNormalization(unittest.TestCase):
                 "geometry": geom,
                 "properties": {"@type": "way", "@id": 777777, "admin_level": "7", "area_type": "island", "place": "island", "name": "Sample Island"},
             },
+            # BT / osmium broken geometry {"type": null} -> must be ignored without ST_GeomFromGeoJSON error
+            {
+                "type": "Feature",
+                "geometry": {"type": None},
+                "properties": {"@type": "relation", "@id": 888888, "admin_level": "8", "boundary": "administrative", "name": "Null Geometry Type"},
+            },
+            # Null geometry object -> must be ignored without error
+            {
+                "type": "Feature",
+                "geometry": None,
+                "properties": {"@type": "relation", "@id": 888889, "admin_level": "8", "boundary": "administrative", "name": "Null Geometry"},
+            },
         ]
 
         with tempfile.TemporaryDirectory() as tmp:

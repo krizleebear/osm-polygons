@@ -101,13 +101,20 @@ COPY (
         FROM (
             SELECT
                 properties,
-                ST_GeomFromGeoJSON(geometry) AS geom_raw
+                CASE
+                    WHEN json_extract_string(geometry, '$.type') IN ('Polygon', 'MultiPolygon')
+                         AND json_extract(geometry, '$.coordinates') IS NOT NULL
+                    THEN ST_GeomFromGeoJSON(geometry)
+                    ELSE NULL
+                END AS geom_raw
             FROM read_json('__INPUT_GEOJSONSEQ__',
                 format='newline_delimited',
                 columns={'properties': 'JSON', 'geometry': 'JSON'},
                 maximum_object_size=268435456,
                 ignore_errors=true)
-            WHERE TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) BETWEEN 1 AND 12
+            WHERE json_extract_string(geometry, '$.type') IN ('Polygon', 'MultiPolygon')
+              AND json_extract(geometry, '$.coordinates') IS NOT NULL
+              AND TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) BETWEEN 1 AND 12
               AND (
                   LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) IN ('administrative', 'traditional', 'statistical', 'cadastral', 'local_authority', 'borough')
                   OR (LOWER(COALESCE(json_extract_string(properties, '$.boundary'), '')) = 'disputed' AND UPPER(COALESCE(json_extract_string(properties, '$.ISO3166-1'), '')) = 'PS')

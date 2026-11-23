@@ -25,7 +25,12 @@ COPY (
             l.landuse,
             NULLIF(TRIM(l.name), '') AS name,
             NULLIF(TRIM(l.name_en), '') AS name_en,
-            ST_GeomFromGeoJSON(l.geom_json) AS geom,
+            CASE
+                WHEN json_extract_string(l.geom_json, '$.type') IN ('Polygon', 'MultiPolygon')
+                     AND json_extract(l.geom_json, '$.coordinates') IS NOT NULL
+                THEN ST_GeomFromGeoJSON(l.geom_json)
+                ELSE NULL
+            END AS geom,
             l.tags,
             ROW_NUMBER() OVER (
                 PARTITION BY l.osm_type, TRY_CAST(l.osm_id AS BIGINT)
@@ -51,6 +56,8 @@ COPY (
         WHERE l.osm_id IS NOT NULL
           AND l.landuse IS NOT NULL
           AND l.geom_json IS NOT NULL
+          AND json_extract_string(l.geom_json, '$.type') IN ('Polygon', 'MultiPolygon')
+          AND json_extract(l.geom_json, '$.coordinates') IS NOT NULL
     )
     SELECT
         continent,

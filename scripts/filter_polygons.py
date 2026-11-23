@@ -380,7 +380,8 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
     # Spec §4.2: only Polygon / MultiPolygon geometries are emitted.
     # osmium tags-filter pulls in referenced member nodes/ways which osmium export
     # would otherwise leak through as Point/LineString features.
-    geometry_type = (data.get("geometry") or {}).get("type")
+    geom_obj = data.get("geometry") or {}
+    geometry_type = geom_obj.get("type")
     if geometry_type not in ("Polygon", "MultiPolygon"):
         return None
 

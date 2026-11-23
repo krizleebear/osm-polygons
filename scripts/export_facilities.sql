@@ -23,7 +23,12 @@ COPY (
             TRY_CAST(f.osm_id AS BIGINT) AS osm_id,
             f.osm_type,
             f.feature_class,
-            ST_GeomFromGeoJSON(f.geom_json) AS geom_raw,
+            CASE
+                WHEN json_extract_string(f.geom_json, '$.type') IS NOT NULL
+                     AND json_extract(f.geom_json, '$.coordinates') IS NOT NULL
+                THEN ST_GeomFromGeoJSON(f.geom_json)
+                ELSE NULL
+            END AS geom_raw,
             f.tags
         FROM read_json('__INPUT_JSONL__',
             format='newline_delimited',
@@ -43,6 +48,8 @@ COPY (
         WHERE f.osm_id IS NOT NULL
           AND f.feature_class IS NOT NULL
           AND f.geom_json IS NOT NULL
+          AND json_extract_string(f.geom_json, '$.type') IS NOT NULL
+          AND json_extract(f.geom_json, '$.coordinates') IS NOT NULL
     ),
     raw_facilities AS (
         SELECT
