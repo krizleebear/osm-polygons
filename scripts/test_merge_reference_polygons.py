@@ -71,7 +71,18 @@ class TestMergeReferencePolygons(unittest.TestCase):
     def test_insert_missing_candidate(self):
         # Stream has other features, but missing Monaco (1001)
         orig_stream = [
-            {"type": "Feature", "id": 5001, "properties": {"osm_id": 5001, "admin_level": "8", "ISO3166-1": "MC"}},
+            {
+                "type": "Feature",
+                "id": 5001,
+                "properties": {"osm_id": 5001, "admin_level": "8", "ISO3166-1": "MC"},
+                "geometry": {"type": "Polygon", "coordinates": [[[7.4, 43.7], [7.5, 43.7], [7.5, 43.8], [7.4, 43.7]]]},
+            },
+            {
+                "type": "Feature",
+                "id": 5002,
+                "properties": {"osm_id": 5002, "admin_level": "8", "ISO3166-1": "MC"},
+                "geometry": {"type": None},
+            },
         ]
         with open(self.stream_file, "w") as f:
             for feat in orig_stream:
@@ -181,7 +192,12 @@ class TestMergeReferencePolygons(unittest.TestCase):
 
     def test_merge_is_idempotent(self):
         with open(self.stream_file, "w") as f:
-            f.write(json.dumps({"type": "Feature", "id": 5001, "properties": {"osm_id": 5001, "admin_level": "8"}}) + "\n")
+            f.write(json.dumps({
+                "type": "Feature",
+                "id": 5001,
+                "properties": {"osm_id": 5001, "admin_level": "8"},
+                "geometry": {"type": "Polygon", "coordinates": [[[7.4, 43.7], [7.5, 43.7], [7.5, 43.8], [7.4, 43.7]]]},
+            }) + "\n")
 
         import io, sys
         from contextlib import redirect_stdout

@@ -24,8 +24,7 @@ COPY (
             f.osm_type,
             f.feature_class,
             CASE
-                WHEN json_extract_string(f.geom_json, '$.type') IS NOT NULL
-                     AND json_extract(f.geom_json, '$.coordinates') IS NOT NULL
+                WHEN regexp_matches(f.geom_json, '"type"\s*:\s*"(Point|MultiPoint|LineString|MultiLineString|Polygon|MultiPolygon)"')
                 THEN ST_GeomFromGeoJSON(f.geom_json)
                 ELSE NULL
             END AS geom_raw,
@@ -48,8 +47,7 @@ COPY (
         WHERE f.osm_id IS NOT NULL
           AND f.feature_class IS NOT NULL
           AND f.geom_json IS NOT NULL
-          AND json_extract_string(f.geom_json, '$.type') IS NOT NULL
-          AND json_extract(f.geom_json, '$.coordinates') IS NOT NULL
+          AND regexp_matches(f.geom_json, '"type"\s*:\s*"(Point|MultiPoint|LineString|MultiLineString|Polygon|MultiPolygon)"')
     ),
     raw_facilities AS (
         SELECT

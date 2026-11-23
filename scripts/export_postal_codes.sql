@@ -26,8 +26,7 @@ COPY (
             NULLIF(TRIM(p.postal_code), '') AS postal_code,
             NULLIF(TRIM(p.name), '') AS name,
             CASE
-                WHEN json_extract_string(p.geom_json, '$.type') IN ('Polygon', 'MultiPolygon')
-                     AND json_extract(p.geom_json, '$.coordinates') IS NOT NULL
+                WHEN regexp_matches(p.geom_json, '"type"\s*:\s*"(Multi)?Polygon"')
                 THEN ST_GeomFromGeoJSON(p.geom_json)
                 ELSE NULL
             END AS geom_raw,
@@ -51,8 +50,7 @@ COPY (
         WHERE p.osm_id IS NOT NULL
           AND NULLIF(TRIM(p.postal_code), '') IS NOT NULL
           AND p.geom_json IS NOT NULL
-          AND json_extract_string(p.geom_json, '$.type') IN ('Polygon', 'MultiPolygon')
-          AND json_extract(p.geom_json, '$.coordinates') IS NOT NULL
+          AND regexp_matches(p.geom_json, '"type"\s*:\s*"(Multi)?Polygon"')
     ),
     raw_postal_codes AS (
         SELECT

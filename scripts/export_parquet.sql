@@ -28,7 +28,6 @@ COPY (
             NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1:alpha3')), ''),
             CASE
                 WHEN regexp_matches(COALESCE(json_extract_string(properties, '$.ISO3166-2'), ''), '^[A-Za-z]{2}-')
-                     AND UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1)) IN (SELECT cc FROM countries_meta)
                      AND NOT (UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1)) = 'GB' AND '__COUNTRY_CODE__' = 'IE')
                 THEN UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1))
                 ELSE NULL
@@ -102,8 +101,7 @@ COPY (
             SELECT
                 properties,
                 CASE
-                    WHEN json_extract_string(geometry, '$.type') IN ('Polygon', 'MultiPolygon')
-                         AND json_extract(geometry, '$.coordinates') IS NOT NULL
+                    WHEN regexp_matches(geometry::VARCHAR, '"type"\s*:\s*"(Multi)?Polygon"')
                     THEN ST_GeomFromGeoJSON(geometry)
                     ELSE NULL
                 END AS geom_raw
@@ -112,8 +110,7 @@ COPY (
                 columns={'properties': 'JSON', 'geometry': 'JSON'},
                 maximum_object_size=268435456,
                 ignore_errors=true)
-            WHERE json_extract_string(geometry, '$.type') IN ('Polygon', 'MultiPolygon')
-              AND json_extract(geometry, '$.coordinates') IS NOT NULL
+            WHERE regexp_matches(geometry::VARCHAR, '"type"\s*:\s*"(Multi)?Polygon"')
               AND TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) BETWEEN 1 AND 12
               AND (
                   LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) IN ('administrative', 'traditional', 'statistical', 'cadastral', 'local_authority', 'borough')
@@ -130,7 +127,6 @@ COPY (
         NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1:alpha3')), ''),
         CASE
             WHEN regexp_matches(COALESCE(json_extract_string(raw.properties, '$.ISO3166-2'), ''), '^[A-Za-z]{2}-')
-                 AND UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1)) IN (SELECT cc FROM countries_meta)
                  AND NOT (UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1)) = 'GB' AND '__COUNTRY_CODE__' = 'IE')
             THEN UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1))
             ELSE NULL

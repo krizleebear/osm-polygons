@@ -263,7 +263,6 @@ def main():
             line = line.strip()
             if not line:
                 continue
-            total_stream_count += 1
             feat = json.loads(line)
             props = feat.get("properties") or {}
             osm_id = extract_osm_id(feat)
@@ -274,6 +273,7 @@ def main():
                     stream_l2_by_cc[iso1] = (osm_id, str(props.get("name") or "").strip())
 
             if is_relation_feature(feat) and osm_id is not None and osm_id in ref_features:
+                total_stream_count += 1
                 rel_id = osm_id
                 seen_ids.add(rel_id)
                 ref_feat = normalize_and_enrich_reference(
@@ -287,7 +287,8 @@ def main():
                 print(
                     f"[{args.country_code}] REPLACED relation {rel_id} ({candidates[rel_id].get('name')}) with intact reference geometry."
                 )
-            else:
+            elif has_valid_polygonal_geometry(feat):
+                total_stream_count += 1
                 out_fp.write(line + "\n")
 
         # Insert candidates that were completely absent from the stream
