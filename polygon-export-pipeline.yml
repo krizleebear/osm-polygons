@@ -1618,292 +1618,47 @@ stages:
             find . -maxdepth 2 -type d \( -name "export-*-${region}" -o -name "export-${region}" -o -name "admin-polygons-*-${region}" -o -name "places-*-${region}" -o -name "facilities-*-${region}" -o -name "landuse-*-${region}" -o -name "postal-codes-*-${region}" \) -exec rm -rf {} + 2>/dev/null || true
           done
 
-          TEMP_COUNT=$(find temp_parquet -name "*.parquet" 2>/dev/null | wc -l)
-          if [ "$TEMP_COUNT" -eq 0 ]; then
-            echo "****************************************************************"
-            echo " ERROR: No GeoParquet files were produced for continent '$(CONTINENT)'!"
-            echo "****************************************************************"
-            exit 1
-          fi
-
           # Merge per-region temp parquets into per-country parquets (groups spain+canary-islands -> ES, etc.)
-          echo "Producing per-country GeoParquet files from $TEMP_COUNT region parquet(s)..."
-          duckdb -c "LOAD spatial;
-          CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
-          CREATE TABLE country_list AS SELECT DISTINCT country_code FROM combined ORDER BY country_code;
-          SELECT country_code, count(*) AS features FROM combined GROUP BY country_code ORDER BY country_code;
-          " > /tmp/country_summary.txt 2>&1 || true
-          cat /tmp/country_summary.txt || true
-
-          duckdb << 'DUCKDB_EOF'
-          LOAD spatial;
-          CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
-          SELECT DISTINCT country_code FROM combined ORDER BY country_code;
-          DUCKDB_EOF
-
-          # Write one parquet per country_code
-          duckdb -c "
-          LOAD spatial;
-          CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
-          CREATE TABLE ccs AS SELECT DISTINCT country_code AS cc FROM combined ORDER BY cc;
-          COPY (SELECT cc FROM ccs) TO '/tmp/country_codes_$(CONTINENT).csv' (HEADER false);
-          "
-          while IFS= read -r cc; do
-            [ -n "$cc" ] || continue
-            out="parquet/admin-polygons-${cc}.parquet"
-            echo "Writing $out ..."
-            country_osm_ts=$(duckdb -no-init -noheader -list -c "
-              SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
-              FROM parquet_kv_metadata('temp_parquet/*.parquet')
-              WHERE key = 'osm_data_timestamp';
-            " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
-            [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
-            duckdb -c "
-            LOAD spatial;
-            CREATE TABLE combined AS SELECT * FROM read_parquet('temp_parquet/*.parquet');
-            COPY (
-              SELECT * EXCLUDE (rn) FROM (
-                SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY admin_level, (center_lat IS NULL), (parent_osm_id IS NULL), ST_Area(geom) DESC) AS rn
-                FROM combined
-                WHERE country_code = '${cc}'
-              ) WHERE rn = 1
-              ORDER BY admin_level, bbox_miny, bbox_minx
-            ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
-              KV_METADATA {
-                'source': 'OpenStreetMap',
-                'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
-                'dataset': 'OpenStreetMap Administrative Polygons',
-                'attribution': '© OpenStreetMap contributors',
-                'attribution_url': 'https://www.openstreetmap.org/copyright',
-                'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
-                'license_url': 'https://opendatacommons.org/licenses/odbl/',
-                'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
-                'schema': 'https://github.com/krizleebear/osm-polygons',
-                'schema_url': 'https://github.com/krizleebear/osm-polygons',
-                'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
-                'country_code': '${cc}',
-                'exported_at': '${EXPORTED_AT}',
-                'osm_data_timestamp': '${country_osm_ts}'
-              }
-            );
-            "
-          done < /tmp/country_codes_$(CONTINENT).csv
-
+          python3 scripts/merge_country_parquets.py \
+            --layer admin-polygons \
+            --input-dir temp_parquet \
+            --output-dir parquet \
+            --exported-at "${EXPORTED_AT}" \
+            --continent "$(CONTINENT)" \
+            --require-non-empty
           rm -rf temp_parquet
 
-          # per-country places parquets
-          HAS_PLACES=false
-          PLACES_TEMP_COUNT=$(find temp_places_parquet -name "*.parquet" 2>/dev/null | wc -l)
-          if [ "$PLACES_TEMP_COUNT" -gt 0 ]; then
-            duckdb -c "
-            LOAD spatial;
-            CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
-            COPY (SELECT DISTINCT country_code AS cc FROM pcombined ORDER BY cc) TO '/tmp/places_ccs_$(CONTINENT).csv' (HEADER false);
-            "
-            while IFS= read -r cc; do
-              [ -n "$cc" ] || continue
-              pout="parquet/osm-places-${cc}.parquet"
-              echo "Writing $pout ..."
-              country_osm_ts=$(duckdb -no-init -noheader -list -c "
-                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
-                FROM parquet_kv_metadata('temp_places_parquet/*.parquet')
-                WHERE key = 'osm_data_timestamp';
-              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
-              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
-              duckdb -c "
-              LOAD spatial;
-              CREATE TABLE pcombined AS SELECT * FROM read_parquet('temp_places_parquet/*.parquet');
-              COPY (
-                SELECT * EXCLUDE (rn) FROM (
-                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_id ORDER BY place_type) AS rn
-                  FROM pcombined
-                  WHERE country_code = '${cc}'
-                ) WHERE rn = 1
-                ORDER BY place_type, lat, lon
-              ) TO '${pout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
-                KV_METADATA {
-                  'source': 'OpenStreetMap',
-                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
-                  'dataset': 'OpenStreetMap Places',
-                  'attribution': '© OpenStreetMap contributors',
-                  'attribution_url': 'https://www.openstreetmap.org/copyright',
-                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
-                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
-                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
-                  'schema': 'https://github.com/krizleebear/osm-polygons',
-                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
-                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
-                  'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}',
-                  'osm_data_timestamp': '${country_osm_ts}'
-                }
-              );
-              "
+          python3 scripts/merge_country_parquets.py \
+            --layer places \
+            --input-dir temp_places_parquet \
+            --output-dir parquet \
+            --exported-at "${EXPORTED_AT}" \
+            --continent "$(CONTINENT)"
+          rm -rf temp_places_parquet
 
+          python3 scripts/merge_country_parquets.py \
+            --layer facilities \
+            --input-dir temp_facilities_parquet \
+            --output-dir parquet \
+            --exported-at "${EXPORTED_AT}" \
+            --continent "$(CONTINENT)"
+          rm -rf temp_facilities_parquet
 
-              HAS_PLACES=true
-            done < /tmp/places_ccs_$(CONTINENT).csv
-            rm -rf temp_places_parquet
-          fi
+          python3 scripts/merge_country_parquets.py \
+            --layer landuse \
+            --input-dir temp_landuse_parquet \
+            --output-dir parquet \
+            --exported-at "${EXPORTED_AT}" \
+            --continent "$(CONTINENT)"
+          rm -rf temp_landuse_parquet
 
-          # per-country facilities parquets
-          HAS_FACILITIES=false
-          FACILITIES_TEMP_COUNT=$(find temp_facilities_parquet -name "*.parquet" 2>/dev/null | wc -l)
-          if [ "$FACILITIES_TEMP_COUNT" -gt 0 ]; then
-            duckdb -c "
-            LOAD spatial;
-            CREATE TABLE fcombined AS SELECT * FROM read_parquet('temp_facilities_parquet/*.parquet');
-            COPY (SELECT DISTINCT country_code AS cc FROM fcombined ORDER BY cc) TO '/tmp/facilities_ccs_$(CONTINENT).csv' (HEADER false);
-            "
-            while IFS= read -r cc; do
-              [ -n "$cc" ] || continue
-              fout="parquet/osm-facilities-${cc}.parquet"
-              echo "Writing $fout ..."
-              country_osm_ts=$(duckdb -no-init -noheader -list -c "
-                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
-                FROM parquet_kv_metadata('temp_facilities_parquet/*.parquet')
-                WHERE key = 'osm_data_timestamp';
-              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
-              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
-              duckdb -c "
-              LOAD spatial;
-              CREATE TABLE fcombined AS SELECT * FROM read_parquet('temp_facilities_parquet/*.parquet');
-              COPY (
-                SELECT * EXCLUDE (rn) FROM (
-                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY feature_class) AS rn
-                  FROM fcombined
-                  WHERE country_code = '${cc}'
-                ) WHERE rn = 1
-                ORDER BY ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
-              ) TO '${fout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
-                KV_METADATA {
-                  'source': 'OpenStreetMap',
-                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
-                  'dataset': 'OpenStreetMap Facilities',
-                  'attribution': '© OpenStreetMap contributors',
-                  'attribution_url': 'https://www.openstreetmap.org/copyright',
-                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
-                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
-                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
-                  'schema': 'https://github.com/krizleebear/osm-polygons',
-                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
-                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
-                  'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}',
-                  'osm_data_timestamp': '${country_osm_ts}'
-                }
-              );
-              "
-              HAS_FACILITIES=true
-            done < /tmp/facilities_ccs_$(CONTINENT).csv
-            rm -rf temp_facilities_parquet
-          fi
-
-          # per-country landuse parquets
-          HAS_LANDUSE=false
-          LANDUSE_TEMP_COUNT=$(find temp_landuse_parquet -name "*.parquet" 2>/dev/null | wc -l)
-          if [ "$LANDUSE_TEMP_COUNT" -gt 0 ]; then
-            duckdb -c "
-            LOAD spatial;
-            CREATE TABLE lcombined AS SELECT * FROM read_parquet('temp_landuse_parquet/*.parquet');
-            COPY (SELECT DISTINCT country_code AS cc FROM lcombined ORDER BY cc) TO '/tmp/landuse_ccs_$(CONTINENT).csv' (HEADER false);
-            "
-            while IFS= read -r cc; do
-              [ -n "$cc" ] || continue
-              lout="parquet/osm-landuse-${cc}.parquet"
-              echo "Writing $lout ..."
-              country_osm_ts=$(duckdb -no-init -noheader -list -c "
-                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
-                FROM parquet_kv_metadata('temp_landuse_parquet/*.parquet')
-                WHERE key = 'osm_data_timestamp';
-              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
-              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
-              duckdb -c "
-              LOAD spatial;
-              CREATE TABLE lcombined AS SELECT * FROM read_parquet('temp_landuse_parquet/*.parquet');
-              COPY (
-                SELECT * EXCLUDE (rn) FROM (
-                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY landuse) AS rn
-                  FROM lcombined
-                  WHERE country_code = '${cc}'
-                ) WHERE rn = 1
-                ORDER BY ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
-              ) TO '${lout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
-                KV_METADATA {
-                  'source': 'OpenStreetMap',
-                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
-                  'dataset': 'OpenStreetMap Landuse',
-                  'attribution': '© OpenStreetMap contributors',
-                  'attribution_url': 'https://www.openstreetmap.org/copyright',
-                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
-                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
-                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
-                  'schema': 'https://github.com/krizleebear/osm-polygons',
-                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
-                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
-                  'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}',
-                  'osm_data_timestamp': '${country_osm_ts}'
-                }
-              );
-              "
-              HAS_LANDUSE=true
-            done < /tmp/landuse_ccs_$(CONTINENT).csv
-            rm -rf temp_landuse_parquet
-          fi
-
-          # per-country postal codes parquets
-          HAS_POSTAL_CODES=false
-          POSTAL_CODES_TEMP_COUNT=$(find temp_postal_codes_parquet -name "*.parquet" 2>/dev/null | wc -l)
-          if [ "$POSTAL_CODES_TEMP_COUNT" -gt 0 ]; then
-            duckdb -c "
-            LOAD spatial;
-            CREATE TABLE pccombined AS SELECT * FROM read_parquet('temp_postal_codes_parquet/*.parquet');
-            COPY (SELECT DISTINCT country_code AS cc FROM pccombined ORDER BY cc) TO '/tmp/postal_codes_ccs_$(CONTINENT).csv' (HEADER false);
-            "
-            while IFS= read -r cc; do
-              [ -n "$cc" ] || continue
-              pcout="parquet/osm-postal-codes-${cc}.parquet"
-              echo "Writing $pcout ..."
-              country_osm_ts=$(duckdb -no-init -noheader -list -c "
-                SELECT COALESCE(MAX(value::VARCHAR), '${EXPORTED_AT}')
-                FROM parquet_kv_metadata('temp_postal_codes_parquet/*.parquet')
-                WHERE key = 'osm_data_timestamp';
-              " 2>/dev/null | tail -n 1 || echo "$EXPORTED_AT")
-              [ -n "$country_osm_ts" ] || country_osm_ts="$EXPORTED_AT"
-              duckdb -c "
-              LOAD spatial;
-              CREATE TABLE pccombined AS SELECT * FROM read_parquet('temp_postal_codes_parquet/*.parquet');
-              COPY (
-                SELECT * EXCLUDE (rn) FROM (
-                  SELECT *, ROW_NUMBER() OVER (PARTITION BY osm_type, osm_id ORDER BY postal_code) AS rn
-                  FROM pccombined
-                  WHERE country_code = '${cc}'
-                ) WHERE rn = 1
-                ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
-              ) TO '${pcout}' (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 5000,
-                KV_METADATA {
-                  'source': 'OpenStreetMap',
-                  'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
-                  'dataset': 'OpenStreetMap Postal Codes',
-                  'attribution': '© OpenStreetMap contributors',
-                  'attribution_url': 'https://www.openstreetmap.org/copyright',
-                  'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
-                  'license_url': 'https://opendatacommons.org/licenses/odbl/',
-                  'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
-                  'schema': 'https://github.com/krizleebear/osm-polygons',
-                  'schema_url': 'https://github.com/krizleebear/osm-polygons',
-                  'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
-                  'country_code': '${cc}',
-                  'exported_at': '${EXPORTED_AT}',
-                  'osm_data_timestamp': '${country_osm_ts}'
-                }
-              );
-              "
-              HAS_POSTAL_CODES=true
-            done < /tmp/postal_codes_ccs_$(CONTINENT).csv
-            rm -rf temp_postal_codes_parquet
-          fi
+          python3 scripts/merge_country_parquets.py \
+            --layer postal-codes \
+            --input-dir temp_postal_codes_parquet \
+            --output-dir parquet \
+            --exported-at "${EXPORTED_AT}" \
+            --continent "$(CONTINENT)"
+          rm -rf temp_postal_codes_parquet
 
           echo "=== Per-country GeoParquet files produced ==="
           ls -lh parquet/

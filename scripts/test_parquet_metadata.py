@@ -14,10 +14,17 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, SCRIPTS_DIR)
+
+import merge_country_parquets
+
+REPO_ROOT = os.path.dirname(SCRIPTS_DIR)
 
 PIPELINE_YAML = os.path.join(REPO_ROOT, "polygon-export-pipeline.yml")
 LANDUSE_CONVERTER = os.path.join(REPO_ROOT, "scripts", "convert_landuse_to_parquet.sh")
@@ -46,10 +53,6 @@ REQUIRED_METADATA_KEYS = (
     "exported_at",
     "osm_data_timestamp",
 )
-
-# Shell variables holding the per-country output paths of the five merges.
-MERGE_TARGET_VARS = ("${out}", "${pout}", "${fout}", "${lout}", "${pcout}")
-
 
 def copy_options_for_target(script, target):
     """Return the option list of every ``COPY ... TO '<target>' (...)`` statement."""
@@ -86,34 +89,76 @@ class TestPipelineMergeMetadata(unittest.TestCase):
     def setUpClass(cls):
         cls.pipeline = read_file(PIPELINE_YAML)
 
+    def test_pipeline_invokes_merge_country_parquets_for_all_layers(self):
+        for layer in merge_country_parquets.LAYER_CONFIGS:
+            pattern = (
+                r"python3\s+scripts/merge_country_parquets\.py\s+\\"
+                r"(?:\s+--[a-z-]+\s+\S+\s+\\)*\s*--layer\s+" + re.escape(layer)
+            )
+            block_match = re.search(
+                rf"python3\s+scripts/merge_country_parquets\.py[\s\S]*?--layer\s+{re.escape(layer)}[\s\S]*?--exported-at\s+\"\$\{{EXPORTED_AT\}}\"",
+                self.pipeline,
+            )
+            self.assertIsNotNone(
+                block_match,
+                f"Pipeline must invoke scripts/merge_country_parquets.py for layer '{layer}' with EXPORTED_AT",
+            )
+            self.assertRegex(self.pipeline, r"scripts/merge_country_parquets\.py[\s\S]*--layer\s+" + re.escape(layer))
+        # Ensure --require-non-empty is set on admin-polygons invocation
+        admin_section = self.pipeline.split("--layer admin-polygons", 1)[1].split("rm -rf temp_parquet", 1)[0]
+        self.assertIn("--require-non-empty", admin_section)
+        self.assertIn('--exported-at "${EXPORTED_AT}"', admin_section)
+
     def test_per_country_merge_statements_embed_kv_metadata(self):
-        for target in MERGE_TARGET_VARS:
-            options = copy_options_for_target(self.pipeline, target)
-            self.assertEqual(
-                len(options), 1,
-                f"Expected exactly one COPY statement writing to {target}",
+        exported_at = "2026-11-23T00:00:00Z"
+        osm_ts = "2026-11-22T23:59:59Z"
+        for layer in merge_country_parquets.LAYER_CONFIGS:
+            out_path = f"parquet/test-{layer}.parquet"
+            stmt = merge_country_parquets.build_copy_statement(
+                layer=layer,
+                country_code="DE",
+                source_files=[f"temp/{layer}-DE.parquet"],
+                output_path=out_path,
+                exported_at=exported_at,
+                osm_data_timestamp=osm_ts,
             )
+            options = copy_options_for_target(stmt, out_path)
+            self.assertEqual(len(options), 1, f"Expected one COPY option block for layer '{layer}'")
             option_block = options[0]
-            self.assertIn(
-                "KV_METADATA", option_block,
-                f"Per-country merge to {target} drops Parquet KV_METADATA",
-            )
+            self.assertIn("ROW_GROUP_SIZE 5000", option_block)
+            self.assertIn("KV_METADATA", option_block)
             for key in REQUIRED_METADATA_KEYS:
                 self.assertIn(
                     f"'{key}'", option_block,
-                    f"Per-country merge to {target} is missing metadata key '{key}'",
+                    f"Per-country merge for '{layer}' is missing metadata key '{key}'",
                 )
+            self.assertIn(f"'country_code': 'DE'", option_block)
+            self.assertIn(f"'exported_at': '{exported_at}'", option_block)
+            self.assertIn(f"'osm_data_timestamp': '{osm_ts}'", option_block)
 
-    def test_per_country_merge_exported_at_comes_from_pipeline_variable(self):
-        for target in MERGE_TARGET_VARS:
-            option_block = copy_options_for_target(self.pipeline, target)[0]
-            self.assertIn(
-                "'${EXPORTED_AT}'", option_block,
-                f"Per-country merge to {target} must stamp the pipeline EXPORTED_AT value",
+    def test_spatial_merge_layers_sort_by_bounded_hilbert_point_on_surface(self):
+        for layer in ("facilities", "landuse", "postal-codes"):
+            stmt = merge_country_parquets.build_copy_statement(
+                layer=layer,
+                country_code="DE",
+                source_files=[f"temp/{layer}-DE.parquet"],
+                output_path=f"parquet/{layer}-DE.parquet",
+                exported_at="2026-11-23T00:00:00Z",
+                osm_data_timestamp="2026-11-22T23:59:59Z",
             )
+            self.assertRegex(
+                stmt,
+                r"ORDER BY .*ST_Hilbert\(ST_PointOnSurface\(geom\), ST_Extent\(ST_Extent_Agg\(geom\) OVER \(\)\)\)",
+                f"Layer '{layer}' merge must sort by bounded ST_Hilbert(ST_PointOnSurface(geom), ...)",
+            )
+            self.assertNotIn("ST_Centroid(", stmt)
 
     def test_parquet_job_defines_exported_at_before_merges(self):
         self.assertIn('EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"', self.pipeline)
+        self.assertLess(
+            self.pipeline.index('EXPORTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'),
+            self.pipeline.index("scripts/merge_country_parquets.py"),
+        )
 
 
 class TestSqlTemplateMetadata(unittest.TestCase):
