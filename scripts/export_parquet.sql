@@ -3,8 +3,12 @@
 -- Note: continent is resolved via __COUNTRIES_JSON__ lookup per derived country_code (not a static token anymore).
 --
 -- country_code derivation (simple):
---   COALESCE(ISO3166-1, split_part(ISO3166-2, '-', 1), matrix_CC)
---   Per-extract CC remapping (e.g. FR→NC for new-caledonia) and multi-country L2 spatial splitting are handled in convert_to_parquet.sh.
+--   COALESCE(ISO3166-1, ISO3166-1:alpha2, ISO3166-1:alpha3, matrix_CC)
+--   ISO3166-2 prefix splitting is intentionally restricted to composite multi-country
+--   extracts in convert_to_parquet.sh (MULTI_CCS) to prevent cross-continent duplicates
+--   from disputed territories (e.g. UA-43/UA-40 in RU) or OSM tag typos (e.g. MG-BR in BR).
+--   Per-extract CC remapping (e.g. FR→NC for new-caledonia) and multi-country L2 spatial
+--   splitting are handled in convert_to_parquet.sh.
 
 INSTALL spatial;
 LOAD spatial;
@@ -26,12 +30,6 @@ COPY (
             NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1')), ''),
             NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1:alpha2')), ''),
             NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1:alpha3')), ''),
-            CASE
-                WHEN regexp_matches(COALESCE(json_extract_string(properties, '$.ISO3166-2'), ''), '^[A-Za-z]{2}-')
-                     AND NOT (UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1)) = 'GB' AND '__COUNTRY_CODE__' = 'IE')
-                THEN UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1))
-                ELSE NULL
-            END,
             '__COUNTRY_CODE__'
         ) AS country_code,
         TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) AS admin_level,
@@ -125,12 +123,6 @@ COPY (
         NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1')), ''),
         NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1:alpha2')), ''),
         NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1:alpha3')), ''),
-        CASE
-            WHEN regexp_matches(COALESCE(json_extract_string(raw.properties, '$.ISO3166-2'), ''), '^[A-Za-z]{2}-')
-                 AND NOT (UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1)) = 'GB' AND '__COUNTRY_CODE__' = 'IE')
-            THEN UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1))
-            ELSE NULL
-        END,
         '__COUNTRY_CODE__'
     )
     WHERE geom IS NOT NULL

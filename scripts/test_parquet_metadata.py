@@ -324,6 +324,8 @@ class TestExportParquetNormalization(unittest.TestCase):
             {"type": "Feature", "geometry": do_box, "properties": {"@type": "relation", "@id": 307828, "admin_level": "2", "ISO3166-1": "DO", "name": "República Dominicana"}},
             # L4 in DO with ISO3166-2=DO-01 (and bogus ISO3166-1=DO that must be stripped on L4)
             {"type": "Feature", "geometry": do_sub, "properties": {"@type": "relation", "@id": 4001, "admin_level": "4", "ISO3166-1": "DO", "ISO3166-2": "DO-01", "name": "Distrito Nacional"}},
+            # L4 in DO without ISO3166-1 inside ht_sub (proves MULTI_CCS ISO3166-2 takes precedence over spatial containment)
+            {"type": "Feature", "geometry": ht_sub, "properties": {"@type": "relation", "@id": 4002, "admin_level": "4", "ISO3166-2": "DO-02", "name": "Azua"}},
             # L8 in DO without ISO tags (resolved spatially via DO L2 polygon)
             {"type": "Feature", "geometry": do_sub, "properties": {"@type": "relation", "@id": 8001, "admin_level": "8", "name": "Santo Domingo"}},
             # L8 in HT without ISO tags (resolved spatially via HT L2 polygon)
@@ -387,6 +389,8 @@ class TestExportParquetNormalization(unittest.TestCase):
         self.assertEqual(admin_out[307828]["iso3166_1"], "DO")
         self.assertEqual(admin_out[4001]["country_code"], "DO")
         self.assertIsNone(admin_out[4001]["iso3166_1"])
+        self.assertEqual(admin_out[4002]["country_code"], "DO")
+        self.assertEqual(admin_out[4002]["iso3166_2"], "DO-02")
         self.assertEqual(admin_out[8001]["country_code"], "DO")
         self.assertEqual(admin_out[8002]["country_code"], "HT")
 
@@ -394,6 +398,66 @@ class TestExportParquetNormalization(unittest.TestCase):
         self.assertEqual(places_out[9002]["country_code"], "HT")
         self.assertEqual(landuse_out[7001]["country_code"], "DO")
         self.assertEqual(landuse_out[7002]["country_code"], "HT")
+
+    @unittest.skipUnless(shutil.which("duckdb"), "duckdb CLI required for end-to-end SQL check")
+    def test_single_country_extract_ignores_foreign_iso3166_2_prefix(self):
+        geom = {"type": "Polygon", "coordinates": [[[10.0, 10.0], [10.1, 10.0], [10.1, 10.1], [10.0, 10.1], [10.0, 10.0]]]}
+        cases = [
+            (
+                "RU",
+                {"@type": "relation", "@id": 72639, "admin_level": "4", "ISO3166-2": "UA-43", "name": "Crimea"},
+                {"country_code": "RU", "continent": "russia", "iso3166_1": None, "iso3166_2": "UA-43"},
+            ),
+            (
+                "BR",
+                {"@type": "relation", "@id": 6274886, "admin_level": "9", "ISO3166-2": "MG-BR", "name": "Setor Oeste"},
+                {"country_code": "BR", "continent": "south-america", "iso3166_1": None, "iso3166_2": "MG-BR"},
+            ),
+            (
+                "IE",
+                {"@type": "relation", "@id": 156393, "admin_level": "4", "ISO3166-2": "GB-NIR", "name": "Northern Ireland"},
+                {"country_code": "IE", "continent": "europe", "iso3166_1": None, "iso3166_2": "GB-NIR"},
+            ),
+            (
+                "CN",
+                {"@type": "relation", "@id": 913110, "admin_level": "3", "ISO3166-1": "HK", "ISO3166-2": "CN-HK", "name": "Hong Kong"},
+                {"country_code": "HK", "continent": "asia", "iso3166_1": None, "iso3166_2": "CN-HK"},
+            ),
+        ]
+
+        converter = os.path.join(REPO_ROOT, "scripts", "convert_to_parquet.sh")
+        with tempfile.TemporaryDirectory() as tmp:
+            for matrix_cc, props, expected in cases:
+                with self.subTest(matrix_cc=matrix_cc, osm_id=props["@id"]):
+                    in_seq = os.path.join(tmp, f"{matrix_cc}_{props['@id']}.admin-polygons.geojsonseq")
+                    out_pq = os.path.join(tmp, f"{matrix_cc}_{props['@id']}.parquet")
+                    with open(in_seq, "w", encoding="utf-8") as f:
+                        f.write(json.dumps({"type": "Feature", "geometry": geom, "properties": props}) + "\n")
+
+                    res = subprocess.run(
+                        [converter, matrix_cc, in_seq, out_pq],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(res.returncode, 0, res.stderr + res.stdout)
+
+                    q = (
+                        f"SELECT osm_id, country_code, continent, iso3166_1, iso3166_2 "
+                        f"FROM read_parquet('{out_pq}')"
+                    )
+                    qres = subprocess.run(
+                        ["duckdb", "-no-init", "-json", "-c", q],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(qres.returncode, 0, qres.stderr)
+                    rows = json.loads(qres.stdout)
+                    self.assertEqual(len(rows), 1)
+                    row = rows[0]
+                    for field, val in expected.items():
+                        self.assertEqual(row[field], val)
 
 
 if __name__ == "__main__":
