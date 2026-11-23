@@ -35,6 +35,7 @@ MAINLAND_RELATION_IDS = {
     62149:   {"country": "GB", "default_name": "Great Britain"},
     2978650: {"country": "NO", "default_name": "Norway (Mainland)"},
     295438:  {"country": "PT", "default_name": "Portugal (Continental)"},
+    1703814: {"country": "PS", "default_name": "Palestine"},
 }
 
 # Allowed administrative and sub-municipal boundary tag values
@@ -385,6 +386,9 @@ def process_feature(data, require_wikidata=False, country_code=None, relation_ce
 
     # Exclude non-administrative boundaries (protected_area, place, forest, political, census, historic, etc.)
     boundary_val = str(props.get("boundary", "")).strip().lower()
+    if boundary_val == "disputed" and str(props.get("ISO3166-1", "")).strip().upper() == "PS":
+        props["boundary"] = "administrative"
+        boundary_val = "administrative"
     if boundary_val not in ALLOWED_BOUNDARY_VALUES:
         return None
 

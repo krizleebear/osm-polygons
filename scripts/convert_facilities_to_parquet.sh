@@ -74,6 +74,85 @@ sed -e "s|__COUNTRY_CODE__|${COUNTRY_CODE}|g" \
 
 duckdb < "$TMP_SQL"
 
+MULTI_CCS=""
+case "$COUNTRY_CODE" in
+  AE) MULTI_CCS="'AE','SA','QA','KW','OM','BH'" ;;
+  MY) MULTI_CCS="'MY','SG','BN'" ;;
+  HT) MULTI_CCS="'HT','DO'" ;;
+  SN) MULTI_CCS="'SN','GM'" ;;
+  IL) MULTI_CCS="'IL','PS'" ;;
+esac
+
+ADMIN_PARQUET="${ADMIN_PARQUET:-$(dirname "$OUTPUT_PARQUET")/../temp_parquet/${PREFIX}.admin-polygons.parquet}"
+if [ -n "$MULTI_CCS" ] && [ -f "$ADMIN_PARQUET" ] && [ -s "$ADMIN_PARQUET" ]; then
+  echo "Applying multi-country L2 spatial splitting for facilities in ${OUTPUT_PARQUET} using ${ADMIN_PARQUET}..."
+  duckdb -c "
+  LOAD spatial;
+  LOAD json;
+  CREATE TEMP TABLE countries_meta AS
+      SELECT key AS cc, value->>'continent' AS continent
+      FROM (
+          SELECT unnest(json_keys(doc)) AS key, doc->(unnest(json_keys(doc))) AS value
+          FROM (SELECT json(content) AS doc FROM read_text('${COUNTRIES_JSON}'))
+      );
+  CREATE TABLE a AS SELECT * FROM read_parquet('${ADMIN_PARQUET}');
+  CREATE TABLE l2_bounds AS
+      SELECT
+          cc AS l2_cc,
+          ST_Union_Agg(geom) AS l2_geom,
+          CASE WHEN cc != '${COUNTRY_CODE}' THEN 0 ELSE 1 END AS prio
+      FROM (
+          SELECT country_code AS cc, geom FROM a
+          WHERE admin_level = 2 AND country_code IN (${MULTI_CCS})
+          UNION ALL
+          SELECT 'PS' AS cc, geom FROM a
+          WHERE '${COUNTRY_CODE}' = 'IL'
+            AND (UPPER(COALESCE(iso3166_2, '')) LIKE 'PS-%' OR (osm_type = 'relation' AND osm_id IN (1473938, 1613659)))
+      )
+      GROUP BY cc;
+  CREATE TABLE t AS SELECT *, ST_PointOnSurface(geom) AS _pt FROM read_parquet('${OUTPUT_PARQUET}');
+  CREATE TABLE resolved AS
+      SELECT
+          t.* EXCLUDE (_pt),
+          COALESCE(
+              (SELECT b.l2_cc FROM l2_bounds b WHERE ST_Contains(b.l2_geom, t._pt) ORDER BY b.prio ASC LIMIT 1),
+              (SELECT b.l2_cc FROM l2_bounds b ORDER BY ST_Distance(b.l2_geom, t._pt) ASC, b.prio ASC LIMIT 1),
+              t.country_code
+          ) AS new_cc
+      FROM t;
+  COPY (
+      SELECT
+          r.* EXCLUDE (new_cc) REPLACE (
+              COALESCE(m.continent, r.continent) AS continent,
+              r.new_cc AS country_code
+          )
+      FROM resolved r
+      LEFT JOIN countries_meta m ON m.cc = r.new_cc
+      ORDER BY continent, country_code, ST_Hilbert(ST_PointOnSurface(geom), ST_Extent(ST_Extent_Agg(geom) OVER ()))
+  ) TO '${OUTPUT_PARQUET}' (
+      FORMAT PARQUET,
+      COMPRESSION ZSTD,
+      ROW_GROUP_SIZE 5000,
+      KV_METADATA {
+          'source': 'OpenStreetMap',
+          'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+          'dataset': 'OpenStreetMap Facilities',
+          'attribution': '© OpenStreetMap contributors',
+          'attribution_url': 'https://www.openstreetmap.org/copyright',
+          'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+          'license_url': 'https://opendatacommons.org/licenses/odbl/',
+          'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+          'schema': 'https://github.com/krizleebear/osm-polygons',
+          'schema_url': 'https://github.com/krizleebear/osm-polygons',
+          'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+          'country_code': '${COUNTRY_CODE}',
+          'exported_at': '${EXPORTED_AT}',
+          'osm_data_timestamp': '${OSM_DATA_TIMESTAMP}'
+      }
+  );
+  "
+fi
+
 if [ ! -s "$OUTPUT_PARQUET" ]; then
     echo "ERROR: Parquet conversion failed or output '$OUTPUT_PARQUET' is empty." >&2
     exit 1

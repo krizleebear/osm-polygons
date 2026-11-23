@@ -46,6 +46,14 @@ class TestFilterPolygons(unittest.TestCase):
         self.assertEqual(res_nl["properties"]["admin_level"], "2")
         self.assertEqual(res_nl["properties"]["ISO3166-1"], "NL")
 
+        # PS relation 1703814 (Palestine with boundary=disputed and no admin_level in OSM)
+        feature_ps = feat({"@type": "relation", "id": 1703814, "boundary": "disputed", "ISO3166-1": "PS", "name": "الأراضي الفلسطينية"})
+        res_ps = process_feature(feature_ps)
+        self.assertIsNotNone(res_ps)
+        self.assertEqual(res_ps["properties"]["admin_level"], "2")
+        self.assertEqual(res_ps["properties"]["boundary"], "administrative")
+        self.assertEqual(res_ps["properties"]["ISO3166-1"], "PS")
+
     def test_exclude_political_census_and_historic_boundaries(self):
         # German Bundestagswahlkreis / electoral constituency with boundary=political
         bundestag = feat({"@type": "relation", "id": 3146607, "boundary": "political", "admin_level": "9", "name": "Deggendorf"})

@@ -56,6 +56,18 @@ class TestMergeReferencePolygons(unittest.TestCase):
         self.assertIn(2001, us_candidates)
         self.assertIn(2002, us_candidates)
 
+    def test_load_candidates_expands_multi_country_hosts_and_normalizes_ps_disputed(self):
+        il_ps_cands = os.path.join(self.temp_dir.name, "il_ps_cands.json")
+        with open(il_ps_cands, "w") as f:
+            json.dump({
+                "candidates": [
+                    {"osm_id": 1703814, "country": "PS", "admin_level": 2, "name": "Palestine"},
+                ]
+            }, f)
+        loaded = load_candidates(il_ps_cands, "IL")
+        self.assertIn(1703814, loaded)
+        self.assertEqual(loaded[1703814]["country"], "PS")
+
     def test_insert_missing_candidate(self):
         # Stream has other features, but missing Monaco (1001)
         orig_stream = [

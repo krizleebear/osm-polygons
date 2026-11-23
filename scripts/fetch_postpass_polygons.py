@@ -346,6 +346,10 @@ def format_feature(feature, fallback_info, *, relation_centres=None, parent_info
         flat_props["admin_level"] = str(fallback_info["admin_level"])
     level_str = str(flat_props.get("admin_level") or "").strip()
 
+    raw_boundary = str(flat_props.get("boundary") or "").strip().lower()
+    if not raw_boundary or raw_boundary == "disputed":
+        flat_props["boundary"] = "administrative"
+
     fallback_country = fallback_info.get("country")
     if level_str == "2":
         if not flat_props.get("ISO3166-1") and fallback_country:

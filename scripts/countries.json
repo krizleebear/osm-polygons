@@ -230,7 +230,14 @@
     "continent": "asia",
     "name": "Bahrain",
     "levels": [
-      2
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
     ]
   },
   "BI": {
@@ -261,7 +268,12 @@
     "continent": "asia",
     "name": "Brunei",
     "levels": [
-      2
+      2,
+      4,
+      6,
+      7,
+      8,
+      10
     ]
   },
   "BO": {
@@ -637,7 +649,14 @@
     "continent": "central-america",
     "name": "Dominican Republic",
     "levels": [
-      2
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
     ]
   },
   "DZ": {
@@ -875,7 +894,14 @@
     "continent": "africa",
     "name": "Gambia",
     "levels": [
-      2
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
     ]
   },
   "GN": {
@@ -1011,8 +1037,8 @@
       4,
       5,
       6,
+      7,
       8,
-      9,
       10,
       11
     ]
@@ -1295,7 +1321,13 @@
     "continent": "asia",
     "name": "Kuwait",
     "levels": [
-      2
+      2,
+      4,
+      6,
+      7,
+      9,
+      10,
+      11
     ]
   },
   "KZ": {
@@ -1668,7 +1700,6 @@
     "name": "Malaysia",
     "levels": [
       2,
-      3,
       4,
       5,
       6,
@@ -1842,7 +1873,13 @@
     "continent": "asia",
     "name": "Oman",
     "levels": [
-      2
+      2,
+      4,
+      6,
+      7,
+      8,
+      10,
+      11
     ]
   },
   "PA": {
@@ -1967,7 +2004,17 @@
   },
   "PS": {
     "continent": "asia",
-    "name": "Palestine"
+    "name": "Palestine",
+    "levels": [
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ]
   },
   "PT": {
     "continent": "europe",
@@ -2010,7 +2057,13 @@
     "continent": "asia",
     "name": "Qatar",
     "levels": [
-      2
+      2,
+      4,
+      7,
+      8,
+      9,
+      10,
+      11
     ]
   },
   "RE": {
@@ -2081,7 +2134,14 @@
     "continent": "asia",
     "name": "Saudi Arabia",
     "levels": [
-      2
+      2,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
     ]
   },
   "SB": {
@@ -2135,7 +2195,14 @@
     "continent": "asia",
     "name": "Singapore",
     "levels": [
-      2
+      2,
+      3,
+      5,
+      6,
+      7,
+      9,
+      10,
+      11
     ]
   },
   "SH": {
@@ -2197,7 +2264,6 @@
       2,
       4,
       5,
-      6,
       7,
       8,
       9,

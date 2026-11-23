@@ -255,6 +255,89 @@ class TestExportParquetNormalization(unittest.TestCase):
         self.assertEqual(rows[4627314]["parent_osm_id"], 287670)
         self.assertEqual(rows[777777]["boundary"], "administrative")
 
+    @unittest.skipUnless(shutil.which("duckdb"), "duckdb CLI required for end-to-end SQL check")
+    def test_multi_country_extract_splits_admin_and_companion_layers_by_l2_and_iso3166_2(self):
+        ht_box = {"type": "Polygon", "coordinates": [[[-74.0, 18.0], [-72.0, 18.0], [-72.0, 20.0], [-74.0, 20.0], [-74.0, 18.0]]]}
+        do_box = {"type": "Polygon", "coordinates": [[[-71.5, 18.0], [-68.5, 18.0], [-68.5, 20.0], [-71.5, 20.0], [-71.5, 18.0]]]}
+        ht_sub = {"type": "Polygon", "coordinates": [[[-73.0, 18.5], [-72.5, 18.5], [-72.5, 19.0], [-73.0, 19.0], [-73.0, 18.5]]]}
+        do_sub = {"type": "Polygon", "coordinates": [[[-70.5, 18.5], [-69.5, 18.5], [-69.5, 19.0], [-70.5, 19.0], [-70.5, 18.5]]]}
+
+        admin_features = [
+            {"type": "Feature", "geometry": ht_box, "properties": {"@type": "relation", "@id": 307829, "admin_level": "2", "ISO3166-1": "HT", "name": "Ayiti"}},
+            {"type": "Feature", "geometry": do_box, "properties": {"@type": "relation", "@id": 307828, "admin_level": "2", "ISO3166-1": "DO", "name": "República Dominicana"}},
+            # L4 in DO with ISO3166-2=DO-01 (and bogus ISO3166-1=DO that must be stripped on L4)
+            {"type": "Feature", "geometry": do_sub, "properties": {"@type": "relation", "@id": 4001, "admin_level": "4", "ISO3166-1": "DO", "ISO3166-2": "DO-01", "name": "Distrito Nacional"}},
+            # L8 in DO without ISO tags (resolved spatially via DO L2 polygon)
+            {"type": "Feature", "geometry": do_sub, "properties": {"@type": "relation", "@id": 8001, "admin_level": "8", "name": "Santo Domingo"}},
+            # L8 in HT without ISO tags (resolved spatially via HT L2 polygon)
+            {"type": "Feature", "geometry": ht_sub, "properties": {"@type": "relation", "@id": 8002, "admin_level": "8", "name": "Port-au-Prince"}},
+        ]
+
+        places_rows = [
+            {"continent": "central-america", "country_code": "HT", "osm_id": 9001, "name": "Santo Domingo Place", "place_type": "city", "lon": -70.0, "lat": 18.7, "wikidata": "Q1", "population": 1000, "alt_names_json": "{}", "tags": "{}"},
+            {"continent": "central-america", "country_code": "HT", "osm_id": 9002, "name": "Port-au-Prince Place", "place_type": "city", "lon": -72.8, "lat": 18.7, "wikidata": "Q2", "population": 2000, "alt_names_json": "{}", "tags": "{}"},
+        ]
+
+        landuse_rows = [
+            {"continent": "central-america", "country_code": "HT", "osm_id": 7001, "osm_type": "way", "landuse": "residential", "name": "DO Residential", "name_en": None, "geom_json": json.dumps(do_sub), "tags": "{}"},
+            {"continent": "central-america", "country_code": "HT", "osm_id": 7002, "osm_type": "way", "landuse": "residential", "name": "HT Residential", "name_en": None, "geom_json": json.dumps(ht_sub), "tags": "{}"},
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "temp_parquet"))
+            os.makedirs(os.path.join(tmp, "temp_places_parquet"))
+            os.makedirs(os.path.join(tmp, "temp_landuse_parquet"))
+
+            in_seq = os.path.join(tmp, "HT_haiti-and-domrep.admin-polygons.geojsonseq")
+            out_admin = os.path.join(tmp, "temp_parquet", "HT_haiti-and-domrep.admin-polygons.parquet")
+            with open(in_seq, "w", encoding="utf-8") as f:
+                for feat in admin_features:
+                    f.write(json.dumps(feat) + "\n")
+
+            in_places = os.path.join(tmp, "HT_haiti-and-domrep.places.jsonl")
+            out_places = os.path.join(tmp, "temp_places_parquet", "HT_haiti-and-domrep.places.parquet")
+            with open(in_places, "w", encoding="utf-8") as f:
+                for row in places_rows:
+                    f.write(json.dumps(row) + "\n")
+
+            in_landuse = os.path.join(tmp, "HT_haiti-and-domrep.landuse.jsonl")
+            out_landuse = os.path.join(tmp, "temp_landuse_parquet", "HT_haiti-and-domrep.landuse.parquet")
+            with open(in_landuse, "w", encoding="utf-8") as f:
+                for row in landuse_rows:
+                    f.write(json.dumps(row) + "\n")
+
+            res_admin = subprocess.run([os.path.join(REPO_ROOT, "scripts", "convert_to_parquet.sh"), "HT", in_seq, out_admin], capture_output=True, text=True)
+            self.assertEqual(res_admin.returncode, 0, res_admin.stderr + res_admin.stdout)
+
+            res_places = subprocess.run([os.path.join(REPO_ROOT, "scripts", "convert_places_to_parquet.sh"), "HT", in_places, out_places], capture_output=True, text=True)
+            self.assertEqual(res_places.returncode, 0, res_places.stderr + res_places.stdout)
+
+            res_landuse = subprocess.run([os.path.join(REPO_ROOT, "scripts", "convert_landuse_to_parquet.sh"), "HT", in_landuse, out_landuse], capture_output=True, text=True)
+            self.assertEqual(res_landuse.returncode, 0, res_landuse.stderr + res_landuse.stdout)
+
+            q_admin = f"SELECT osm_id, country_code, admin_level, iso3166_1, iso3166_2 FROM read_parquet('{out_admin}') ORDER BY osm_id"
+            admin_out = {r["osm_id"]: r for r in json.loads(subprocess.run(["duckdb", "-json", "-c", q_admin], capture_output=True, text=True).stdout)}
+
+            q_places = f"SELECT osm_id, country_code, continent FROM read_parquet('{out_places}') ORDER BY osm_id"
+            places_out = {r["osm_id"]: r for r in json.loads(subprocess.run(["duckdb", "-json", "-c", q_places], capture_output=True, text=True).stdout)}
+
+            q_landuse = f"SELECT osm_id, country_code, continent FROM read_parquet('{out_landuse}') ORDER BY osm_id"
+            landuse_out = {r["osm_id"]: r for r in json.loads(subprocess.run(["duckdb", "-json", "-c", q_landuse], capture_output=True, text=True).stdout)}
+
+        self.assertEqual(admin_out[307829]["country_code"], "HT")
+        self.assertEqual(admin_out[307829]["iso3166_1"], "HT")
+        self.assertEqual(admin_out[307828]["country_code"], "DO")
+        self.assertEqual(admin_out[307828]["iso3166_1"], "DO")
+        self.assertEqual(admin_out[4001]["country_code"], "DO")
+        self.assertIsNone(admin_out[4001]["iso3166_1"])
+        self.assertEqual(admin_out[8001]["country_code"], "DO")
+        self.assertEqual(admin_out[8002]["country_code"], "HT")
+
+        self.assertEqual(places_out[9001]["country_code"], "DO")
+        self.assertEqual(places_out[9002]["country_code"], "HT")
+        self.assertEqual(landuse_out[7001]["country_code"], "DO")
+        self.assertEqual(landuse_out[7002]["country_code"], "HT")
+
 
 if __name__ == "__main__":
     unittest.main()

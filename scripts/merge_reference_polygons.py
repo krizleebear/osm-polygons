@@ -62,15 +62,28 @@ _OSM_TYPE_MAP = {
 }
 
 
+MULTI_COUNTRY_HOSTS = {
+    "AE": ("AE", "SA", "QA", "KW", "OM", "BH"),
+    "MY": ("MY", "SG", "BN"),
+    "HT": ("HT", "DO"),
+    "SN": ("SN", "GM"),
+    "IL": ("IL", "PS"),
+}
+
+
 def load_candidates(candidates_path, country_code):
     with open(candidates_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     candidates = data.get("candidates", [])
-    # Return mapping of int osm_id -> candidate metadata matching country_code
+    raw_codes = [c.strip().upper() for c in str(country_code).split(",") if c.strip()]
+    target_codes = set()
+    for code in raw_codes:
+        target_codes.update(MULTI_COUNTRY_HOSTS.get(code, (code,)))
+    # Return mapping of int osm_id -> candidate metadata matching target country codes
     return {
         int(c["osm_id"]): c
         for c in candidates
-        if c.get("country", "").upper() == country_code.upper()
+        if c.get("country", "").upper() in target_codes
     }
 
 
@@ -119,6 +132,10 @@ def normalize_and_enrich_reference(ref_feat, candidate_meta, existing_feat=None,
     if not props.get("admin_level") and candidate_meta and "admin_level" in candidate_meta:
         props["admin_level"] = str(candidate_meta["admin_level"])
     level_str = str(props.get("admin_level") or "").strip()
+
+    raw_boundary = str(props.get("boundary") or "").strip().lower()
+    if not raw_boundary or raw_boundary == "disputed":
+        props["boundary"] = "administrative"
 
     cand_country = candidate_meta.get("country") if candidate_meta else None
     if level_str != "2" and cand_country and props.get("ISO3166-1") == cand_country:

@@ -127,6 +127,93 @@ if [ -n "$CC_REMAP" ]; then
   echo "Remapped country_code '${OLD_CC}' -> '${NEW_CC}' in ${OUTPUT_PARQUET}"
 fi
 
+# Multi-country composite extract splitting: assign sub-national polygons (L3+)
+# to their respective sovereign country via ISO3166-2 prefix or L2 spatial containment.
+MULTI_CCS=""
+case "$COUNTRY_CODE" in
+  AE) MULTI_CCS="'AE','SA','QA','KW','OM','BH'" ;;
+  MY) MULTI_CCS="'MY','SG','BN'" ;;
+  HT) MULTI_CCS="'HT','DO'" ;;
+  SN) MULTI_CCS="'SN','GM'" ;;
+  IL) MULTI_CCS="'IL','PS'" ;;
+esac
+
+if [ -n "$MULTI_CCS" ]; then
+  echo "Applying multi-country L2 spatial splitting for host ${COUNTRY_CODE} (${MULTI_CCS})..."
+  duckdb -c "
+  LOAD spatial;
+  LOAD json;
+  CREATE TEMP TABLE countries_meta AS
+      SELECT key AS cc, value->>'continent' AS continent
+      FROM (
+          SELECT unnest(json_keys(doc)) AS key, doc->(unnest(json_keys(doc))) AS value
+          FROM (SELECT json(content) AS doc FROM read_text('${COUNTRIES_JSON}'))
+      );
+  CREATE TABLE t AS SELECT *, ST_PointOnSurface(geom) AS _pt FROM read_parquet('${OUTPUT_PARQUET}');
+  CREATE TABLE l2_bounds AS
+      SELECT
+          cc AS l2_cc,
+          ST_Union_Agg(geom) AS l2_geom,
+          CASE WHEN cc != '${COUNTRY_CODE}' THEN 0 ELSE 1 END AS prio
+      FROM (
+          SELECT country_code AS cc, geom FROM t
+          WHERE admin_level = 2 AND country_code IN (${MULTI_CCS})
+          UNION ALL
+          SELECT 'PS' AS cc, geom FROM t
+          WHERE '${COUNTRY_CODE}' = 'IL'
+            AND (UPPER(COALESCE(iso3166_2, '')) LIKE 'PS-%' OR (osm_type = 'relation' AND osm_id IN (1473938, 1613659)))
+      )
+      GROUP BY cc;
+  CREATE TABLE resolved AS
+      SELECT
+          t.* EXCLUDE (_pt),
+          CASE
+              WHEN t.admin_level = 2 AND t.country_code IN (${MULTI_CCS}) THEN t.country_code
+              WHEN regexp_matches(COALESCE(t.iso3166_2, ''), '^[A-Za-z]{2}-')
+                   AND UPPER(split_part(t.iso3166_2, '-', 1)) IN (${MULTI_CCS})
+              THEN UPPER(split_part(t.iso3166_2, '-', 1))
+              WHEN '${COUNTRY_CODE}' = 'IL' AND t.osm_type = 'relation' AND t.osm_id IN (1473938, 1613659, 1803010) THEN 'PS'
+              ELSE COALESCE(
+                  (SELECT b.l2_cc FROM l2_bounds b WHERE ST_Contains(b.l2_geom, t._pt) ORDER BY b.prio ASC LIMIT 1),
+                  (SELECT b.l2_cc FROM l2_bounds b ORDER BY ST_Distance(b.l2_geom, t._pt) ASC, b.prio ASC LIMIT 1),
+                  t.country_code
+              )
+          END AS new_cc
+      FROM t;
+  COPY (
+      SELECT
+          r.* EXCLUDE (new_cc) REPLACE (
+              COALESCE(m.continent, r.continent) AS continent,
+              r.new_cc AS country_code
+          )
+      FROM resolved r
+      LEFT JOIN countries_meta m ON m.cc = r.new_cc
+      ORDER BY continent, country_code, admin_level, bbox_miny, bbox_minx
+  ) TO '${OUTPUT_PARQUET}' (
+      FORMAT PARQUET,
+      COMPRESSION ZSTD,
+      ROW_GROUP_SIZE 5000,
+      KV_METADATA {
+          'source': 'OpenStreetMap',
+          'origin': 'OpenStreetMap (https://www.openstreetmap.org)',
+          'dataset': 'OpenStreetMap Administrative Polygons',
+          'attribution': '© OpenStreetMap contributors',
+          'attribution_url': 'https://www.openstreetmap.org/copyright',
+          'license': 'ODbL-1.0 (https://opendatacommons.org/licenses/odbl/)',
+          'license_url': 'https://opendatacommons.org/licenses/odbl/',
+          'copyright': 'Data © OpenStreetMap contributors, licensed under Open Data Commons Open Database License 1.0 (ODbL)',
+          'schema': 'https://github.com/krizleebear/osm-polygons',
+          'schema_url': 'https://github.com/krizleebear/osm-polygons',
+          'compiler': 'osm-polygons (https://github.com/krizleebear/osm-polygons)',
+          'country_code': '${COUNTRY_CODE}',
+          'exported_at': '${EXPORTED_AT}',
+          'osm_data_timestamp': '${OSM_DATA_TIMESTAMP}'
+      }
+  );
+  "
+  echo "Multi-country split complete for ${OUTPUT_PARQUET}"
+fi
+
 if [ ! -s "$OUTPUT_PARQUET" ]; then
     echo "ERROR: Parquet conversion failed or output '$OUTPUT_PARQUET' is empty." >&2
     exit 1

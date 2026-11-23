@@ -3,8 +3,8 @@
 -- Note: continent is resolved via __COUNTRIES_JSON__ lookup per derived country_code (not a static token anymore).
 --
 -- country_code derivation (simple):
---   COALESCE(ISO3166-1, matrix_CC)
---   Per-extract CC remapping (e.g. FR→NC for new-caledonia) is handled in convert_to_parquet.sh.
+--   COALESCE(ISO3166-1, split_part(ISO3166-2, '-', 1), matrix_CC)
+--   Per-extract CC remapping (e.g. FR→NC for new-caledonia) and multi-country L2 spatial splitting are handled in convert_to_parquet.sh.
 
 INSTALL spatial;
 LOAD spatial;
@@ -23,14 +23,24 @@ COPY (
     SELECT
         COALESCE(m.continent, 'unknown') AS continent,
         COALESCE(
-            json_extract_string(properties, '$.ISO3166-1'),
-            json_extract_string(properties, '$.ISO3166-1:alpha2'),
-            json_extract_string(properties, '$.ISO3166-1:alpha3'),
+            NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1')), ''),
+            NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1:alpha2')), ''),
+            NULLIF(TRIM(json_extract_string(properties, '$.ISO3166-1:alpha3')), ''),
+            CASE
+                WHEN regexp_matches(COALESCE(json_extract_string(properties, '$.ISO3166-2'), ''), '^[A-Za-z]{2}-')
+                     AND UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1)) IN (SELECT cc FROM countries_meta)
+                     AND NOT (UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1)) = 'GB' AND '__COUNTRY_CODE__' = 'IE')
+                THEN UPPER(split_part(json_extract_string(properties, '$.ISO3166-2'), '-', 1))
+                ELSE NULL
+            END,
             '__COUNTRY_CODE__'
         ) AS country_code,
         TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) AS admin_level,
         COALESCE(json_extract_string(properties, '$.area_type'), 'administrative') AS area_type,
-        LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) AS boundary,
+        CASE LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative'))
+            WHEN 'disputed' THEN 'administrative'
+            ELSE LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative'))
+        END AS boundary,
         TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.@id'), json_extract_string(properties, '$.id'), json_extract_string(properties, '$.osm_id'), '0'), '[^0-9]', '', 'g') AS BIGINT) AS osm_id,
         CASE LOWER(COALESCE(json_extract_string(properties, '$.@type'), json_extract_string(properties, '$.osm_type'), 'relation'))
             WHEN 'r' THEN 'relation'
@@ -41,7 +51,11 @@ COPY (
         COALESCE(json_extract_string(properties, '$.name'), json_extract_string(properties, '$.name:en'), json_extract_string(properties, '$.official_name'), '') AS name,
         json_extract_string(properties, '$.name:en') AS name_en,
         json_extract_string(properties, '$.wikidata') AS wikidata,
-        COALESCE(json_extract_string(properties, '$.ISO3166-1'), json_extract_string(properties, '$.ISO3166-1:alpha2'), json_extract_string(properties, '$.ISO3166-1:alpha3')) AS iso3166_1,
+        CASE
+            WHEN TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) = 2
+            THEN COALESCE(json_extract_string(properties, '$.ISO3166-1'), json_extract_string(properties, '$.ISO3166-1:alpha2'), json_extract_string(properties, '$.ISO3166-1:alpha3'))
+            ELSE NULL
+        END AS iso3166_1,
         json_extract_string(properties, '$.ISO3166-2') AS iso3166_2,
         TRY_CAST(regexp_replace(COALESCE(json_extract_string(properties, '$.parent_osm_id'), ''), '[^0-9]', '', 'g') AS BIGINT) AS parent_osm_id,
         json_extract_string(properties, '$.parent_iso3166_2') AS parent_iso3166_2,
@@ -94,16 +108,26 @@ COPY (
                 maximum_object_size=268435456,
                 ignore_errors=true)
             WHERE TRY_CAST(json_extract_string(properties, '$.admin_level') AS TINYINT) BETWEEN 1 AND 12
-              AND LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) IN ('administrative', 'traditional', 'statistical', 'cadastral', 'local_authority', 'borough')
+              AND (
+                  LOWER(COALESCE(NULLIF(TRIM(json_extract_string(properties, '$.boundary')), ''), 'administrative')) IN ('administrative', 'traditional', 'statistical', 'cadastral', 'local_authority', 'borough')
+                  OR (LOWER(COALESCE(json_extract_string(properties, '$.boundary'), '')) = 'disputed' AND UPPER(COALESCE(json_extract_string(properties, '$.ISO3166-1'), '')) = 'PS')
+              )
               AND (json_extract_string(properties, '$.end_date') IS NULL OR json_extract_string(properties, '$.end_date') = '')
               AND (json_extract_string(properties, '$.historic') IS NULL OR json_extract_string(properties, '$.historic') IN ('no', 'false', '0'))
               AND (json_extract_string(properties, '$.admin_type:FR') IS NULL OR json_extract_string(properties, '$.admin_type:FR') != 'ancienne commune')
         ) sub
     ) raw
     LEFT JOIN countries_meta m ON m.cc = COALESCE(
-        json_extract_string(raw.properties, '$.ISO3166-1'),
-        json_extract_string(raw.properties, '$.ISO3166-1:alpha2'),
-        json_extract_string(raw.properties, '$.ISO3166-1:alpha3'),
+        NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1')), ''),
+        NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1:alpha2')), ''),
+        NULLIF(TRIM(json_extract_string(raw.properties, '$.ISO3166-1:alpha3')), ''),
+        CASE
+            WHEN regexp_matches(COALESCE(json_extract_string(raw.properties, '$.ISO3166-2'), ''), '^[A-Za-z]{2}-')
+                 AND UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1)) IN (SELECT cc FROM countries_meta)
+                 AND NOT (UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1)) = 'GB' AND '__COUNTRY_CODE__' = 'IE')
+            THEN UPPER(split_part(json_extract_string(raw.properties, '$.ISO3166-2'), '-', 1))
+            ELSE NULL
+        END,
         '__COUNTRY_CODE__'
     )
     WHERE geom IS NOT NULL
