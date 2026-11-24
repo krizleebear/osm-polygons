@@ -168,6 +168,62 @@ class TestCompositeExtracts(unittest.TestCase):
         self.assertIn("-S", cmd)
         self.assertIn("types=multipolygon,boundary", cmd)
 
+    def test_build_union_multipolygon_for_all_sources(self):
+        expected_counts = {"guernsey-jersey": 2, "american-oceania": 3, "central-america": 18}
+        for src_id, expected_count in expected_counts.items():
+            extracts = self.sources[src_id]["extracts"]
+            union = extract_composites.build_union_multipolygon(extracts)
+            self.assertEqual(union["type"], "Feature")
+            self.assertEqual(union["geometry"]["type"], "MultiPolygon")
+            polys = union["geometry"]["coordinates"]
+            self.assertEqual(len(polys), expected_count, src_id)
+            for poly in polys:
+                self.assertEqual(len(poly), 1)
+                ring = poly[0]
+                self.assertGreaterEqual(len(ring), 4)
+                self.assertEqual(ring[0], ring[-1])
+
+    def test_build_single_extract_command_bbox_and_polygon(self):
+        bbox_cmd = extract_composites.build_single_extract_command(
+            "/tmp/in.osm.pbf", "/tmp/out.osm.pbf", bbox=[-2.75, 49.38, -2.10, 49.77]
+        )
+        self.assertEqual(
+            bbox_cmd,
+            [
+                "osmium",
+                "extract",
+                "--strategy=smart",
+                "-S",
+                "types=multipolygon,boundary",
+                "--overwrite",
+                "-b",
+                "-2.75,49.38,-2.1,49.77",
+                "-o",
+                "/tmp/out.osm.pbf",
+                "/tmp/in.osm.pbf",
+            ],
+        )
+
+        poly_cmd = extract_composites.build_single_extract_command(
+            "/tmp/in.osm.pbf", "/tmp/out.osm.pbf", polygon_path="/tmp/poly.geojson"
+        )
+        self.assertEqual(
+            poly_cmd,
+            [
+                "osmium",
+                "extract",
+                "--strategy=smart",
+                "-S",
+                "types=multipolygon,boundary",
+                "--overwrite",
+                "-p",
+                "/tmp/poly.geojson",
+                "-o",
+                "/tmp/out.osm.pbf",
+                "/tmp/in.osm.pbf",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
