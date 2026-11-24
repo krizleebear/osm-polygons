@@ -61,3 +61,6 @@ tmp/
 /reference-polygons/
 /data/
 validation.json
+
+# DuckDB local extensions & cache
+.duckdb/
