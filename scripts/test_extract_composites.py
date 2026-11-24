@@ -162,6 +162,12 @@ class TestCompositeExtracts(unittest.TestCase):
                     self.assertTrue(ext_cfg["output"].endswith(".osm.pbf"))
                     self.assertTrue("bbox" in ext_cfg or "polygon" in ext_cfg)
 
+    def test_osmium_command_uses_smart_strategy_for_boundaries(self):
+        cmd = extract_composites.build_osmium_command("/tmp/cfg.json", "/tmp/in.osm.pbf")
+        self.assertIn("--strategy=smart", cmd)
+        self.assertIn("-S", cmd)
+        self.assertIn("types=multipolygon,boundary", cmd)
+
 
 if __name__ == "__main__":
     unittest.main()

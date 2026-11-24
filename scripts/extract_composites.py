@@ -79,6 +79,21 @@ def build_osmium_config(extracts, out_dir, work_dir):
     return {"extracts": osmium_extracts}, expected_outputs
 
 
+def build_osmium_command(cfg_path, input_pbf):
+    """Return the osmium extract command preserving boundary/multipolygon relations."""
+    return [
+        "osmium",
+        "extract",
+        "--strategy=smart",
+        "-S",
+        "types=multipolygon,boundary",
+        "--overwrite",
+        "-c",
+        cfg_path,
+        input_pbf,
+    ]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Single-pass osmium extract splitter for composite Geofabrik PBFs."
@@ -115,15 +130,7 @@ def main(argv=None):
         with open(cfg_path, "w", encoding="utf-8") as cfh:
             json.dump(osmium_cfg, cfh, indent=2)
 
-        cmd = [
-            "osmium",
-            "extract",
-            "--strategy=complete_ways",
-            "--overwrite",
-            "-c",
-            cfg_path,
-            args.input_pbf,
-        ]
+        cmd = build_osmium_command(cfg_path, args.input_pbf)
         print(f"[INFO] Running single-pass extraction for source '{args.source}' ({len(extracts)} regions)...")
         proc = subprocess.run(cmd, check=False)
         if proc.returncode != 0:
