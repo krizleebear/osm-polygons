@@ -10,7 +10,7 @@ name: osm-download
 resources:
   containers:
   - container: osm2parquet
-    image: ghcr.io/krizleebear/osm2parquet:v1.0.6
+    image: ghcr.io/krizleebear/osm2parquet:v1.1.0
 
 trigger: none
 pr: none
