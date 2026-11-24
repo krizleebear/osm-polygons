@@ -39,6 +39,20 @@
       11
     ]
   },
+  "AG": {
+    "continent": "central-america",
+    "name": "Antigua and Barbuda",
+    "levels": [
+      2
+    ]
+  },
+  "AI": {
+    "continent": "central-america",
+    "name": "Anguilla",
+    "levels": [
+      3
+    ]
+  },
   "AL": {
     "continent": "europe",
     "name": "Albania",
@@ -95,6 +109,13 @@
       9,
       10,
       11
+    ]
+  },
+  "AS": {
+    "continent": "australia-oceania",
+    "name": "American Samoa",
+    "levels": [
+      4
     ]
   },
   "AT": {
@@ -166,6 +187,13 @@
       9,
       10,
       11
+    ]
+  },
+  "BB": {
+    "continent": "central-america",
+    "name": "Barbados",
+    "levels": [
+      2
     ]
   },
   "BD": {
@@ -262,6 +290,13 @@
       8,
       10,
       11
+    ]
+  },
+  "BL": {
+    "continent": "central-america",
+    "name": "Saint Barthélemy",
+    "levels": [
+      3
     ]
   },
   "BN": {
@@ -568,6 +603,13 @@
       11
     ]
   },
+  "CW": {
+    "continent": "central-america",
+    "name": "Curaçao",
+    "levels": [
+      3
+    ]
+  },
   "CX": {
     "continent": "australia-oceania",
     "name": "Christmas Island",
@@ -643,6 +685,13 @@
       9,
       10,
       11
+    ]
+  },
+  "DM": {
+    "continent": "central-america",
+    "name": "Dominica",
+    "levels": [
+      2
     ]
   },
   "DO": {
@@ -840,6 +889,13 @@
       11
     ]
   },
+  "GD": {
+    "continent": "central-america",
+    "name": "Grenada",
+    "levels": [
+      2
+    ]
+  },
   "GE": {
     "continent": "europe",
     "name": "Georgia",
@@ -862,6 +918,13 @@
       3,
       4,
       8
+    ]
+  },
+  "GG": {
+    "continent": "europe",
+    "name": "Guernsey",
+    "levels": [
+      3
     ]
   },
   "GH": {
@@ -965,6 +1028,13 @@
       9,
       10,
       11
+    ]
+  },
+  "GU": {
+    "continent": "australia-oceania",
+    "name": "Guam",
+    "levels": [
+      4
     ]
   },
   "GW": {
@@ -1186,6 +1256,13 @@
       11
     ]
   },
+  "JE": {
+    "continent": "europe",
+    "name": "Jersey",
+    "levels": [
+      3
+    ]
+  },
   "JM": {
     "continent": "central-america",
     "name": "Jamaica",
@@ -1291,6 +1368,13 @@
       10
     ]
   },
+  "KN": {
+    "continent": "central-america",
+    "name": "Saint Kitts and Nevis",
+    "levels": [
+      2
+    ]
+  },
   "KP": {
     "continent": "asia",
     "name": "North Korea",
@@ -1328,6 +1412,13 @@
       9,
       10,
       11
+    ]
+  },
+  "KY": {
+    "continent": "central-america",
+    "name": "Cayman Islands",
+    "levels": [
+      3
     ]
   },
   "KZ": {
@@ -1368,6 +1459,13 @@
       8,
       10,
       11
+    ]
+  },
+  "LC": {
+    "continent": "central-america",
+    "name": "Saint Lucia",
+    "levels": [
+      2
     ]
   },
   "LI": {
@@ -1525,6 +1623,13 @@
       11
     ]
   },
+  "MF": {
+    "continent": "central-america",
+    "name": "Saint Martin",
+    "levels": [
+      3
+    ]
+  },
   "MG": {
     "continent": "africa",
     "name": "Madagascar",
@@ -1612,6 +1717,13 @@
       3
     ]
   },
+  "MP": {
+    "continent": "australia-oceania",
+    "name": "Northern Mariana Islands",
+    "levels": [
+      4
+    ]
+  },
   "MQ": {
     "continent": "europe",
     "name": "Martinique",
@@ -1631,6 +1743,13 @@
       8,
       10,
       11
+    ]
+  },
+  "MS": {
+    "continent": "central-america",
+    "name": "Montserrat",
+    "levels": [
+      3
     ]
   },
   "MT": {
@@ -2332,6 +2451,13 @@
       6
     ]
   },
+  "SX": {
+    "continent": "central-america",
+    "name": "Sint Maarten",
+    "levels": [
+      3
+    ]
+  },
   "SY": {
     "continent": "asia",
     "name": "Syria",
@@ -2356,6 +2482,13 @@
       6,
       8,
       10
+    ]
+  },
+  "TC": {
+    "continent": "central-america",
+    "name": "Turks and Caicos Islands",
+    "levels": [
+      3
     ]
   },
   "TD": {
@@ -2482,6 +2615,13 @@
       11
     ]
   },
+  "TT": {
+    "continent": "central-america",
+    "name": "Trinidad and Tobago",
+    "levels": [
+      2
+    ]
+  },
   "TV": {
     "continent": "australia-oceania",
     "name": "Tuvalu",
@@ -2592,6 +2732,13 @@
       11
     ]
   },
+  "VC": {
+    "continent": "central-america",
+    "name": "Saint Vincent and the Grenadines",
+    "levels": [
+      2
+    ]
+  },
   "VE": {
     "continent": "south-america",
     "name": "Venezuela",
@@ -2605,6 +2752,13 @@
       9,
       10,
       11
+    ]
+  },
+  "VG": {
+    "continent": "central-america",
+    "name": "British Virgin Islands",
+    "levels": [
+      3
     ]
   },
   "VI": {

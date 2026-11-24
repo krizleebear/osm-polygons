@@ -18,13 +18,14 @@ DOWNLOAD_YAML = os.path.join(REPO_ROOT, "osm-download-pipeline.yml")
 EXPORT_YAML = os.path.join(REPO_ROOT, "polygon-export-pipeline.yml")
 COUNTRIES_JSON = os.path.join(REPO_ROOT, "scripts", "countries.json")
 
-PAIR_RE = re.compile(r"OSM_REGION:\s*'([^']+)'\s+PBF_URL:\s*'([^']+)'")
+PAIR_RE = re.compile(r"OSM_REGION:\s*'([^']+)'\s+PBF_URL:\s*'([^']*)'")
 TRIPLE_RE = re.compile(
-    r"OSM_REGION:\s*'([^']+)'\s+PBF_URL:\s*'([^']+)'\s+COUNTRY_CODE:\s*'([^']+)'"
+    r"OSM_REGION:\s*'([^']+)'\s+PBF_URL:\s*'([^']*)'\s+COUNTRY_CODE:\s*'([^']+)'"
 )
 PARTITION_KEY_RE = re.compile(r"^ {8}([a-z_]+):\s*$", re.MULTILINE)
 REGIONS_LINE_RE = re.compile(r"REGIONS:\s*'([^']+)'")
 ARTIFACT_PATTERN_RE = re.compile(r"\*-([a-z0-9-]+)/\*\*")
+COMPOSITES_JSON = os.path.join(REPO_ROOT, "scripts", "composite-extracts.json")
 
 
 def read_text(path):
@@ -68,14 +69,18 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
     def test_download_and_export_matrices_match_regions_and_urls(self):
         dl_pairs = parse_region_url_pairs(self.download_text)
         ex_pairs = parse_region_url_pairs(self.export_text)
+        derived_regions, sources = validate_geofabrik_urls.load_composite_config(COMPOSITES_JSON)
 
         self.assertGreaterEqual(len(dl_pairs), 197)
+        self.assertEqual(len(derived_regions), 23)
         self.assertEqual(len(dl_pairs), len({r for r, _ in dl_pairs}), "Duplicate region in osm-download-pipeline.yml")
         self.assertEqual(len(ex_pairs), len({r for r, _ in ex_pairs}), "Duplicate region in polygon-export-pipeline.yml")
 
         dl_map = dict(dl_pairs)
         ex_map = dict(ex_pairs)
-        self.assertEqual(set(dl_map.keys()), set(ex_map.keys()))
+        self.assertEqual(set(dl_map.keys()) & derived_regions, set())
+        self.assertEqual(set(dl_map.keys()) | derived_regions, set(ex_map.keys()))
+        self.assertGreaterEqual(len(ex_map), 220)
 
         for reg, dl_url in dl_map.items():
             self.assertEqual(
@@ -84,11 +89,28 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
                 f"PBF_URL mismatch between download and export pipelines for '{reg}'",
             )
 
+        for reg in derived_regions:
+            self.assertEqual(ex_map[reg], "", f"Derived region '{reg}' must have empty PBF_URL in export matrix")
+            self.assertIn(
+                f"    - {reg}\n",
+                self.download_text,
+                f"Derived region '{reg}' must be published in osm-download-pipeline.yml",
+            )
+        for source_id, src_url in sources.items():
+            self.assertIn(
+                f"pbfUrl: '{src_url}'",
+                self.download_text,
+                f"Composite source '{source_id}' pbfUrl missing from osm-download-pipeline.yml",
+            )
+
     def test_all_pbf_urls_are_canonical_geofabrik_format(self):
-        for path in (DOWNLOAD_YAML, EXPORT_YAML):
-            count, errs = validate_geofabrik_urls.validate_file(path, catalog=None)
-            self.assertGreaterEqual(count, 197)
-            self.assertEqual(errs, [], f"Canonical URL errors in {path}: {errs}")
+        dl_count, dl_errs = validate_geofabrik_urls.validate_file(DOWNLOAD_YAML, catalog=None)
+        self.assertGreaterEqual(dl_count, 197)
+        self.assertEqual(dl_errs, [], f"Canonical URL errors in {DOWNLOAD_YAML}: {dl_errs}")
+
+        ex_count, ex_errs = validate_geofabrik_urls.validate_file(EXPORT_YAML, catalog=None)
+        self.assertGreaterEqual(ex_count, 220)
+        self.assertEqual(ex_errs, [], f"Canonical URL errors in {EXPORT_YAML}: {ex_errs}")
 
     def test_parquet_partitions_match_export_matrix_and_artifact_patterns(self):
         ex_regions = [r for r, _, _ in parse_export_triples(self.export_text)]
@@ -143,6 +165,10 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
             self.download_text,
             r"- job: download\s+dependsOn: preflight",
         )
+        self.assertIn("templates/extract-composite-job.yml", self.download_text)
+        self.assertIn("extract_guernsey_jersey", self.download_text)
+        self.assertIn("extract_american_oceania", self.download_text)
+        self.assertIn("extract_caribbean", self.download_text)
 
     def test_validate_geofabrik_urls_catches_flat_legacy_dom_url_and_catalog_mismatch(self):
         flat_legacy_yaml = (

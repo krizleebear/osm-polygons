@@ -1,0 +1,205 @@
+{
+  "sources": {
+    "guernsey-jersey": {
+      "pbf_url": "https://download.geofabrik.de/europe/guernsey-jersey/guernsey-jersey-latest.osm.pbf",
+      "extracts": [
+        {
+          "region": "guernsey",
+          "country_code": "GG",
+          "continent": "europe",
+          "bbox": [-2.75, 49.38, -2.10, 49.77]
+        },
+        {
+          "region": "jersey",
+          "country_code": "JE",
+          "continent": "europe",
+          "bbox": [-2.32, 48.92, -1.94, 49.32]
+        }
+      ]
+    },
+    "american-oceania": {
+      "pbf_url": "https://download.geofabrik.de/australia-oceania/american-oceania/american-oceania-latest.osm.pbf",
+      "extracts": [
+        {
+          "region": "american-samoa",
+          "country_code": "AS",
+          "continent": "australia-oceania",
+          "bbox": [-171.20, -14.60, -168.00, -10.90]
+        },
+        {
+          "region": "guam",
+          "country_code": "GU",
+          "continent": "australia-oceania",
+          "bbox": [144.55, 13.18, 145.05, 13.72]
+        },
+        {
+          "region": "northern-mariana-islands",
+          "country_code": "MP",
+          "continent": "australia-oceania",
+          "bbox": [144.80, 14.05, 146.15, 20.65]
+        }
+      ]
+    },
+    "central-america": {
+      "pbf_url": "https://download.geofabrik.de/central-america/central-america-latest.osm.pbf",
+      "extracts": [
+        {
+          "region": "trinidad-and-tobago",
+          "country_code": "TT",
+          "continent": "central-america",
+          "polygon": [
+            [-61.96, 10.02],
+            [-61.82, 10.68],
+            [-61.60, 10.95],
+            [-60.45, 11.40],
+            [-60.45, 10.00],
+            [-61.96, 10.02]
+          ]
+        },
+        {
+          "region": "barbados",
+          "country_code": "BB",
+          "continent": "central-america",
+          "bbox": [-59.72, 13.00, -59.35, 13.38]
+        },
+        {
+          "region": "antigua-and-barbuda",
+          "country_code": "AG",
+          "continent": "central-america",
+          "bbox": [-62.40, 16.90, -61.60, 17.80]
+        },
+        {
+          "region": "dominica",
+          "country_code": "DM",
+          "continent": "central-america",
+          "bbox": [-61.55, 15.17, -61.18, 15.68]
+        },
+        {
+          "region": "grenada",
+          "country_code": "GD",
+          "continent": "central-america",
+          "polygon": [
+            [-61.85, 11.95],
+            [-61.35, 11.95],
+            [-61.35, 12.528],
+            [-61.85, 12.528],
+            [-61.85, 11.95]
+          ]
+        },
+        {
+          "region": "saint-kitts-and-nevis",
+          "country_code": "KN",
+          "continent": "central-america",
+          "bbox": [-62.90, 17.07, -62.50, 17.45]
+        },
+        {
+          "region": "saint-lucia",
+          "country_code": "LC",
+          "continent": "central-america",
+          "bbox": [-61.15, 13.68, -60.82, 14.14]
+        },
+        {
+          "region": "saint-vincent-and-the-grenadines",
+          "country_code": "VC",
+          "continent": "central-america",
+          "polygon": [
+            [-61.55, 12.528],
+            [-61.05, 12.528],
+            [-61.05, 13.42],
+            [-61.55, 13.42],
+            [-61.55, 12.528]
+          ]
+        },
+        {
+          "region": "aruba",
+          "country_code": "AW",
+          "continent": "central-america",
+          "bbox": [-70.12, 12.38, -69.82, 12.66]
+        },
+        {
+          "region": "curacao",
+          "country_code": "CW",
+          "continent": "central-america",
+          "bbox": [-69.20, 11.96, -68.60, 12.42]
+        },
+        {
+          "region": "sint-maarten",
+          "country_code": "SX",
+          "continent": "central-america",
+          "polygon": [
+            [-63.16, 17.98],
+            [-62.98, 17.98],
+            [-62.98, 18.056],
+            [-63.011, 18.056],
+            [-63.067, 18.059],
+            [-63.100, 18.046],
+            [-63.124, 18.053],
+            [-63.16, 18.053],
+            [-63.16, 17.98]
+          ]
+        },
+        {
+          "region": "saint-martin",
+          "country_code": "MF",
+          "continent": "central-america",
+          "polygon": [
+            [-63.16, 18.053],
+            [-63.124, 18.053],
+            [-63.100, 18.046],
+            [-63.067, 18.059],
+            [-63.011, 18.056],
+            [-62.98, 18.056],
+            [-62.98, 18.14],
+            [-63.16, 18.14],
+            [-63.16, 18.053]
+          ]
+        },
+        {
+          "region": "saint-barthelemy",
+          "country_code": "BL",
+          "continent": "central-america",
+          "bbox": [-62.96, 17.85, -62.76, 17.98]
+        },
+        {
+          "region": "cayman-islands",
+          "country_code": "KY",
+          "continent": "central-america",
+          "bbox": [-81.48, 19.22, -79.68, 19.80]
+        },
+        {
+          "region": "turks-and-caicos-islands",
+          "country_code": "TC",
+          "continent": "central-america",
+          "bbox": [-72.55, 21.15, -71.05, 22.02]
+        },
+        {
+          "region": "british-virgin-islands",
+          "country_code": "VG",
+          "continent": "central-america",
+          "polygon": [
+            [-64.79, 18.38],
+            [-64.72, 18.35],
+            [-64.65, 18.31],
+            [-64.55, 18.28],
+            [-64.22, 18.28],
+            [-64.22, 18.80],
+            [-64.82, 18.80],
+            [-64.79, 18.38]
+          ]
+        },
+        {
+          "region": "anguilla",
+          "country_code": "AI",
+          "continent": "central-america",
+          "bbox": [-63.48, 18.15, -62.90, 18.65]
+        },
+        {
+          "region": "montserrat",
+          "country_code": "MS",
+          "continent": "central-america",
+          "bbox": [-62.28, 16.65, -62.12, 16.85]
+        }
+      ]
+    }
+  }
+}

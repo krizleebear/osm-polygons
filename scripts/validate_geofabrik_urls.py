@@ -16,8 +16,29 @@ import urllib.error
 import urllib.request
 
 DEFAULT_INDEX_URL = "https://download.geofabrik.de/index-v1-nogeom.json"
-PAIR_RE = re.compile(r"OSM_REGION:\s*'([^']+)'\s+PBF_URL:\s*'([^']+)'")
+DEFAULT_COMPOSITES_CONFIG = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "composite-extracts.json"
+)
+PAIR_RE = re.compile(r"OSM_REGION:\s*'([^']+)'\s+PBF_URL:\s*'([^']*)'")
 ANY_GEOFABRIK_URL_RE = re.compile(r"https://download\.geofabrik\.de/[^\s'\"]+")
+
+
+def load_composite_config(config_path=DEFAULT_COMPOSITES_CONFIG):
+    """Return (derived_regions_set, {source_id: pbf_url}) from composite-extracts.json."""
+    if not config_path or not os.path.isfile(config_path):
+        return set(), {}
+    with open(config_path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    derived = set()
+    sources = {}
+    for source_id, info in (data.get("sources") or {}).items():
+        pbf_url = info.get("pbf_url") or ""
+        sources[source_id] = pbf_url
+        for ext in info.get("extracts") or []:
+            reg = ext.get("region")
+            if reg:
+                derived.add(reg)
+    return derived, sources
 
 
 def load_geofabrik_catalog(
@@ -66,6 +87,7 @@ def validate_yaml_text(
     label,
     catalog=None,
     allow_duplicate_regions=False,
+    derived_regions=None,
 ):
     """Validate all (OSM_REGION, PBF_URL) entries in pipeline YAML content."""
     errors = []
@@ -73,9 +95,15 @@ def validate_yaml_text(
     if not pairs:
         return [f"{label}: No (OSM_REGION, PBF_URL) entries found."]
 
+    if derived_regions is None:
+        derived_regions, sources = load_composite_config()
+    else:
+        _, sources = load_composite_config()
+
     all_urls = set(ANY_GEOFABRIK_URL_RE.findall(content))
-    pair_urls = {url for _, url in pairs}
-    stray_urls = sorted(all_urls - pair_urls)
+    pair_urls = {url for _, url in pairs if url}
+    source_urls = set(sources.values())
+    stray_urls = sorted(all_urls - pair_urls - source_urls)
     if stray_urls:
         errors.append(
             f"{label}: Found Geofabrik URL(s) outside standard (OSM_REGION, PBF_URL) pairs: {stray_urls}"
@@ -86,6 +114,19 @@ def validate_yaml_text(
         if not allow_duplicate_regions and reg in seen_regions:
             errors.append(f"{label}: Duplicate OSM_REGION '{reg}'.")
         seen_regions.add(reg)
+
+        if url == "":
+            if reg not in derived_regions:
+                errors.append(
+                    f"{label}: Empty PBF_URL is only allowed for derived composite regions, got '{reg}'."
+                )
+            continue
+
+        if reg in derived_regions:
+            errors.append(
+                f"{label}: Derived composite region '{reg}' must have empty PBF_URL '', got '{url}'."
+            )
+            continue
 
         if not url.startswith("https://download.geofabrik.de/"):
             errors.append(
@@ -111,7 +152,7 @@ def validate_yaml_text(
     return errors
 
 
-def validate_file(filepath, catalog=None, allow_duplicate_regions=False):
+def validate_file(filepath, catalog=None, allow_duplicate_regions=False, derived_regions=None):
     """Read filepath and validate all Geofabrik PBF URLs. Returns (pair_count, errors)."""
     with open(filepath, "r", encoding="utf-8") as fh:
         content = fh.read()
@@ -121,8 +162,33 @@ def validate_file(filepath, catalog=None, allow_duplicate_regions=False):
         label=filepath,
         catalog=catalog,
         allow_duplicate_regions=allow_duplicate_regions,
+        derived_regions=derived_regions,
     )
     return len(pairs), errors
+
+
+def validate_composite_sources(config_path=DEFAULT_COMPOSITES_CONFIG, catalog=None):
+    """Validate all composite source pbf_url entries in composite-extracts.json."""
+    _, sources = load_composite_config(config_path)
+    errors = []
+    for source_id, url in sources.items():
+        if not url.startswith("https://download.geofabrik.de/"):
+            errors.append(f"{config_path}: Invalid URL for source '{source_id}': '{url}'.")
+            continue
+        expected_suffix = f"/{source_id}/{source_id}-latest.osm.pbf"
+        if not url.endswith(expected_suffix):
+            errors.append(
+                f"{config_path}: Non-canonical URL for source '{source_id}' ('{url}'); expected '{expected_suffix}'."
+            )
+        if catalog is not None:
+            expected = catalog.get(source_id)
+            if expected is None:
+                errors.append(f"{config_path}: Source '{source_id}' not found in Geofabrik catalog.")
+            elif url != expected:
+                errors.append(
+                    f"{config_path}: URL mismatch for '{source_id}': configured '{url}' != Geofabrik catalog '{expected}'."
+                )
+    return len(sources), errors
 
 
 def main(argv=None):
@@ -169,7 +235,13 @@ def main(argv=None):
             print(f"[ERROR] {exc}", file=sys.stderr)
             return 1
 
+    derived_regions, _ = load_composite_config()
     all_errors = []
+    comp_count, comp_errs = validate_composite_sources(catalog=catalog)
+    all_errors.extend(comp_errs)
+    if not comp_errs:
+        print(f"[OK] composite-extracts.json: validated {comp_count} composite source URLs.")
+
     for fp in args.files:
         if not os.path.exists(fp):
             all_errors.append(f"{fp}: File does not exist.")
@@ -178,6 +250,7 @@ def main(argv=None):
             fp,
             catalog=catalog,
             allow_duplicate_regions=args.allow_duplicate_regions,
+            derived_regions=derived_regions,
         )
         if errs:
             all_errors.extend(errs)

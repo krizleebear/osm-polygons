@@ -1,0 +1,78 @@
+parameters:
+- name: jobName
+  type: string
+- name: displayName
+  type: string
+- name: sourceId
+  type: string
+- name: pbfUrl
+  type: string
+- name: regions
+  type: object
+
+jobs:
+- job: ${{ parameters.jobName }}
+  displayName: ${{ parameters.displayName }}
+  dependsOn: preflight
+  timeoutInMinutes: 60
+  container: osm2parquet
+  steps:
+  - checkout: self
+
+  - task: Bash@3
+    displayName: 'Download composite PBF & extract single-region PBFs'
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+        SOURCE_ID='${{ parameters.sourceId }}'
+        PBF_URL='${{ parameters.pbfUrl }}'
+        INPUT_PBF="${SOURCE_ID}.osm.pbf"
+
+        echo "Downloading composite source '${SOURCE_ID}' from ${PBF_URL} ..."
+        SUCCESS=false
+        for ATTEMPT in 1 2 3 4 5; do
+          if curl --fail --location --continue-at - --silent --show-error \
+              --speed-limit 10240 --speed-time 30 \
+              --retry 2 --retry-delay 5 --retry-all-errors \
+              --output "$INPUT_PBF" "$PBF_URL"; then
+            SUCCESS=true
+            break
+          fi
+          if [ "$ATTEMPT" -lt 5 ]; then
+            WAIT_TIME=$(( ATTEMPT * 10 + (RANDOM % 15) ))
+            echo "Download attempt $ATTEMPT failed for ${SOURCE_ID}. Retrying in ${WAIT_TIME}s..."
+            sleep "$WAIT_TIME"
+          fi
+        done
+
+        if [ "$SUCCESS" != "true" ] || [ ! -s "$INPUT_PBF" ]; then
+          echo "ERROR: Failed to download composite PBF '${SOURCE_ID}' from ${PBF_URL}." >&2
+          exit 1
+        fi
+
+        echo "Download complete: $(du -h "$INPUT_PBF" | cut -f1)"
+        mkdir -p extracted
+        python3 scripts/extract_composites.py \
+          --config scripts/composite-extracts.json \
+          --source "$SOURCE_ID" \
+          --input-pbf "$INPUT_PBF" \
+          --out-dir extracted
+
+        rm -f "$INPUT_PBF"
+
+  - ${{ each region in parameters.regions }}:
+    - task: PublishPipelineArtifact@1
+      displayName: 'Cache extracted PBF (${{ region }})'
+      inputs:
+        targetPath: 'extracted/${{ region }}.osm.pbf'
+        artifact: 'osm-data-${{ region }}'
+        publishLocation: 'pipeline'
+
+  - task: Bash@3
+    displayName: 'Cleanup extracted PBFs from runner disk'
+    condition: always()
+    inputs:
+      targetType: 'inline'
+      script: |
+        rm -rf '${{ parameters.sourceId }}.osm.pbf' extracted

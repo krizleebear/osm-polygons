@@ -87,7 +87,22 @@ case "$COUNTRY_CODE" in
   GL) CC_REMAP="GL:DK=GL" ;;        # Greenland (DK-GL → GL)
   FO) CC_REMAP="FO:DK=FO" ;;        # Faroe Islands (DK-FO → FO)
   HK) CC_REMAP="HK:CN=HK" ;;        # Hong Kong (CN-HK → HK)
-  MO)  CC_REMAP="MO:CN=MO" ;;        # Macao (CN-MO → MO)
+  MO) CC_REMAP="MO:CN=MO" ;;        # Macao (CN-MO → MO)
+  GG) CC_REMAP="GG:GB=GG" ;;        # Guernsey (GB-GG → GG)
+  JE) CC_REMAP="JE:GB=JE" ;;        # Jersey (GB-JE → JE)
+  AS) CC_REMAP="AS:US=AS" ;;        # American Samoa (US-AS → AS)
+  GU) CC_REMAP="GU:US=GU" ;;        # Guam (US-GU → GU)
+  MP) CC_REMAP="MP:US=MP" ;;        # Northern Mariana Islands (US-MP → MP)
+  AW) CC_REMAP="AW:NL=AW" ;;        # Aruba (NL-AW → AW)
+  CW) CC_REMAP="CW:NL=CW" ;;        # Curaçao (NL-CW → CW)
+  SX) CC_REMAP="SX:NL=SX" ;;        # Sint Maarten (NL-SX → SX)
+  BL) CC_REMAP="BL:FR=BL" ;;        # Saint-Barthélemy (FR-BL → BL)
+  MF) CC_REMAP="MF:FR=MF" ;;        # Saint-Martin (FR-MF → MF)
+  KY) CC_REMAP="KY:GB=KY" ;;        # Cayman Islands (GB-KY → KY)
+  TC) CC_REMAP="TC:GB=TC" ;;        # Turks and Caicos Islands (GB-TC → TC)
+  VG) CC_REMAP="VG:GB=VG" ;;        # British Virgin Islands (GB-VG → VG)
+  AI) CC_REMAP="AI:GB=AI" ;;        # Anguilla (GB-AI → AI)
+  MS) CC_REMAP="MS:GB=MS" ;;        # Montserrat (GB-MS → MS)
 esac
 
 if [ -n "$CC_REMAP" ]; then

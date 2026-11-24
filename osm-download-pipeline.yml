@@ -7,6 +7,11 @@
 
 name: osm-download
 
+resources:
+  containers:
+  - container: osm2parquet
+    image: ghcr.io/krizleebear/osm2parquet:v1.0.6
+
 trigger: none
 pr: none
 
@@ -22,7 +27,7 @@ jobs:
   - bash: |
       set -euo pipefail
       echo "=== 1. Validating Azure Pipelines YAML Syntax ==="
-      python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml
+      python3 scripts/validate_azure_yaml.py osm-download-pipeline.yml templates/extract-composite-job.yml
 
       echo "=== 2. Running Pipeline Sync & URL Unit Tests ==="
       PYTHONPATH=scripts python3 -m unittest scripts/test_pipeline_sync.py
@@ -784,4 +789,51 @@ jobs:
       targetPath: 'reference-polygons'
       artifact: 'admin-polygons-reference'
       publishLocation: 'pipeline'
+
+- template: templates/extract-composite-job.yml
+  parameters:
+    jobName: 'extract_guernsey_jersey'
+    displayName: 'Extract Channel Islands (GG, JE)'
+    sourceId: 'guernsey-jersey'
+    pbfUrl: 'https://download.geofabrik.de/europe/guernsey-jersey/guernsey-jersey-latest.osm.pbf'
+    regions:
+    - guernsey
+    - jersey
+
+- template: templates/extract-composite-job.yml
+  parameters:
+    jobName: 'extract_american_oceania'
+    displayName: 'Extract US Pacific Territories (AS, GU, MP)'
+    sourceId: 'american-oceania'
+    pbfUrl: 'https://download.geofabrik.de/australia-oceania/american-oceania/american-oceania-latest.osm.pbf'
+    regions:
+    - american-samoa
+    - guam
+    - northern-mariana-islands
+
+- template: templates/extract-composite-job.yml
+  parameters:
+    jobName: 'extract_caribbean'
+    displayName: 'Extract Caribbean Islands from central-america (18 territories/states)'
+    sourceId: 'central-america'
+    pbfUrl: 'https://download.geofabrik.de/central-america/central-america-latest.osm.pbf'
+    regions:
+    - trinidad-and-tobago
+    - barbados
+    - antigua-and-barbuda
+    - dominica
+    - grenada
+    - saint-kitts-and-nevis
+    - saint-lucia
+    - saint-vincent-and-the-grenadines
+    - aruba
+    - curacao
+    - sint-maarten
+    - saint-martin
+    - saint-barthelemy
+    - cayman-islands
+    - turks-and-caicos-islands
+    - british-virgin-islands
+    - anguilla
+    - montserrat
 
