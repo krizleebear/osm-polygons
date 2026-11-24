@@ -17,6 +17,7 @@
     { "osm_id": 304751, "country": "ID", "admin_level": 2, "name": "Indonesia" },
     { "osm_id": 304716, "country": "IN", "admin_level": 2, "name": "India" },
     { "osm_id": 304938, "country": "IR", "admin_level": 2, "name": "Iran" },
+    { "osm_id": 367988, "country": "JE", "admin_level": 2, "name": "Jersey" },
     { "osm_id": 178009, "country": "KG", "admin_level": 2, "name": "Kyrgyzstan" },
     { "osm_id": 192734, "country": "KP", "admin_level": 2, "name": "North Korea" },
     { "osm_id": 1124039, "country": "MC", "admin_level": 2, "name": "Monaco" },
@@ -78,6 +79,8 @@
     { "osm_id": 8421412, "country": "PT", "admin_level": 7, "name": "Santa Cruz" },
     { "osm_id": 8421417, "country": "PT", "admin_level": 7, "name": "Santana" },
     { "osm_id": 8421418, "country": "PT", "admin_level": 7, "name": "São Vicente" },
-    { "osm_id": 8421413, "country": "PT", "admin_level": 7, "name": "Funchal" }
+    { "osm_id": 8421413, "country": "PT", "admin_level": 7, "name": "Funchal" },
+    { "osm_id": 9238571, "country": "JE", "admin_level": 8, "name": "Grouville" },
+    { "osm_id": 14051437, "country": "JE", "admin_level": 9, "name": "La Vingtaine de la Rocque" }
   ]
 }
