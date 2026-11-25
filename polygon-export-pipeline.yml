@@ -1046,6 +1046,16 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
+          AVAIL=$(df -PB1 / | awk 'NR==2 {print $4}')
+          PBF_BYTES=$(curl -sIL --max-time 10 "$(PBF_URL)" | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {val=$2} END{gsub(/[^0-9]/,"",val); print val+0}')
+          if [ "$PBF_BYTES" -gt 0 ] 2>/dev/null; then
+            # Reserve 4x PBF size + 3 GiB headroom for osmium filtering and export outputs.
+            NEEDED=$((PBF_BYTES * 4 + 3221225472))
+            if [ "$AVAIL" -ge "$NEEDED" ]; then
+              echo "[INFO] Sufficient disk space ($((AVAIL / 1073741824)) GiB free >= $((NEEDED / 1073741824)) GiB needed for $((PBF_BYTES / 1048576)) MiB PBF). Skipping reclaim."
+              exit 0
+            fi
+          fi
           echo "[INFO] Disk space before cleanup:"
           df -h /
           sudo rm -rf \
@@ -1569,6 +1579,16 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
+          AVAIL=$(df -PB1 / | awk 'NR==2 {print $4}')
+          PBF_BYTES=$(curl -sIL --max-time 10 "$(PBF_URL)" | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {val=$2} END{gsub(/[^0-9]/,"",val); print val+0}')
+          if [ "$PBF_BYTES" -gt 0 ] 2>/dev/null; then
+            # Reserve 4x PBF size + 3 GiB headroom for osmium filtering and export outputs.
+            NEEDED=$((PBF_BYTES * 4 + 3221225472))
+            if [ "$AVAIL" -ge "$NEEDED" ]; then
+              echo "[INFO] Sufficient disk space ($((AVAIL / 1073741824)) GiB free >= $((NEEDED / 1073741824)) GiB needed for $((PBF_BYTES / 1048576)) MiB PBF). Skipping reclaim."
+              exit 0
+            fi
+          fi
           echo "[INFO] Disk space before cleanup:"
           df -h /
           sudo rm -rf \
