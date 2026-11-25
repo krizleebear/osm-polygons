@@ -653,6 +653,40 @@ jobs:
 
   steps:
   - task: Bash@3
+    displayName: 'Reclaim runner host disk space (if needed)'
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+        TOTAL_KB=$(df -Pk / | awk 'NR==2 {print $2}')
+        AVAIL_KB=$(df -Pk / | awk 'NR==2 {print $4}')
+        # Keep at least 6% free on / (above Azure DevOps's 5% warning threshold)
+        RESERVE_KB=$(( TOTAL_KB * 6 / 100 ))
+
+        CONTENT_LEN=$(curl --fail --silent --location --head --max-time 15 "$(PBF_URL)" \
+          | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub(/\r/, "", $2); len=$2} END{print len+0}' || true)
+        CONTENT_LEN=${CONTENT_LEN:-0}
+        NEED_KB=$(( CONTENT_LEN / 1024 + RESERVE_KB ))
+
+        echo "[INFO] Disk on /: total=$((TOTAL_KB/1048576))G, avail=$((AVAIL_KB/1048576))G, pbf=$((CONTENT_LEN/1048576))M, need=$((NEED_KB/1048576))G (incl. 6% reserve)"
+        if [ "$CONTENT_LEN" -eq 0 ] || [ "$AVAIL_KB" -lt "$NEED_KB" ]; then
+          echo "[INFO] Insufficient headroom on / — reclaiming runner host disk space..."
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache \
+            2>/dev/null || true
+          echo "[INFO] Disk space after cleanup:"
+          df -h /
+        else
+          echo "[INFO] Sufficient disk space on / — skipping cleanup."
+        fi
+
+  - task: Bash@3
     displayName: 'Download PBF from Geofabrik'
     inputs:
       targetType: 'inline'

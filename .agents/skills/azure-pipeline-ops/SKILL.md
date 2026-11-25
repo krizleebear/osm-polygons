@@ -20,6 +20,7 @@ description: >-
 - Non-breaking data audits should emit `echo "##vso[task.logissue type=warning]..."` with `continueOnError: true`.
 - Ensure all declared `PublishPipelineArtifact` target files exist on disk (touch empty fallback files if needed).
 - Large external downloads (e.g. Geofabrik PBFs) must use long-form CLI flags, stall timeouts (`--speed-limit 10240 --speed-time 30`), `--continue-at -`, and lightweight progress heartbeats.
+- Never run runner disk reclamation (`sudo rm -rf /usr/share/dotnet ...`) unconditionally across all jobs in a large matrix (slow and unnecessary for small regions). Gate it dynamically by comparing `df -Pk /` available space against `curl --head` `Content-Length` + a 6% reserve (above Azure DevOps's 5% warning threshold), falling back to cleanup only when headroom is insufficient or `Content-Length` is unavailable.
 - Fast-fail `preflight` stage (`validate_azure_yaml.py` + `unittest`) must run before matrix-heavy stages (`dependsOn: preflight`).
 
 ## 3. Container & Upstream Image Rules
