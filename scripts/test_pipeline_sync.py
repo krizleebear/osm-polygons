@@ -237,35 +237,29 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
         self.assertIn("artifact: 'admin-polygons-reference'", ref_job)
 
     def test_simplify_partitions_and_merge_ownership_are_disjoint_and_complete(self):
-        import yaml
         import merge_country_parquets
 
-        meta = merge_country_parquets.load_countries_continents(
-            os.path.join(REPO_ROOT, "scripts", "countries.json")
-        )
-        export_pipeline = yaml.safe_load(self.export_text)
-        export_matrix = None
-        simplify_matrix = None
-        for stage in export_pipeline["stages"]:
-            for job in stage.get("jobs", []):
-                matrix = job.get("strategy", {}).get("matrix", {})
-                if not matrix:
-                    continue
-                first = next(iter(matrix.values()))
-                if "OSM_REGION" in first:
-                    export_matrix = matrix
-                elif "CONTINENT" in first:
-                    simplify_matrix = matrix
+        meta = merge_country_parquets.load_countries_continents(COUNTRIES_JSON)
+        region_to_cc = {reg: cc for reg, _url, cc in parse_export_triples(self.export_text)}
+        self.assertGreaterEqual(len(region_to_cc), 220)
 
-        self.assertIsNotNone(export_matrix)
-        self.assertIsNotNone(simplify_matrix)
+        after_job = self.export_text.split("- job: parquet", 1)[1]
+        matrix_block = after_job.split("\n    steps:", 1)[0]
+        matches = list(PARTITION_KEY_RE.finditer(matrix_block))
+        continent_re = re.compile(r"CONTINENT:\s*'([^']+)'")
 
-        region_to_cc = {v["OSM_REGION"]: v["COUNTRY_CODE"] for v in export_matrix.values()}
-        partitions = [part["CONTINENT"] for part in simplify_matrix.values()]
-
-        for part in simplify_matrix.values():
-            cont = part["CONTINENT"]
-            for reg in part["REGIONS"].split():
+        partitions = []
+        for idx, match in enumerate(matches):
+            start = match.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(matrix_block)
+            chunk = matrix_block[start:end]
+            cont_match = continent_re.search(chunk)
+            reg_match = REGIONS_LINE_RE.search(chunk)
+            self.assertIsNotNone(cont_match, f"Missing CONTINENT in partition {match.group(1)}")
+            self.assertIsNotNone(reg_match, f"Missing REGIONS in partition {match.group(1)}")
+            cont = cont_match.group(1)
+            partitions.append(cont)
+            for reg in reg_match.group(1).split():
                 cc = region_to_cc[reg]
                 self.assertTrue(
                     merge_country_parquets.country_belongs_to_partition(cc, cont, meta),
