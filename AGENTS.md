@@ -53,8 +53,8 @@ Guidelines and invariants for `osm-polygons`. Detailed runbooks live in `.agents
 1. **Pre-Commit Verification (Mandatory):**
    - Validate pipeline YAML before committing:
      `python3 scripts/validate_azure_yaml.py <pipeline.yml>` (or via Docker `python:3-alpine` + `pyyaml`).
-   - Run full unit tests:
-     `PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'`
+   - Run full unit tests in an isolated stdlib-only venv (matching the `osmium-tool` CI container):
+     `./scripts/run_tests.sh` (or `PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'`).
    - Verify scripts/changes inside the local Docker container environment; keep complex validation in standalone testable Python CLIs (`scripts/validate_*.py`), not long inline Bash loops.
 2. **Git Workflow & Explain-First Rule:**
    - Check `git diff origin/master` before committing; use Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`); test major pipeline refactors on feature branches first.
