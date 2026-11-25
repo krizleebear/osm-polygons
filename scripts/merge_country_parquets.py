@@ -17,6 +17,19 @@ import sys
 import tempfile
 
 COUNTRY_CODE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+DEFAULT_COUNTRIES_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "countries.json")
+
+# Partitions that only emit their single dedicated country (prevents neighbor border-bleed).
+SINGLE_COUNTRY_PARTITIONS = {
+    "us": "US",
+    "canada": "CA",
+    "russia": "RU",
+}
+
+# Countries whose simplify partition differs from their countries.json continent.
+PARTITION_OVERRIDES = {
+    "TR": "asia",
+}
 
 LAYER_CONFIGS = {
     "admin-polygons": {
@@ -296,6 +309,64 @@ def run_batch_sql(batch_sql: str) -> None:
             os.remove(tmp_path)
 
 
+def load_countries_continents(countries_json_path: str | None) -> dict[str, str]:
+    """Load country_code -> continent mapping from scripts/countries.json."""
+    if not countries_json_path or not os.path.isfile(countries_json_path):
+        return {}
+    with open(countries_json_path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    return {
+        cc.strip().upper(): str(info.get("continent") or "").strip()
+        for cc, info in data.items()
+        if isinstance(info, dict) and info.get("continent")
+    }
+
+
+def country_belongs_to_partition(
+    country_code: str, partition: str, countries_continents: dict[str, str]
+) -> bool:
+    """Return True if country_code is owned by the given simplify partition."""
+    if not partition:
+        return True
+    cc = country_code.strip().upper()
+    if partition in SINGLE_COUNTRY_PARTITIONS:
+        return cc == SINGLE_COUNTRY_PARTITIONS[partition]
+    if cc in SINGLE_COUNTRY_PARTITIONS.values():
+        return False
+    if cc in PARTITION_OVERRIDES:
+        return PARTITION_OVERRIDES[cc] == partition
+    expected_continent = countries_continents.get(cc)
+    if expected_continent:
+        return expected_continent == partition
+    return True
+
+
+def filter_country_files_by_partition(
+    country_files: dict[str, list[str]],
+    country_counts: dict[str, int],
+    partition: str,
+    countries_continents: dict[str, str],
+) -> tuple[dict[str, list[str]], dict[str, int], list[tuple[str, str]]]:
+    """Filter out cross-partition country codes caused by neighboring PBF border bleed."""
+    if not partition:
+        return country_files, country_counts, []
+
+    kept_files: dict[str, list[str]] = {}
+    kept_counts: dict[str, int] = {}
+    skipped: list[tuple[str, str]] = []
+    for cc, files in country_files.items():
+        if country_belongs_to_partition(cc, partition, countries_continents):
+            kept_files[cc] = files
+            kept_counts[cc] = country_counts[cc]
+        else:
+            owner = PARTITION_OVERRIDES.get(
+                cc.strip().upper(),
+                countries_continents.get(cc.strip().upper(), "another partition"),
+            )
+            skipped.append((cc, owner))
+    return kept_files, kept_counts, skipped
+
+
 def merge_layer(
     layer: str,
     input_dir: str,
@@ -303,6 +374,7 @@ def merge_layer(
     exported_at: str,
     continent: str = "",
     require_non_empty: bool = False,
+    countries_json: str | None = DEFAULT_COUNTRIES_JSON,
 ) -> int:
     """Discover per-country temp Parquet files for a layer and merge them in one DuckDB session."""
     if layer not in LAYER_CONFIGS:
@@ -324,6 +396,16 @@ def merge_layer(
         return 0
 
     country_files, country_counts = discover_country_files(input_dir)
+    countries_continents = load_countries_continents(countries_json)
+    country_files, country_counts, skipped_countries = filter_country_files_by_partition(
+        country_files, country_counts, continent, countries_continents
+    )
+    if skipped_countries:
+        skipped_desc = ", ".join(f"{cc} (belongs to '{owner}')" for cc, owner in sorted(skipped_countries))
+        print(
+            f"[INFO] Skipping cross-partition {layer} country_code(s){continent_label}: {skipped_desc}"
+        )
+
     if not country_files:
         if require_non_empty:
             print("****************************************************************", file=sys.stderr)
@@ -396,6 +478,11 @@ def parse_args(argv=None):
         action="store_true",
         help="Exit non-zero if no temp Parquet files or country rows are found",
     )
+    parser.add_argument(
+        "--countries-json",
+        default=DEFAULT_COUNTRIES_JSON,
+        help="Path to countries.json SSOT for partition ownership filtering",
+    )
     return parser.parse_args(argv)
 
 
@@ -409,6 +496,7 @@ def main(argv=None) -> int:
             exported_at=args.exported_at,
             continent=args.continent,
             require_non_empty=args.require_non_empty,
+            countries_json=args.countries_json,
         )
     except Exception as exc:
         print(f"ERROR: Failed merging layer '{args.layer}': {exc}", file=sys.stderr)

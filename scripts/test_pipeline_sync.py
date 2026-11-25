@@ -236,6 +236,53 @@ class TestPipelineSyncAndUrls(unittest.TestCase):
         self.assertIn("pipelineId: '$(DL_REF_BUILD_ID)'", ref_job)
         self.assertIn("artifact: 'admin-polygons-reference'", ref_job)
 
+    def test_simplify_partitions_and_merge_ownership_are_disjoint_and_complete(self):
+        import yaml
+        import merge_country_parquets
+
+        meta = merge_country_parquets.load_countries_continents(
+            os.path.join(REPO_ROOT, "scripts", "countries.json")
+        )
+        export_pipeline = yaml.safe_load(self.export_text)
+        export_matrix = None
+        simplify_matrix = None
+        for stage in export_pipeline["stages"]:
+            for job in stage.get("jobs", []):
+                matrix = job.get("strategy", {}).get("matrix", {})
+                if not matrix:
+                    continue
+                first = next(iter(matrix.values()))
+                if "OSM_REGION" in first:
+                    export_matrix = matrix
+                elif "CONTINENT" in first:
+                    simplify_matrix = matrix
+
+        self.assertIsNotNone(export_matrix)
+        self.assertIsNotNone(simplify_matrix)
+
+        region_to_cc = {v["OSM_REGION"]: v["COUNTRY_CODE"] for v in export_matrix.values()}
+        partitions = [part["CONTINENT"] for part in simplify_matrix.values()]
+
+        for part in simplify_matrix.values():
+            cont = part["CONTINENT"]
+            for reg in part["REGIONS"].split():
+                cc = region_to_cc[reg]
+                self.assertTrue(
+                    merge_country_parquets.country_belongs_to_partition(cc, cont, meta),
+                    f"Region {reg} ({cc}) in simplify partition '{cont}' would be filtered out!",
+                )
+
+        for cc in meta:
+            owners = [
+                p for p in partitions
+                if merge_country_parquets.country_belongs_to_partition(cc, p, meta)
+            ]
+            self.assertEqual(
+                len(owners),
+                1,
+                f"Country {cc} must belong to exactly 1 simplify partition, got {owners}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -312,6 +312,69 @@ class TestMergeCountryParquetsEndToEnd(unittest.TestCase):
                 self.assertEqual(kv["exported_at"], exported_at)
                 self.assertEqual(kv["osm_data_timestamp"], "2026-11-21T08:00:00Z")
 
+    def test_cross_partition_border_bleed_is_filtered_using_countries_json(self):
+        """Border-bleed features (e.g. AW/TT in VE, VI in VG) must not emit duplicate country Parquets."""
+        exported_at = "2026-11-25T18:00:00Z"
+        with tempfile.TemporaryDirectory() as tmp:
+            sa_in = os.path.join(tmp, "sa_in")
+            sa_out = os.path.join(tmp, "sa_out")
+            os.makedirs(sa_in)
+            _run_duckdb_sql(f"""
+            LOAD spatial;
+            COPY (
+              SELECT * FROM (VALUES
+                ('south-america', 'VE', 100::BIGINT, 'relation', 'Venezuela', 2::TINYINT, -73.0, 1.0, -60.0, 12.0, 10.0, -66.0, 1000::BIGINT, ST_GeomFromText('POLYGON((-67 8, -66 8, -66 9, -67 9, -67 8))')),
+                ('central-america', 'AW', 101::BIGINT, 'relation', 'Aruba', 3::TINYINT, -70.1, 12.4, -69.8, 12.6, 12.5, -70.0, NULL::BIGINT, ST_GeomFromText('POLYGON((-70 12.4, -69.9 12.4, -69.9 12.6, -70 12.6, -70 12.4))')),
+                ('central-america', 'TT', 102::BIGINT, 'relation', 'Trinidad and Tobago', 2::TINYINT, -61.9, 10.0, -60.5, 11.4, 10.5, -61.2, NULL::BIGINT, ST_GeomFromText('POLYGON((-61.5 10.2, -61.0 10.2, -61.0 10.8, -61.5 10.8, -61.5 10.2))'))
+              ) AS t(continent, country_code, osm_id, osm_type, name, admin_level, bbox_minx, bbox_miny, bbox_maxx, bbox_maxy, center_lat, center_lon, parent_osm_id, geom)
+            ) TO '{sa_in}/VE_venezuela.admin-polygons.parquet' (FORMAT PARQUET, KV_METADATA {{'osm_data_timestamp': '2026-11-25T01:00:00Z'}});
+            """)
+            rc = merge_country_parquets.main([
+                "--layer", "admin-polygons",
+                "--input-dir", sa_in,
+                "--output-dir", sa_out,
+                "--exported-at", exported_at,
+                "--continent", "south-america",
+                "--require-non-empty",
+            ])
+            self.assertEqual(rc, 0)
+            self.assertEqual(sorted(os.listdir(sa_out)), ["admin-polygons-VE.parquet"])
+
+            ca_in = os.path.join(tmp, "ca_in")
+            ca_out = os.path.join(tmp, "ca_out")
+            os.makedirs(ca_in)
+            _run_duckdb_sql(f"""
+            LOAD spatial;
+            COPY (
+              SELECT * FROM (VALUES
+                ('central-america', 'VG', 200::BIGINT, 'relation', 'British Virgin Islands', 3::TINYINT, -64.7, 18.3, -64.2, 18.8, 18.4, -64.6, NULL::BIGINT, ST_GeomFromText('POLYGON((-64.7 18.4, -64.5 18.4, -64.5 18.5, -64.7 18.5, -64.7 18.4))')),
+                ('north-america', 'VI', 201::BIGINT, 'relation', 'US Virgin Islands', 4::TINYINT, -65.1, 17.6, -64.5, 18.4, 18.3, -64.9, NULL::BIGINT, ST_GeomFromText('POLYGON((-65.0 18.3, -64.8 18.3, -64.8 18.4, -65.0 18.4, -65.0 18.3))'))
+              ) AS t(continent, country_code, osm_id, osm_type, name, admin_level, bbox_minx, bbox_miny, bbox_maxx, bbox_maxy, center_lat, center_lon, parent_osm_id, geom)
+            ) TO '{ca_in}/VG_british-virgin-islands.admin-polygons.parquet' (FORMAT PARQUET, KV_METADATA {{'osm_data_timestamp': '2026-11-25T01:00:00Z'}});
+            """)
+            rc = merge_country_parquets.main([
+                "--layer", "admin-polygons",
+                "--input-dir", ca_in,
+                "--output-dir", ca_out,
+                "--exported-at", exported_at,
+                "--continent", "central-america",
+                "--require-non-empty",
+            ])
+            self.assertEqual(rc, 0)
+            self.assertEqual(sorted(os.listdir(ca_out)), ["admin-polygons-VG.parquet"])
+
+    def test_partition_ownership_handles_overrides_and_dedicated_partitions(self):
+        meta = merge_country_parquets.load_countries_continents(merge_country_parquets.DEFAULT_COUNTRIES_JSON)
+        self.assertTrue(merge_country_parquets.country_belongs_to_partition("TR", "asia", meta))
+        self.assertFalse(merge_country_parquets.country_belongs_to_partition("TR", "europe", meta))
+        self.assertTrue(merge_country_parquets.country_belongs_to_partition("RU", "russia", meta))
+        self.assertFalse(merge_country_parquets.country_belongs_to_partition("RU", "europe", meta))
+        self.assertFalse(merge_country_parquets.country_belongs_to_partition("UA", "russia", meta))
+        self.assertTrue(merge_country_parquets.country_belongs_to_partition("US", "us", meta))
+        self.assertFalse(merge_country_parquets.country_belongs_to_partition("US", "north-america", meta))
+        self.assertTrue(merge_country_parquets.country_belongs_to_partition("VI", "north-america", meta))
+        self.assertFalse(merge_country_parquets.country_belongs_to_partition("VI", "central-america", meta))
+
 
 if __name__ == "__main__":
     unittest.main()
